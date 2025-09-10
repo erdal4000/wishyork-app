@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can read public profiles of other users
+    match /users/{userId} {
+      allow read: if true;
+      
+      // A user can only update their own profile
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // A user can create their own document, and we ensure the username is unique.
+      // This is now handled by the server-side logic, but we keep a safe rule here.
+      allow create: if request.auth != null && request.auth.uid == userId &&
+                       !exists(/databases/$(database)/documents/usernames/$(request.resource.data.username));
+                       
+      // Deletion should be handled server-side or with more complex rules (e.g., admin roles)
+      allow delete: if false;
+    }
+
+    // Usernames collection is used for uniqueness checks
+    match /usernames/{username} {
+      // Anyone can check if a username exists
+      allow read: if true;
+
+      // A user can create a username document for themselves.
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      
+      // Deletion should be handled server-side.
+      allow delete: if false;
+    }
+  }
+}

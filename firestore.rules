@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read public profiles of other users
+    match /users/{userId} {
+      allow read: if true;
+      // A user can only update their own profile
+      allow update: if request.auth != null && request.auth.uid == userId;
+      // Deny creation and deletion from the client to enforce server-side logic
+      allow create: if false; 
+      allow delete: if false;
+    }
+
+    // Usernames collection is used for uniqueness checks
+    match /usernames/{username} {
+      // Anyone can check if a username exists
+      allow read: if true;
+      // Deny creation and deletion from the client to enforce server-side logic
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // Add other rules for your collections here
+    // Example: Wishlists
+    // match /wishlists/{wishlistId} {
+    //   allow read, write: if request.auth.uid == resource.data.ownerId;
+    // }
+  }
+}
