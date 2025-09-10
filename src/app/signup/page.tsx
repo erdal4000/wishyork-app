@@ -1,4 +1,3 @@
-
 import { SignupForm } from '@/components/signup-form';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -17,8 +16,13 @@ function SignupFormSkeleton() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full mt-6" />
+            <div className="grid grid-cols-2 gap-2 h-10 w-full">
+                <Skeleton className="h-full w-full" />
+                <Skeleton className="h-full w-full" />
+            </div>
+            <Skeleton className="h-40 w-full mt-6" />
+            <Skeleton className="h-12 w-full mt-6" />
+            <Skeleton className="h-5 w-48 mx-auto" />
         </div>
       </CardContent>
     </Card>
