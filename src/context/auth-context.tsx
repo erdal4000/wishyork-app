@@ -41,36 +41,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      // This entire block is now safe for server-side rendering because the
-      // functions that depend on `document` will not execute.
+      setLoading(true);
       try {
         const customToken = getCookie('customToken');
         
         if (customToken) {
-            // Only try to sign in if there's no current user and we have a token
-            if (!auth.currentUser) {
-              await signInWithCustomToken(auth, customToken);
-            }
-            // Clean up the cookie regardless of success or failure.
-            deleteCookie('customToken');
+          if (!auth.currentUser) {
+            await signInWithCustomToken(auth, customToken);
+          }
+          deleteCookie('customToken');
         }
       } catch (e) {
         console.error("Custom token sign-in failed", e);
-        deleteCookie('customToken'); // Also clean up on error
-      } 
+        deleteCookie('customToken');
+      } finally {
+        // The onAuthStateChanged listener will handle setting the final loading state
+      }
     };
 
-    // The onAuthStateChanged listener is safe to run on both server and client.
-    // Firebase's SDK handles the environment differences.
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         setUser(currentUser);
         setLoading(false);
     });
 
-    // Run the one-time token check.
     initializeAuth();
 
-    // Cleanup the listener on component unmount
     return () => unsubscribe();
   }, []);
 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -53,18 +54,50 @@ export default function DashboardLayout({
   const pathname = usePathname();
 
   React.useEffect(() => {
+    // Sadece yükleme bittiğinde ve kullanıcı yoksa yönlendirme yap
     if (!loading && !user) {
       router.push('/login');
     }
   }, [user, loading, router]);
   
-  if (loading || !user) {
+  // Yükleme devam ediyorsa veya henüz kullanıcı bilgisi gelmediyse (ama hala yükleniyor olabilir),
+  // tam sayfa bir iskelet yükleyici göster.
+  if (loading) {
     return (
-        <div className="flex h-screen items-center justify-center">
-            <Skeleton className="h-screen w-full" />
+        <div className="flex h-screen items-center justify-center bg-background">
+           <div className="w-full h-full p-4 space-y-4">
+              <header className="flex h-16 items-center justify-between border-b px-4 lg:px-8">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                   <Skeleton className="h-6 w-32 hidden lg:block" />
+                </div>
+                 <div className="flex items-center gap-4">
+                  <Skeleton className="h-10 w-10 rounded-md" />
+                   <Skeleton className="h-10 w-10 rounded-full" />
+                </div>
+              </header>
+              <div className="grid grid-cols-12 gap-8 container mx-auto">
+                <div className="col-span-12 lg:col-span-8 xl:col-span-9">
+                  <Skeleton className="h-[500px] w-full" />
+                </div>
+                <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
+                  <div className="space-y-6">
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-32 w-full" />
+                  </div>
+                </aside>
+              </div>
+           </div>
         </div>
     );
   }
+
+  // Yükleme bitti ve kullanıcı yoksa, bu bileşen bir şey render etmeden hemen yönlendirme yapar.
+  // Ancak kullanıcı varsa, layout'u gösterir.
+  if (!user) {
+    return null; // Yönlendirme gerçekleşirken boş render et
+  }
+
 
   const handleLogout = async () => {
     await auth.signOut();
