@@ -32,7 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from "firebase/firestore";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
 
@@ -95,7 +95,6 @@ export function IndividualSignupForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user, loading } = useAuth();
   
@@ -224,8 +223,9 @@ export function IndividualSignupForm() {
       
       await batch.commit();
       
-      toast({ title: "Account Created!", description: "Redirecting you to the dashboard." });
-      router.push('/dashboard');
+      toast({ title: "Welcome!", description: "Your account has been created successfully." });
+      // The onAuthStateChanged listener in auth-context will handle the redirect.
+      // We don't need to push the router here, it might cause a race condition.
 
     } catch (error: any) {
         const errorCode = error.code;
@@ -240,9 +240,10 @@ export function IndividualSignupForm() {
             description: errorMessage,
             variant: "destructive",
         });
-    } finally {
         setIsSubmitting(false);
-    }
+    } 
+    // We don't set isSubmitting to false in the success case
+    // because the component will unmount on redirect.
   };
 
   return (
@@ -487,3 +488,5 @@ export function IndividualSignupForm() {
     </Form>
   );
 }
+
+    

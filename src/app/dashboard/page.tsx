@@ -1,4 +1,6 @@
 
+'use client';
+
 import {
   Card,
   CardContent,
@@ -8,116 +10,180 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/context/auth-context';
+import { FormEvent, useEffect, useState } from 'react';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData } from "firebase/firestore";
+import { formatDistanceToNow } from 'date-fns';
+
+interface Post {
+  id: string;
+  authorName: string;
+  authorUsername: string;
+  authorAvatar: string;
+  content: string;
+  imageUrl: string | null;
+  aiHint: string | null;
+  createdAt: any;
+}
 
 export default function DashboardPage() {
-  const posts = [
-    {
-      id: 1,
-      author: 'Jane Doe',
-      username: 'janedoe',
-      avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
-      time: '5m ago',
-      content:
-        'Just donated to the "Clean Water Initiative"! It feels so good to contribute to such a meaningful cause. Every little bit helps to bring safe drinking water to communities in need. #CleanWater #GivingBack #SocialGood',
-      imageUrl: 'https://picsum.photos/600/400?random=1',
-      aiHint: 'clean water charity',
-    },
-    {
-      id: 2,
-      author: 'Hope Foundation',
-      username: 'hopefoundation',
-      avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704e',
-      time: '2h ago',
-      content:
-        'A huge thank you to all our volunteers this weekend! We successfully planted over 200 trees for our reforestation project. Together, we are making a greener planet! 🌱💚 #Volunteer #Environment #Reforestation',
-      imageUrl: null,
-      aiHint: null,
-    },
-  ];
+  const { user } = useAuth();
+  const [postContent, setPostContent] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  useEffect(() => {
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const postsData: Post[] = [];
+      querySnapshot.forEach((doc) => {
+        postsData.push({ id: doc.id, ...doc.data() } as Post);
+      });
+      setPosts(postsData);
+      setLoadingPosts(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCreatePost = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!postContent.trim() || !user) return;
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, "posts"), {
+        content: postContent,
+        authorId: user.uid,
+        authorName: user.displayName,
+        authorUsername: user.email?.split('@')[0], // Placeholder, ideally from user profile
+        authorAvatar: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
+        createdAt: serverTimestamp(),
+        imageUrl: null,
+        aiHint: null,
+        likes: 0,
+        comments: 0,
+      });
+      setPostContent('');
+    } catch (error) {
+      console.error("Error creating post: ", error);
+      // You could show a toast message here for the error
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
+
 
   return (
     <div className="space-y-6">
       {/* Create Post Card */}
       <Card>
+        <form onSubmit={handleCreatePost}>
         <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
           <Avatar>
             <AvatarImage
-              src="https://i.pravatar.cc/150?u=a042581f4e29026704d"
-              alt="User"
+              src={user?.photoURL ?? ''}
+              alt={user?.displayName ?? 'User'}
             />
-            <AvatarFallback>ME</AvatarFallback>
+            <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
           </Avatar>
           <div className="w-full">
             <Textarea
               placeholder="What's on your mind? Share a wish or a success story!"
               className="border-0 bg-secondary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
               rows={3}
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
+              disabled={isSubmitting}
             />
           </div>
         </CardHeader>
         <CardFooter className="flex justify-end p-4 pt-0">
-          <Button>Post</Button>
+          <Button type="submit" disabled={isSubmitting || !postContent.trim()}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Post
+          </Button>
         </CardFooter>
+        </form>
       </Card>
 
       {/* Feed Posts */}
-      {posts.map((post) => (
-        <Card key={post.id}>
-          <CardHeader className="flex flex-row items-center gap-4 p-4">
-            <Avatar>
-              <AvatarImage src={post.avatarUrl} alt={post.author} />
-              <AvatarFallback>
-                {post.author
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="font-bold">{post.author}</p>
-              <p className="text-sm text-muted-foreground">
-                <Link href={`/profile/${post.username}`}>@{post.username}</Link>{' '}
-                · {post.time}
-              </p>
-            </div>
-            <Button variant="ghost" size="icon">
-              <MoreHorizontal className="h-5 w-5" />
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4 px-4 pb-2">
-            <p className="whitespace-pre-wrap">{post.content}</p>
-            {post.imageUrl && (
-              <div className="relative aspect-video w-full overflow-hidden rounded-xl">
-                <Image
-                  src={post.imageUrl}
-                  alt={`Post by ${post.author}`}
-                  fill
-                  className="object-cover"
-                  data-ai-hint={post.aiHint ?? ''}
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                />
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="p-2">
-            <Button variant="ghost" className="flex items-center gap-2">
-              <Heart className="h-5 w-5" />
-              <span className="text-sm">123</span>
-            </Button>
-            <Button variant="ghost" className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              <span className="text-sm">45</span>
-            </Button>
-            <Button variant="ghost" className="flex items-center gap-2">
-              <Share2 className="h-5 w-5" />
-              <span className="text-sm">Share</span>
-            </Button>
-          </CardFooter>
+      {loadingPosts ? (
+        <div className="flex justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : posts.length === 0 ? (
+        <Card className="text-center p-8 text-muted-foreground">
+          <p>No posts yet. Be the first to share something!</p>
         </Card>
-      ))}
+      ) : (
+        posts.map((post) => (
+          <Card key={post.id}>
+            <CardHeader className="flex flex-row items-center gap-4 p-4">
+              <Avatar>
+                <AvatarImage src={post.authorAvatar} alt={post.authorName} />
+                <AvatarFallback>
+                  {getInitials(post.authorName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-bold">{post.authorName}</p>
+                <p className="text-sm text-muted-foreground">
+                  <Link href={`/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
+                  · {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                </p>
+              </div>
+              <Button variant="ghost" size="icon">
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4 px-4 pb-2">
+              <p className="whitespace-pre-wrap">{post.content}</p>
+              {post.imageUrl && (
+                <div className="relative aspect-video w-full overflow-hidden rounded-xl">
+                  <Image
+                    src={post.imageUrl}
+                    alt={`Post by ${post.authorName}`}
+                    fill
+                    className="object-cover"
+                    data-ai-hint={post.aiHint ?? ''}
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                  />
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="p-2">
+              <Button variant="ghost" className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                <span className="text-sm">0</span>
+              </Button>
+              <Button variant="ghost" className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5" />
+                <span className="text-sm">0</span>
+              </Button>
+              <Button variant="ghost" className="flex items-center gap-2">
+                <Share2 className="h-5 w-5" />
+                <span className="text-sm">Share</span>
+              </Button>
+            </CardFooter>
+          </Card>
+        ))
+      )}
     </div>
   );
 }
+
+    
