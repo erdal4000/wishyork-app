@@ -1,5 +1,3 @@
-
-// /src/lib/firebase-admin.ts
 'use server';
 
 import { initializeApp, getApps, App } from 'firebase-admin/app';
