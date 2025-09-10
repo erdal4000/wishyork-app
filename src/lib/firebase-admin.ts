@@ -1,4 +1,4 @@
-// /src/lib/firebase-admin.ts
+// /src/lib/firebase-admin.ts dosyasının yeni içeriği bu olmalı
 'use server';
 
 import { initializeApp, getApps, App } from 'firebase-admin/app';
