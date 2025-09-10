@@ -1,4 +1,3 @@
-
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -16,7 +15,6 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 function getCookie(name: string): string | undefined {
-  // This function will only run on the client side
   if (typeof document === 'undefined') {
     return undefined;
   }
@@ -28,7 +26,6 @@ function getCookie(name: string): string | undefined {
 }
 
 function deleteCookie(name: string) {
-    // This function will only run on the client side
   if (typeof document === 'undefined') {
     return;
   }
@@ -41,22 +38,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      setLoading(true);
-      try {
-        const customToken = getCookie('customToken');
-        
-        if (customToken) {
+      const customToken = getCookie('customToken');
+      
+      if (customToken) {
+        try {
           if (!auth.currentUser) {
             await signInWithCustomToken(auth, customToken);
           }
+        } catch (e) {
+          console.error("Custom token sign-in failed, it might be expired or invalid.", e);
+        } finally {
+          // Delete the cookie regardless of success or failure.
           deleteCookie('customToken');
         }
-      } catch (e) {
-        console.error("Custom token sign-in failed", e);
-        deleteCookie('customToken');
-      } finally {
-        // The onAuthStateChanged listener will handle setting the final loading state
       }
+      
+      // The onAuthStateChanged listener will handle the final state.
+      // We don't setLoading(false) here to avoid race conditions.
     };
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {

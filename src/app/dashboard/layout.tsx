@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -44,27 +43,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  React.useEffect(() => {
-    // Sadece yükleme bittiğinde ve kullanıcı yoksa yönlendirme yap
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-  
-  // Yükleme devam ediyorsa veya henüz kullanıcı bilgisi gelmediyse (ama hala yükleniyor olabilir),
-  // tam sayfa bir iskelet yükleyici göster.
-  if (loading) {
+function FullPageLoader() {
     return (
-        <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex h-screen w-screen items-center justify-center bg-background">
            <div className="w-full h-full p-4 space-y-4">
               <header className="flex h-16 items-center justify-between border-b px-4 lg:px-8">
                 <div className="flex items-center gap-4">
@@ -76,11 +57,16 @@ export default function DashboardLayout({
                    <Skeleton className="h-10 w-10 rounded-full" />
                 </div>
               </header>
-              <div className="grid grid-cols-12 gap-8 container mx-auto">
-                <div className="col-span-12 lg:col-span-8 xl:col-span-9">
-                  <Skeleton className="h-[500px] w-full" />
+              <div className="grid grid-cols-12 gap-8 container mx-auto px-4">
+                <div className="col-span-2 hidden lg:block">
+                    <div className="space-y-2">
+                       {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
                 </div>
-                <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
+                <div className="col-span-12 lg:col-span-7 xl:col-span-7">
+                  <Skeleton className="h-[600px] w-full" />
+                </div>
+                <aside className="hidden lg:block lg:col-span-3 xl:col-span-3">
                   <div className="space-y-6">
                     <Skeleton className="h-24 w-full" />
                     <Skeleton className="h-32 w-full" />
@@ -90,12 +76,30 @@ export default function DashboardLayout({
            </div>
         </div>
     );
+}
+
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  React.useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+  
+  if (loading) {
+    return <FullPageLoader />;
   }
 
-  // Yükleme bitti ve kullanıcı yoksa, bu bileşen bir şey render etmeden hemen yönlendirme yapar.
-  // Ancak kullanıcı varsa, layout'u gösterir.
   if (!user) {
-    return null; // Yönlendirme gerçekleşirken boş render et
+    return null; // or a minimal loader, as redirection is happening
   }
 
 
