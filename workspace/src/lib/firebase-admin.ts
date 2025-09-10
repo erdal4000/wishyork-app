@@ -1,21 +1,30 @@
+
 // /src/lib/firebase-admin.ts
 'use server';
 
-import { initializeApp, getApps, App, credential } from 'firebase-admin/app';
+import { initializeApp, getApps, App } from 'firebase-admin/app';
+import * as admin from 'firebase-admin';
 
 const FIREBASE_ADMIN_APP_NAME = 'firebase-admin-app-singleton';
 
 function getServiceAccount() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!serviceAccountJson) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Please check your Vercel deployment settings.');
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY ortam değişkeni bulunamadı. Lütfen Vercel ayarlarınızı kontrol edin.');
   }
   try {
-    // The environment variable is a stringified JSON. We need to parse it.
-    return JSON.parse(serviceAccountJson);
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    if (
+      !serviceAccount.project_id ||
+      !serviceAccount.private_key ||
+      !serviceAccount.client_email
+    ) {
+      throw new Error('Servis anahtarı JSON formatı geçersiz veya eksik alanlar içeriyor.');
+    }
+    return serviceAccount;
   } catch (error) {
-    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:', error);
-    throw new Error('The FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not a valid JSON string.');
+    console.error('Servis anahtarı JSON parse hatası:', error);
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY ortam değişkeni geçerli bir JSON değil.');
   }
 }
 
@@ -27,7 +36,9 @@ export async function getAdminApp(): Promise<App> {
   
   const serviceAccount = getServiceAccount();
 
-  return initializeApp({
-    credential: credential.cert(serviceAccount),
+  const newApp = initializeApp({
+    credential: admin.credential.cert(serviceAccount),
   }, FIREBASE_ADMIN_APP_NAME);
+
+  return newApp;
 }
