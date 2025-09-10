@@ -72,7 +72,7 @@ export default function Home() {
         <section className="container mx-auto grid max-w-screen-xl items-center gap-8 px-4 py-20 md:grid-cols-2 md:py-32">
           <div className="flex flex-col items-start gap-6">
             <h1 className="text-4xl font-extrabold tracking-tighter md:text-5xl lg:text-6xl">
-              Where Wishes Find Their Way
+              Where Wishes Truly Find Their Way
             </h1>
             <p className="max-w-[600px] text-lg text-muted-foreground">
               Connect, share, and fulfill dreams. The social platform for
