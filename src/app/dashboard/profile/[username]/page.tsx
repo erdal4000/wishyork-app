@@ -11,7 +11,7 @@ import { Mail, MapPin, UserPlus, Edit, Package, Globe, Users, Lock, Heart } from
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, DocumentData, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, DocumentData, onSnapshot, orderBy, Unsubscribe } from 'firebase/firestore';
 import Link from 'next/link';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -90,15 +90,13 @@ export default function ProfilePage() {
       return;
     }
 
-    let unsubscribePosts = () => {};
-    let unsubscribeWishlists = () => {};
+    const listeners: Unsubscribe[] = [];
 
     const fetchUserProfile = async () => {
       setLoading(true);
-      const usersRef = collection(db, 'users');
-      const userQuery = query(usersRef, where('username', '==', username));
-
       try {
+        const usersRef = collection(db, 'users');
+        const userQuery = query(usersRef, where('username', '==', username));
         const userSnapshot = await getDocs(userQuery);
 
         if (!userSnapshot.empty) {
@@ -110,10 +108,11 @@ export default function ProfilePage() {
 
           // Fetch user's posts
           const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
-          unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+          const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
             const userPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
             setPosts(userPosts);
           });
+          listeners.push(postsUnsubscribe);
 
           // Fetch user's wishlists
           const wishlistsRef = collection(db, 'wishlists');
@@ -124,10 +123,11 @@ export default function ProfilePage() {
             wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), where('privacy', '==', 'public'), orderBy('createdAt', 'desc'));
           }
 
-          unsubscribeWishlists = onSnapshot(wishlistsQuery, (snapshot) => {
+          const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
             const userWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
             setWishlists(userWishlists);
           });
+          listeners.push(wishlistsUnsubscribe);
 
           setFavorites([]); // Resetting placeholder
 
@@ -144,10 +144,9 @@ export default function ProfilePage() {
 
     fetchUserProfile();
 
-    // Cleanup function
+    // Cleanup function to unsubscribe from all listeners
     return () => {
-      unsubscribePosts();
-      unsubscribeWishlists();
+      listeners.forEach(unsubscribe => unsubscribe());
     };
   }, [username, currentUser, authLoading]);
   
