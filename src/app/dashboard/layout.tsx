@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarProvider,
   SidebarTrigger,
+  SidebarFooter,
 } from '@/components/ui/sidebar';
 import {
   Bell,
@@ -23,6 +24,7 @@ import {
   ListTodo,
   Sparkles,
   LogOut,
+  Plus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ScrollToTop } from '@/components/ui/scroll-to-top';
@@ -42,6 +44,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 
 function FullPageLoader() {
     return (
@@ -284,6 +287,16 @@ export default function DashboardLayout({
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
+             <SidebarFooter>
+                <CreateWishlistDialog>
+                    <SidebarMenuButton className="w-full" size="lg" tooltip={{children: "Create Wishlist", side: "right"}}>
+                        <Plus />
+                        <span className="group-data-[collapsible=icon]:hidden">
+                            Create Wishlist
+                        </span>
+                    </SidebarMenuButton>
+                </CreateWishlistDialog>
+            </SidebarFooter>
           </Sidebar>
 
           <main className="flex-1 py-8">
