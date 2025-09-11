@@ -48,6 +48,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -57,7 +58,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { AlertDialogTrigger } from '@radix-ui/react-alert-dialog';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -493,5 +493,7 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
 
     
