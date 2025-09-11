@@ -21,6 +21,7 @@ import { usePostInteraction } from '@/hooks/use-post-interaction';
 
 interface Post extends DocumentData {
   id: string;
+  authorId: string;
   authorName: string;
   authorUsername: string;
   authorAvatar: string;
@@ -43,12 +44,14 @@ function PostCard({ post }: { post: Post }) {
       .map((n) => n[0])
       .join('');
   };
+  
+  const authorPhoto = post.authorAvatar || `https://picsum.photos/seed/${post.authorId}/200/200`;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage src={post.authorAvatar} alt={post.authorName} />
+          <AvatarImage src={authorPhoto} alt={post.authorName} />
           <AvatarFallback>
             {getInitials(post.authorName)}
           </AvatarFallback>
@@ -158,6 +161,7 @@ export default function DashboardPage() {
       .join('');
   };
 
+  const currentUserPhoto = user?.photoURL || (user ? `https://picsum.photos/seed/${user.uid}/200/200` : '');
 
   return (
     <div className="space-y-6">
@@ -167,7 +171,7 @@ export default function DashboardPage() {
         <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
           <Avatar>
             <AvatarImage
-              src={user?.photoURL ?? ''}
+              src={currentUserPhoto}
               alt={user?.displayName ?? 'User'}
             />
             <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>

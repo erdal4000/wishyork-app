@@ -117,6 +117,8 @@ export default function DashboardLayout({
       .join('');
   };
 
+  const userPhoto = user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`;
+
   return (
     <SidebarProvider>
       <div className="min-h-screen w-full bg-secondary/30">
@@ -154,7 +156,7 @@ export default function DashboardLayout({
                   >
                     <Avatar>
                       <AvatarImage
-                        src={user.photoURL ?? ''}
+                        src={userPhoto}
                         alt={user.displayName ?? 'User'}
                       />
                       <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
@@ -294,7 +296,7 @@ export default function DashboardLayout({
                     className="w-full justify-center group-data-[collapsible=icon]:h-12 group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
                   >
                     <PlusCircle className="h-5 w-5" />
-                    <span className="group-data-[collapsible=icon]:hidden">
+                    <span className="group-data-[collapsible=icon]:hidden ml-2">
                       Create Wishlist
                     </span>
                   </Button>

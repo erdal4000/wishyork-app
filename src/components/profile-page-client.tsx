@@ -153,13 +153,7 @@ export function ProfilePageClient() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!username || authLoading) {
-      if (!authLoading && !username) {
-        setLoading(false);
-        setUserFound(false);
-      }
-      return;
-    }
+    if (!username) return;
 
     const fetchUserProfile = async () => {
       setLoading(true);
@@ -179,7 +173,7 @@ export function ProfilePageClient() {
         }
 
         const userDoc = userSnapshot.docs[0];
-        const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+        const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
@@ -193,7 +187,7 @@ export function ProfilePageClient() {
           : query(
               collection(db, 'wishlists'),
               where('authorId', '==', userData.uid),
-              where('privacy', '==', 'public')
+              where('privacy', 'in', ['public', 'friends']) // Show public and friends lists
             );
 
         const unsubscribeWishlists = onSnapshot(
@@ -214,9 +208,6 @@ export function ProfilePageClient() {
                   (a.createdAt?.toMillis() ?? 0)
               )
             );
-          },
-          (error) => {
-            console.error('Error fetching wishlists: ', error);
           }
         );
 
@@ -234,9 +225,6 @@ export function ProfilePageClient() {
               (doc) => ({ id: doc.id, ...doc.data() } as Post)
             );
             setPosts(postsData);
-          },
-          (error) => {
-            console.error('Error fetching posts: ', error);
           }
         );
 
@@ -254,9 +242,9 @@ export function ProfilePageClient() {
     };
 
     fetchUserProfile();
-  }, [username, authLoading, currentUser]);
+  }, [username, currentUser]);
 
-  if (loading) {
+  if (loading || authLoading) {
     return <ProfilePageSkeleton />;
   }
 
@@ -306,6 +294,8 @@ export function ProfilePageClient() {
 
   const isOwnProfile = currentUser?.uid === profileUser?.uid;
 
+  const profilePhoto = profileUser.photoURL || `https://picsum.photos/seed/${profileUser.uid}/200/200`;
+
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
@@ -324,7 +314,7 @@ export function ProfilePageClient() {
             <div className="-mt-16 flex-shrink-0 sm:-mt-24">
               <Avatar className="h-24 w-24 border-4 border-card sm:h-32 sm:w-32">
                 <AvatarImage
-                  src={profileUser.photoURL ?? ''}
+                  src={profilePhoto}
                   alt={profileUser.name ?? 'User'}
                 />
                 <AvatarFallback className="text-3xl">
@@ -375,10 +365,10 @@ export function ProfilePageClient() {
         <TabsContent value="wishlists" className="mt-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {wishlists.length > 0 ? (
-              wishlists.map((list) => (
+               wishlists.map((list) => (
                 <div key={list.id} className="group relative block">
-                  <Link href={`/dashboard/wishlist/${list.id}`}>
-                    <Card className="flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+                  <Link href={`/dashboard/wishlist/${list.id}`} className="absolute inset-0 z-0" />
+                    <Card className="relative z-10 flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
                       <CardHeader className="relative h-48 p-0">
                         <Image
                           src={list.imageUrl}
@@ -423,102 +413,97 @@ export function ProfilePageClient() {
                       </CardContent>
                       <Separator />
                       <div className="flex items-center justify-between p-2 text-sm text-muted-foreground">
-                        <div className="flex">
-                          <Button variant="ghost" size="sm" className="px-2">
+                      <div className="flex">
+                        <Button variant="ghost" size="sm" className="px-2 z-20" onClick={(e) => e.stopPropagation()}>
                             <Heart className="mr-1.5 h-4 w-4" />
                             <span className="font-medium">{list.likes || 0}</span>
-                          </Button>
-                          <Button variant="ghost" size="sm" className="px-2">
+                        </Button>
+                        <Button variant="ghost" size="sm" className="px-2 z-20" onClick={(e) => e.stopPropagation()}>
                             <MessageCircle className="mr-1.5 h-4 w-4" />
-                            <span className="font-medium">
-                              {list.comments || 0}
-                            </span>
-                          </Button>
-                          <Button variant="ghost" size="sm" className="px-2">
+                            <span className="font-medium">{list.comments || 0}</span>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="px-2 z-20" onClick={(e) => e.stopPropagation()}>
                             <Bookmark className="mr-1.5 h-4 w-4" />
                             <span className="font-medium">{list.saves || 0}</span>
-                          </Button>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            /* handle repost */
-                          }}
-                        >
-                          <Repeat2 className="mr-1.5 h-4 w-4" />
-                          Repost
                         </Button>
                       </div>
+                      <Button variant="ghost" size="sm" className="z-20" onClick={(e) => e.stopPropagation()}>
+                          <Repeat2 className="mr-1.5 h-4 w-4" />
+                          Repost
+                      </Button>
+                      </div>
                     </Card>
-                  </Link>
-                  <div className="absolute right-3 top-3 z-10">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          onClick={(e) => e.preventDefault()}
+                     <div className="absolute right-3 top-3 z-20">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                             onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                             }}
+                          >
+                            <MoreHorizontal className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                           onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                           }}
                         >
-                          <MoreHorizontal className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                         <DropdownMenuItem>
+                          <DropdownMenuItem>
                             <Share2 className="mr-2 h-4 w-4" /> Share
-                         </DropdownMenuItem>
-                        {isOwnProfile ? (
-                          <>
-                            <DropdownMenuItem
-                              onSelect={() => setEditingWishlist(list)}
-                            >
-                              <Edit className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <DropdownMenuItem
-                                  onSelect={(e) => e.preventDefault()}
-                                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                </DropdownMenuItem>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    Are you absolutely sure?
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This action cannot be undone. This will
-                                    permanently delete this wishlist.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteWishlist(list.id)}
-                                    className="bg-destructive hover:bg-destructive/90"
-                                  >
-                                    Yes, delete wishlist
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        ) : (
-                          <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                            <AlertTriangle className="mr-2 h-4 w-4" /> Report
                           </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                          {isOwnProfile ? (
+                            <>
+                              <DropdownMenuItem
+                                onSelect={() => setEditingWishlist(list)}
+                              >
+                                <Edit className="mr-2 h-4 w-4" /> Edit
+                              </DropdownMenuItem>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <DropdownMenuItem
+                                    onSelect={(e) => e.preventDefault()}
+                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Are you absolutely sure?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action cannot be undone. This will
+                                      permanently delete this wishlist.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDeleteWishlist(list.id)}
+                                      className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                      Yes, delete wishlist
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
+                          ) : (
+                            <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                              <AlertTriangle className="mr-2 h-4 w-4" /> Report
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                 </div>
               ))
             ) : (
