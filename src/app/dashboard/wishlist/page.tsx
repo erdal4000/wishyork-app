@@ -33,17 +33,21 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import { Progress } from '@/components/ui/progress';
 
 export default function WishlistPage() {
   const wishlists = [
     {
       id: 1,
-      title: 'KUŞ CENNETİNDEYİZ',
+      title: 'KINGFISHER PARADISE',
       category: 'Fashion',
       itemCount: 0,
       privacy: 'Public',
       imageUrl: 'https://picsum.photos/seed/kingfisher/1200/400',
       aiHint: 'kingfisher bird',
+      progress: 0,
+      unitsFulfilled: 0,
+      totalUnits: 10,
       likes: 0,
       comments: 0,
       saves: 0,
@@ -52,10 +56,13 @@ export default function WishlistPage() {
       id: 2,
       title: 'European Backpacking Trip',
       category: 'Travel',
-      itemCount: 3,
+      itemCount: 8,
       privacy: 'Friends',
       imageUrl: 'https://picsum.photos/seed/backpacking/1200/400',
       aiHint: 'europe backpacking',
+      progress: 65,
+      unitsFulfilled: 13,
+      totalUnits: 20,
       likes: 12,
       comments: 4,
       saves: 8,
@@ -68,6 +75,9 @@ export default function WishlistPage() {
       privacy: 'Private',
       imageUrl: 'https://picsum.photos/seed/newhome/1200/400',
       aiHint: 'modern apartment',
+      progress: 43,
+      unitsFulfilled: 6,
+      totalUnits: 14,
       likes: 45,
       comments: 1,
       saves: 18,
@@ -100,9 +110,9 @@ export default function WishlistPage() {
       {wishlists.length > 0 ? (
         <div className="grid grid-cols-1 gap-8">
           {wishlists.map((list) => (
-             <Link href={`/dashboard/wishlist/${list.id}`} key={list.id}>
+             <Link href={`/dashboard/wishlist/${list.id}`} key={list.id} className="block group">
               <Card
-                className="group w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl"
+                className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl"
               >
                 <CardHeader className="relative h-80 w-full p-0">
                   <Image
@@ -112,56 +122,60 @@ export default function WishlistPage() {
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                  <div className="absolute bottom-4 left-4">
-                    <Badge variant="secondary" className="text-sm">
-                      {list.category}
-                    </Badge>
-                  </div>
-                  <div className="absolute right-4 top-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          onClick={(e) => e.preventDefault()}
-                        >
-                          <MoreHorizontal className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Share2 className="mr-2 h-4 w-4" />
-                          Share
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-headline text-2xl font-bold">
-                        {list.title}
-                      </h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {list.itemCount} item types
-                      </p>
-                    </div>
-                    <div className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-sm text-muted-foreground">
-                      {getPrivacyIcon(list.privacy)}
-                      <span>{list.privacy}</span>
-                    </div>
+                  <div className="flex items-center justify-between gap-4">
+                     <div className="flex items-center gap-4">
+                        <h3 className="font-headline text-2xl font-bold">
+                            {list.title}
+                        </h3>
+                        <Badge variant="secondary" className="text-sm">
+                            {list.category}
+                        </Badge>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
+                            {getPrivacyIcon(list.privacy)}
+                            <span>{list.privacy}</span>
+                        </Badge>
+                        <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={(e) => e.preventDefault()}
+                            >
+                            <MoreHorizontal className="h-5 w-5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                            <Share2 className="mr-2 h-4 w-4" />
+                            Share
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                        </DropdownMenu>
+                     </div>
                   </div>
+                   <p className="mt-2 text-sm text-muted-foreground">
+                        {list.itemCount} item types
+                   </p>
+                   <div className="mt-4">
+                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                            <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
+                            <span>{list.progress}%</span>
+                        </div>
+                        <Progress value={list.progress} className="h-2" />
+                   </div>
                 </CardContent>
                 <Separator />
                 <CardFooter className="flex justify-between p-4 text-sm text-muted-foreground">
@@ -179,23 +193,9 @@ export default function WishlistPage() {
                       <span className="font-medium">{list.saves}</span>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <div className="flex -space-x-2 overflow-hidden">
-                      <Avatar className="h-6 w-6 border-2 border-card">
-                        <AvatarImage src="https://i.pravatar.cc/150?u=a" />
-                        <AvatarFallback>A</AvatarFallback>
-                      </Avatar>
-                      <Avatar className="h-6 w-6 border-2 border-card">
-                        <AvatarImage src="https://i.pravatar.cc/150?u=b" />
-                        <AvatarFallback>B</AvatarFallback>
-                      </Avatar>
-                    </div>
-                    {list.likes > 2 && (
-                       <span className="ml-2 text-xs">
-                         + {list.likes - 2} others
-                       </span>
-                    )}
-                  </div>
+                  <Button variant="ghost" size="icon" onClick={(e) => e.preventDefault()}>
+                      <Share2 className="h-5 w-5" />
+                  </Button>
                 </CardFooter>
               </Card>
             </Link>

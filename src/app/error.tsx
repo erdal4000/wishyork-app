@@ -1,5 +1,5 @@
 
-'use client'; // Hata bileşenleri 'use client' olmalıdır.
+'use client'; // Error components must be Client Components
 
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Hataları bir raporlama servisine gönderebilirsiniz
+    // Log the error to an error reporting service
     console.error(error);
   }, [error]);
 
@@ -25,9 +25,9 @@ export default function Error({
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
             <AlertTriangle className="h-8 w-8 text-destructive" />
           </div>
-          <CardTitle className="mt-4 text-3xl font-bold">Bir şeyler ters gitti!</CardTitle>
+          <CardTitle className="mt-4 text-3xl font-bold">Something went wrong!</CardTitle>
           <CardDescription className="mt-2">
-            Beklenmedik bir hata oluştu. Lütfen tekrar deneyin.
+            An unexpected error has occurred. Please try again.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -39,11 +39,11 @@ export default function Error({
             <Button
                 size="lg"
                 onClick={
-                // Sayfayı yeniden yükleyerek segmenti yeniden oluşturmayı dene
+                // Attempt to recover by trying to re-render the segment
                 () => reset()
                 }
             >
-                Tekrar Dene
+                Try Again
             </Button>
         </CardContent>
       </Card>

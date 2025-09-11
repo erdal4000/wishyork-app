@@ -12,14 +12,14 @@ export default function NotFound() {
            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <SearchX className="h-8 w-8 text-primary" />
           </div>
-          <CardTitle className="mt-4 text-3xl font-bold">404 - Sayfa Bulunamadı</CardTitle>
+          <CardTitle className="mt-4 text-3xl font-bold">404 - Page Not Found</CardTitle>
           <CardDescription className="mt-2">
-            Aradığınız sayfayı maalesef bulamadık. Belki de hiç var olmadı veya başka bir yere taşındı.
+            We couldn't find the page you're looking for. Maybe it never existed or was moved.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild size="lg">
-            <Link href="/">Ana Sayfaya Geri Dön</Link>
+            <Link href="/">Return to Homepage</Link>
           </Button>
         </CardContent>
       </Card>

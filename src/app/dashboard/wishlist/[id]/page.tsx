@@ -9,13 +9,13 @@ export default function WishlistDetailPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">
-        Wishlist Detayları
+        Wishlist Details
       </h1>
       <p className="text-muted-foreground">
-        Burası ID'si <span className="font-bold text-primary">{id}</span> olan wishlist'in ayrıntı sayfası olacak.
+        This will be the detail page for the wishlist with ID: <span className="font-bold text-primary">{id}</span>
       </p>
        <div className="p-8 border-2 border-dashed rounded-lg text-center">
-            <p className="text-muted-foreground">İçerik yakında eklenecek...</p>
+            <p className="text-muted-foreground">Content to be added soon...</p>
        </div>
     </div>
   );
