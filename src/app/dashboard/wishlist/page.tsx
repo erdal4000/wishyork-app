@@ -22,6 +22,7 @@ import {
   Share2,
   Globe,
   Package,
+  Repeat2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -245,22 +246,23 @@ export default function WishlistPage() {
                   </CardContent>
                   <Separator />
                   <CardFooter className="flex justify-between p-4 text-sm text-muted-foreground">
-                    <div className="flex gap-6">
-                      <div className="flex items-center gap-1.5">
-                        <Heart className="h-5 w-5" />
-                        <span className="font-medium">{list.likes}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <MessageCircle className="h-5 w-5" />
-                        <span className="font-medium">{list.comments}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Bookmark className="h-5 w-5" />
-                        <span className="font-medium">{list.saves}</span>
-                      </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" className="px-2">
+                        <Heart className="mr-1.5 h-4 w-4" />
+                        <span className="font-medium">{list.likes || 0}</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="px-2">
+                        <MessageCircle className="mr-1.5 h-4 w-4" />
+                        <span className="font-medium">{list.comments || 0}</span>
+                      </Button>
+                       <Button variant="ghost" size="sm" className="px-2">
+                        <Bookmark className="mr-1.5 h-4 w-4" />
+                        <span className="font-medium">{list.saves || 0}</span>
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); /* handle share */}}>
-                        <Share2 className="h-5 w-5" />
+                     <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); /* handle repost */}}>
+                        <Repeat2 className="mr-1.5 h-4 w-4" />
+                        Repost
                     </Button>
                   </CardFooter>
                 </Card>
@@ -339,3 +341,4 @@ export default function WishlistPage() {
     </div>
   );
 }
+

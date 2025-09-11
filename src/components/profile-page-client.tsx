@@ -14,6 +14,8 @@ import {
   DocumentData,
   onSnapshot,
   getCountFromServer,
+  deleteDoc,
+  doc,
 } from 'firebase/firestore';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,8 +23,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Mail,
-  MapPin,
   UserPlus,
   Edit,
   Package,
@@ -32,10 +32,11 @@ import {
   Heart,
   Search,
   MoreHorizontal,
-  Share2,
   AlertTriangle,
   MessageCircle,
   Bookmark,
+  Trash2,
+  Repeat2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -50,6 +51,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { EditWishlistDialog } from './edit-wishlist-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from './ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 // Data types
 interface UserProfile extends DocumentData {
@@ -129,6 +143,8 @@ export function ProfilePageClient() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [userFound, setUserFound] = useState(true);
+  const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!username || authLoading) {
@@ -139,7 +155,6 @@ export function ProfilePageClient() {
       return;
     }
 
-    let isMounted = true;
     const fetchUserProfile = async () => {
       setLoading(true);
       const usersRef = collection(db, 'users');
@@ -150,7 +165,6 @@ export function ProfilePageClient() {
       );
       try {
         const userSnapshot = await getDocs(q);
-        if (!isMounted) return;
 
         if (userSnapshot.empty) {
           setUserFound(false);
@@ -168,7 +182,7 @@ export function ProfilePageClient() {
 
         const turnOffLoading = () => {
           if (initialWishlistsLoaded && initialPostsLoaded) {
-            if (isMounted) setLoading(false);
+            setLoading(false);
           }
         };
 
@@ -184,7 +198,7 @@ export function ProfilePageClient() {
               where('privacy', '==', 'public'),
               orderBy('createdAt', 'desc')
             );
-
+        
         const unsubscribeWishlists = onSnapshot(wishlistsQuery, async (snapshot) => {
             const listsPromises = snapshot.docs.map(async (doc) => {
               const listData = { id: doc.id, ...doc.data() } as Wishlist;
@@ -194,21 +208,18 @@ export function ProfilePageClient() {
               return listData;
             });
             const lists = await Promise.all(listsPromises);
-            if (isMounted) {
-              setWishlists(lists);
-              initialWishlistsLoaded = true;
-              turnOffLoading();
-            }
+            setWishlists(lists);
+            initialWishlistsLoaded = true;
+            turnOffLoading();
           },
           (error) => {
             console.error('Error fetching wishlists: ', error);
-            if (isMounted) {
-              initialWishlistsLoaded = true;
-              turnOffLoading();
-            }
+            initialWishlistsLoaded = true;
+            turnOffLoading();
           }
         );
         
+        // Handle case where query returns no documents
         getDocs(wishlistsQuery).then(snap => {
             if (snap.empty && !initialWishlistsLoaded) {
                 initialWishlistsLoaded = true;
@@ -227,21 +238,17 @@ export function ProfilePageClient() {
             const postsData = snapshot.docs.map(
               (doc) => ({ id: doc.id, ...doc.data() } as Post)
             );
-            if (isMounted) {
-              setPosts(postsData);
-              initialPostsLoaded = true;
-              turnOffLoading();
-            }
+            setPosts(postsData);
+            initialPostsLoaded = true;
+            turnOffLoading();
           },
           (error) => {
             console.error('Error fetching posts: ', error);
-            if (isMounted) {
-              initialPostsLoaded = true;
-              turnOffLoading();
-            }
+            initialPostsLoaded = true;
+            turnOffLoading();
           }
         );
-        
+
         getDocs(postsQuery).then(snap => {
             if (snap.empty && !initialPostsLoaded) {
                 initialPostsLoaded = true;
@@ -251,24 +258,19 @@ export function ProfilePageClient() {
 
 
         return () => {
-          isMounted = false;
           unsubscribeWishlists();
           unsubscribePosts();
         };
+
       } catch (error) {
         console.error('Error fetching profile:', error);
-        if (isMounted) {
-          setUserFound(false);
-          setLoading(false);
-        }
+        setUserFound(false);
+        setLoading(false);
       }
     };
 
     fetchUserProfile();
 
-    return () => {
-      isMounted = false;
-    };
   }, [username, authLoading, currentUser]);
 
   if (loading) {
@@ -299,11 +301,26 @@ export function ProfilePageClient() {
         return null;
     }
   };
-
+  
   const getPrivacyLabel = (privacy: string) => {
-    if (!privacy) return 'Public';
-    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+      if (!privacy) return 'Public';
+      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  }
+
+  const handleDeleteWishlist = async (wishlistId: string) => {
+    try {
+      await deleteDoc(doc(db, 'wishlists', wishlistId));
+      toast({ title: 'Success', description: 'Wishlist has been deleted.' });
+    } catch (error) {
+      console.error('Error deleting wishlist: ', error);
+      toast({
+        title: 'Error',
+        description: 'Could not delete the wishlist. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
+
 
   const isOwnProfile = currentUser?.uid === profileUser?.uid;
 
@@ -343,12 +360,6 @@ export function ProfilePageClient() {
               <p className="mt-2 max-w-2xl text-sm">
                 {profileUser.bio ?? "This user hasn't set a bio yet."}
               </p>
-              <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground sm:justify-start">
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>Planet Earth</span>
-                </div>
-              </div>
             </div>
             <div className="mt-2 flex-shrink-0 sm:mt-0">
               {isOwnProfile ? (
@@ -387,7 +398,7 @@ export function ProfilePageClient() {
                   key={list.id}
                   className="group flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 hover:scale-105 hover:shadow-2xl"
                 >
-                  <CardHeader className="relative p-0 h-48">
+                  <CardHeader className="relative h-48 p-0">
                     <Link
                       href={`/dashboard/wishlist/${list.id}`}
                       className="absolute inset-0 z-0"
@@ -419,12 +430,53 @@ export function ProfilePageClient() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Share2 className="mr-2 h-4 w-4" /> Share
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                            <AlertTriangle className="mr-2 h-4 w-4" /> Report
-                          </DropdownMenuItem>
+                          {isOwnProfile ? (
+                            <>
+                              <DropdownMenuItem
+                                onSelect={() => setEditingWishlist(list)}
+                              >
+                                <Edit className="mr-2 h-4 w-4" /> Edit
+                              </DropdownMenuItem>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <DropdownMenuItem
+                                    onSelect={(e) => e.preventDefault()}
+                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Are you absolutely sure?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action cannot be undone. This will
+                                      permanently delete this wishlist.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() =>
+                                        handleDeleteWishlist(list.id)
+                                      }
+                                      className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                      Yes, delete wishlist
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
+                          ) : (
+                            <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                              <AlertTriangle className="mr-2 h-4 w-4" /> Report
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -469,15 +521,9 @@ export function ProfilePageClient() {
                         {list.saves || 0}
                       </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      asChild
-                    >
-                      <Link href={`/dashboard/wishlist/${list.id}`}>
-                        <span className="sr-only">Go to wishlist</span>
-                      </Link>
+                    <Button variant="ghost" size="sm">
+                        <Repeat2 className="mr-1.5 h-4 w-4" />
+                        Repost
                     </Button>
                   </div>
                 </Card>
@@ -537,6 +583,20 @@ export function ProfilePageClient() {
           </div>
         </TabsContent>
       </Tabs>
+      {editingWishlist && (
+        <EditWishlistDialog
+          wishlist={editingWishlist}
+          open={!!editingWishlist}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setEditingWishlist(null);
+            }
+          }}
+          onSuccess={() => {
+            setEditingWishlist(null);
+          }}
+        />
+      )}
     </div>
   );
 }

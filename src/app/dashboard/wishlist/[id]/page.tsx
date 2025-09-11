@@ -301,11 +301,9 @@ export default function WishlistDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" asChild>
-          <Link href="/dashboard/wishlist">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Wishlists
-          </Link>
+        <Button variant="ghost" onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -374,7 +372,7 @@ export default function WishlistDetailPage() {
           <h1 className="mt-2 text-3xl font-bold">{wishlist.title}</h1>
           <p className="text-muted-foreground">
             by{' '}
-            <Link href={`/profile/${wishlist.authorUsername}`} className="text-primary hover:underline">
+            <Link href={`/dashboard/profile/${wishlist.authorUsername}`} className="text-primary hover:underline">
               {wishlist.authorName}
             </Link>
           </p>
