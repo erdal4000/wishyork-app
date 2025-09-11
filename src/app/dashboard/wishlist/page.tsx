@@ -4,10 +4,8 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import {
   MoreHorizontal,
@@ -31,9 +29,9 @@ import {
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Progress } from '@/components/ui/progress';
+import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 
 export default function WishlistPage() {
   const wishlists = [
@@ -101,10 +99,12 @@ export default function WishlistPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">My Wishlists</h1>
-        <Button>
-          <Plus className="mr-2 h-5 w-5" />
-          Create Wishlist
-        </Button>
+        <CreateWishlistDialog>
+          <Button>
+            <Plus className="mr-2 h-5 w-5" />
+            Create Wishlist
+          </Button>
+        </CreateWishlistDialog>
       </div>
 
       {wishlists.length > 0 ? (
