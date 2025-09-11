@@ -264,7 +264,7 @@ export default function WishlistDetailPage() {
         console.error("Error cancelling reservation: ", error);
         toast({ title: "Error", description: "Could not cancel the reservation. Please try again.", variant: "destructive" });
     }
-  }
+  };
 
 
   const handleDeleteItem = async (itemId: string) => {
@@ -505,7 +505,7 @@ export default function WishlistDetailPage() {
                                     <AlertDialogDescription>
                                         This action cannot be undone. This will permanently delete the item
                                         from your wishlist.
-                                    </D escription>
+                                    </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -574,3 +574,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
