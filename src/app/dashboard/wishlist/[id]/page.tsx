@@ -153,6 +153,7 @@ export default function WishlistDetailPage() {
   const [loadingItems, setLoadingItems] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+  const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
 
    useEffect(() => {
     if (!id) return;
@@ -233,6 +234,27 @@ export default function WishlistDetailPage() {
     }
   };
 
+  const handleMarkAsPurchased = async (itemId: string) => {
+    if (!user) {
+        toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
+        return;
+    }
+    try {
+        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+        await updateDoc(itemRef, {
+            status: 'fulfilled',
+            // Optional: You can also save who fulfilled it and when
+            // fulfilledBy: user.uid,
+            // fulfilledAt: serverTimestamp(),
+        });
+        toast({ title: "Thank You!", description: "This wish has been fulfilled." });
+    } catch (error) {
+        console.error("Error marking item as purchased: ", error);
+        toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
+    }
+  };
+
+
   const handleDeleteItem = async (itemId: string) => {
     try {
         const itemRef = doc(db, 'wishlists', id, 'items', itemId);
@@ -278,11 +300,9 @@ export default function WishlistDetailPage() {
             <Button variant="outline">Actions</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                <EditWishlistDialog wishlist={wishlist} open={true} onOpenChange={()=>{}} onSuccess={()=>{}}>
-                    <div className='flex items-center'><Edit className="mr-2 h-4 w-4" /> Edit Wishlist</div>
-                </EditWishlistDialog>
-            </DropdownMenuItem>
+             <DropdownMenuItem onSelect={() => setEditingWishlist(wishlist)}>
+                <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
+             </DropdownMenuItem>
             <DropdownMenuItem>
                 <Share2 className="mr-2 h-4 w-4" /> Share
             </DropdownMenuItem>
@@ -376,6 +396,16 @@ export default function WishlistDetailPage() {
           </Button>
         </CardFooter>
       </Card>
+      
+      {editingWishlist && (
+        <EditWishlistDialog
+            wishlist={editingWishlist}
+            open={!!editingWishlist}
+            onOpenChange={(isOpen) => !isOpen && setEditingWishlist(null)}
+            onSuccess={() => setEditingWishlist(null)}
+        />
+      )}
+
 
       {/* Items Section */}
       <div className="space-y-4">
@@ -510,7 +540,7 @@ export default function WishlistDetailPage() {
                                         <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
                                     </div>
                                 </div>
-                                <Button className="mt-3 w-full">Mark as purchased</Button>
+                                <Button className="mt-3 w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
                             </div>
                         )}
                     </div>
@@ -524,5 +554,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
