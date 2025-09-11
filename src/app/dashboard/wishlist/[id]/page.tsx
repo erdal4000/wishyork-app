@@ -22,6 +22,7 @@ import {
   Trash2,
   Share2,
   Edit,
+  XCircle,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -243,9 +244,6 @@ export default function WishlistDetailPage() {
         const itemRef = doc(db, 'wishlists', id, 'items', itemId);
         await updateDoc(itemRef, {
             status: 'fulfilled',
-            // Optional: You can also save who fulfilled it and when
-            // fulfilledBy: user.uid,
-            // fulfilledAt: serverTimestamp(),
         });
         toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     } catch (error) {
@@ -253,6 +251,20 @@ export default function WishlistDetailPage() {
         toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
     }
   };
+
+  const handleCancelReservation = async (itemId: string) => {
+    try {
+        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+        await updateDoc(itemRef, {
+            status: 'available',
+            reservedBy: null,
+        });
+        toast({ title: "Reservation Cancelled", description: "The item is now available for others." });
+    } catch (error) {
+        console.error("Error cancelling reservation: ", error);
+        toast({ title: "Error", description: "Could not cancel the reservation. Please try again.", variant: "destructive" });
+    }
+  }
 
 
   const handleDeleteItem = async (itemId: string) => {
@@ -493,7 +505,7 @@ export default function WishlistDetailPage() {
                                     <AlertDialogDescription>
                                         This action cannot be undone. This will permanently delete the item
                                         from your wishlist.
-                                    </AlertDialogDescription>
+                                    </D escription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -540,7 +552,15 @@ export default function WishlistDetailPage() {
                                         <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
                                     </div>
                                 </div>
-                                <Button className="mt-3 w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
+                                <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                                <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
+                                {user?.displayName === item.reservedBy && (
+                                    <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id)}>
+                                        <XCircle className="mr-2 h-4 w-4" />
+                                        Cancel Reservation
+                                    </Button>
+                                )}
+                                </div>
                             </div>
                         )}
                     </div>
