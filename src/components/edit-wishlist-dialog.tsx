@@ -74,14 +74,17 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
   });
   
   // This useEffect ensures the form is re-initialized if the wishlist prop changes
+  // and the dialog is opened.
   useEffect(() => {
-    form.reset({
-      wishlistName: wishlist.title || "",
-      description: wishlist.description || "",
-      category: wishlist.category || "",
-      privacy: wishlist.privacy || "public",
-    });
-  }, [wishlist, form]);
+    if (open) {
+      form.reset({
+        wishlistName: wishlist.title || "",
+        description: wishlist.description || "",
+        category: wishlist.category || "",
+        privacy: wishlist.privacy || "public",
+      });
+    }
+  }, [wishlist, open, form]);
 
 
   async function onSubmit(values: FormData) {
@@ -89,10 +92,6 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
         toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
         return;
     }
-    
-    // Authorization check
-    // In a real app, this should be backed by security rules
-    // For now, we assume if the component is rendered, the user has rights.
 
     setIsSubmitting(true);
     try {
@@ -102,17 +101,14 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
             description: values.description,
             category: values.category,
             privacy: values.privacy,
-            // We don't update the image URL or other fields here, only what's on the form
         });
 
         toast({
             title: "Success!",
             description: "Your wishlist has been updated.",
         });
-
-        setTimeout(() => {
-          setOpen(false);
-        }, 100);
+        
+        setOpen(false); // Close dialog on success
 
     } catch (error) {
         console.error("Error updating wishlist:", error);
@@ -122,7 +118,7 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
             variant: "destructive",
         });
     } finally {
-        setIsSubmitting(false);
+        setIsSubmitting(false); // Ensure this runs always
     }
   }
 
