@@ -32,7 +32,6 @@ import { useAuth } from '@/context/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +44,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
+import { GlobalSearch } from '@/components/global-search';
 
 function FullPageLoader() {
     return (
@@ -135,14 +135,8 @@ export default function DashboardLayout({
               </Link>
             </div>
             <div className="flex flex-1 justify-center px-4 lg:px-8">
-              <div className="w-full max-w-md">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search everything..."
-                    className="pl-10"
-                  />
-                </div>
+              <div className="w-full max-w-xl">
+                <GlobalSearch />
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -291,7 +285,7 @@ export default function DashboardLayout({
             </SidebarContent>
              <SidebarFooter>
                 <CreateWishlistDialog>
-                  <Button
+                   <Button
                     variant="default"
                     className="w-full justify-center group-data-[collapsible=icon]:h-12 group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
                   >
