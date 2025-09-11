@@ -15,6 +15,10 @@ import {
   Lock,
   Edit,
   Trash2,
+  Heart,
+  MessageCircle,
+  Bookmark,
+  Share2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -22,29 +26,47 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import Image from 'next/image';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 export default function WishlistPage() {
   const wishlists = [
     {
       id: 1,
-      title: 'Birthday Wishes 🎂',
-      description: 'A collection of things I\'d love for my upcoming birthday!',
-      itemCount: 8,
-      privacy: 'Public',
+      title: 'KUŞ CENNETİNDEYİZ',
+      category: 'Fashion',
+      itemCount: 0,
+      privacy: 'Friends',
+      imageUrl: 'https://picsum.photos/seed/kingfisher/600/400',
+      aiHint: 'kingfisher bird',
+      likes: 0,
+      comments: 0,
+      saves: 0,
     },
     {
       id: 2,
       title: 'European Backpacking Trip',
-      description: 'Saving up for a dream trip across Europe. Any contribution helps!',
+      category: 'Travel',
       itemCount: 3,
-      privacy: 'Friends',
+      privacy: 'Public',
+      imageUrl: 'https://picsum.photos/seed/backpacking/600/400',
+      aiHint: 'europe backpacking',
+      likes: 12,
+      comments: 4,
+      saves: 8,
     },
     {
       id: 3,
       title: 'New Home Essentials',
-      description: 'Things we need to furnish our new apartment.',
+      category: 'Home',
       itemCount: 24,
       privacy: 'Private',
+      imageUrl: 'https://picsum.photos/seed/newhome/600/400',
+      aiHint: 'modern apartment',
+      likes: 45,
+      comments: 1,
+      saves: 18,
     },
   ];
 
@@ -53,9 +75,9 @@ export default function WishlistPage() {
       case 'Public':
         return <Users className="h-4 w-4" />;
       case 'Friends':
-        return <Users className="h-4 w-4 text-blue-500" />;
+        return <Users className="h-4 w-4" />; // Using the same icon for now
       case 'Private':
-        return <Lock className="h-4 w-4 text-red-500" />;
+        return <Lock className="h-4 w-4" />;
       default:
         return null;
     }
@@ -67,48 +89,73 @@ export default function WishlistPage() {
         <h1 className="text-3xl font-bold tracking-tight">My Wishlists</h1>
         <Button>
           <Plus className="mr-2 h-5 w-5" />
-          Create new wishlist
+          Create Wishlist
         </Button>
       </div>
 
       {wishlists.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {wishlists.map((list) => (
-            <Card key={list.id} className="flex flex-col">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <CardTitle className="font-headline text-2xl">
-                    {list.title}
-                  </CardTitle>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-5 w-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            <Card key={list.id} className="group flex flex-col overflow-hidden">
+                <div className="relative aspect-video w-full overflow-hidden rounded-t-lg">
+                    <Image
+                        src={list.imageUrl}
+                        alt={list.title}
+                        data-ai-hint={list.aiHint}
+                        fill
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
                 </div>
-                <CardDescription>{list.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1">
-                {/* Potentially show item previews here in the future */}
+              <CardContent className="p-4">
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-lg">{list.title}</h3>
+                        <Badge variant="secondary">{list.category}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            {getPrivacyIcon(list.privacy)}
+                            <span>{list.privacy}</span>
+                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="-mr-2 h-8 w-8">
+                                <MoreHorizontal className="h-5 w-5" />
+                            </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                            </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                 </div>
+                 <p className="mt-1 text-sm text-muted-foreground">{list.itemCount} item types</p>
               </CardContent>
-              <CardFooter className="flex justify-between text-sm text-muted-foreground">
-                <span>{list.itemCount} items</span>
-                <div className="flex items-center gap-2">
-                  {getPrivacyIcon(list.privacy)}
-                  <span>{list.privacy}</span>
+              <CardFooter className="mt-auto flex items-center justify-between p-4 pt-0">
+                <div className="flex gap-4 text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                        <Heart className="h-5 w-5" />
+                        <span className="text-sm font-medium">{list.likes}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <MessageCircle className="h-5 w-5" />
+                        <span className="text-sm font-medium">{list.comments}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <Bookmark className="h-5 w-5" />
+                        <span className="text-sm font-medium">{list.saves}</span>
+                    </div>
                 </div>
+                 <Button variant="ghost" size="icon">
+                    <Share2 className="h-5 w-5" />
+                </Button>
               </CardFooter>
             </Card>
           ))}
