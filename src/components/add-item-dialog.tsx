@@ -111,7 +111,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
             status: 'available',
             addedAt: serverTimestamp(),
             addedBy: user.uid,
-            imageUrl: `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/100/100`, // Placeholder image
+            imageUrl: `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`, // Placeholder image
             aiHint: values.itemName.split(' ').slice(0,2).join(' '),
         };
 
@@ -368,4 +368,5 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
 
