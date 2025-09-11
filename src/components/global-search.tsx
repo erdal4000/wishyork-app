@@ -45,26 +45,31 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const performSearch = async (queryText: string) => {
-    if (queryText.trim().length < 1) {
+    const trimmedQuery = queryText.trim();
+    if (trimmedQuery.length < 1) {
       setResults({ users: [], wishlists: [] });
       setLoading(false);
+      setPopoverOpen(false);
       return;
     }
 
     setLoading(true);
+    setPopoverOpen(true);
     
-    const searchText = queryText.startsWith('@') ? queryText.substring(1) : queryText;
+    const searchText = trimmedQuery.startsWith('@') ? trimmedQuery.substring(1) : trimmedQuery;
     const lowerCaseQuery = searchText.toLowerCase();
 
     try {
+      // --- Users Query ---
       const usersQuery = query(
         collection(db, 'users'),
-        orderBy('username'),
+        orderBy('username'), // Using username which is already lowercase
         where('username', '>=', lowerCaseQuery),
         where('username', '<=', lowerCaseQuery + '\uf8ff'),
         limit(5)
       );
-
+      
+      // --- Wishlists Query ---
       const wishlistsQuery = query(
         collection(db, 'wishlists'),
         orderBy('title_lowercase'),
@@ -73,6 +78,7 @@ export function GlobalSearch() {
         where('privacy', '==', 'public'),
         limit(5)
       );
+
 
       const [userSnap, wishlistSnap] = await Promise.all([
         getDocs(usersQuery),
@@ -105,10 +111,20 @@ export function GlobalSearch() {
     setSearchQuery('');
     router.push(path);
   };
+  
+  const handleBlur = () => {
+    // We delay closing the popover slightly to allow click events on items to register
+    setTimeout(() => {
+        if (!inputRef.current?.matches(':focus-within')) {
+           setPopoverOpen(false);
+        }
+    }, 100);
+  }
 
   const hasResults = results.users.length > 0 || results.wishlists.length > 0;
 
   return (
+    <div onBlur={handleBlur}>
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverAnchor asChild>
         <div className="relative">
@@ -119,11 +135,11 @@ export function GlobalSearch() {
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setPopoverOpen(true)}
+            onFocus={() => setPopoverOpen(searchQuery.length > 0)}
           />
         </div>
       </PopoverAnchor>
-      {searchQuery && (
+      {popoverOpen && (
         <PopoverContent
           className="w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
@@ -174,5 +190,6 @@ export function GlobalSearch() {
         </PopoverContent>
       )}
     </Popover>
+    </div>
   );
 }
