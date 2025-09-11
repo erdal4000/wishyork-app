@@ -6,13 +6,12 @@ import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
-  PopoverTrigger,
+  PopoverAnchor,
 } from '@/components/ui/popover';
 import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
   CommandSeparator,
@@ -26,8 +25,6 @@ import {
   limit,
   getDocs,
   DocumentData,
-  startAt,
-  endAt,
   orderBy,
 } from 'firebase/firestore';
 import debounce from 'lodash.debounce';
@@ -49,7 +46,7 @@ export function GlobalSearch() {
 
 
   const performSearch = async (queryText: string) => {
-    if (!queryText) {
+    if (queryText.trim() === '') {
       setResults({ users: [], wishlists: [] });
       setLoading(false);
       return;
@@ -57,17 +54,20 @@ export function GlobalSearch() {
 
     setLoading(true);
 
+    const lowerCaseQuery = queryText.toLowerCase();
+
     try {
       // Search for users by username
       const usersQuery = query(
         collection(db, 'users'),
         orderBy('username'),
-        where('username', '>=', queryText.toLowerCase()),
-        where('username', '<=', queryText.toLowerCase() + '\uf8ff'),
+        where('username', '>=', lowerCaseQuery),
+        where('username', '<=', lowerCaseQuery + '\uf8ff'),
         limit(5)
       );
 
-      // Search for wishlists by title
+      // Search for wishlists by title (case-insensitive would be ideal but Firestore is limited)
+      // We will fetch by lowercase title if we store it, for now, we'll try a case-sensitive range query
       const wishlistsQuery = query(
         collection(db, 'wishlists'),
         orderBy('title'),
@@ -76,6 +76,16 @@ export function GlobalSearch() {
         where('privacy', '==', 'public'),
         limit(5)
       );
+      
+      const wishlistsQueryLowercase = query(
+        collection(db, 'wishlists'),
+        orderBy('title_lowercase'),
+        where('title_lowercase', '>=', lowerCaseQuery),
+        where('title_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
+        where('privacy', '==', 'public'),
+        limit(5)
+      );
+
 
       const [userSnap, wishlistSnap] = await Promise.all([
         getDocs(usersQuery),
@@ -99,14 +109,21 @@ export function GlobalSearch() {
 
   useEffect(() => {
     if (searchQuery.trim().length > 0) {
-      setPopoverOpen(true);
       debouncedSearch(searchQuery);
     } else {
-      setPopoverOpen(false);
       setResults({ users: [], wishlists: [] });
       debouncedSearch.cancel();
     }
   }, [searchQuery, debouncedSearch]);
+  
+  useEffect(() => {
+    if (searchQuery.trim().length > 0 && !popoverOpen) {
+      setPopoverOpen(true);
+    } else if (searchQuery.trim().length === 0 && popoverOpen) {
+      setPopoverOpen(false);
+    }
+  }, [searchQuery, popoverOpen]);
+
 
   const handleSelect = (path: string) => {
     setPopoverOpen(false);
@@ -118,7 +135,7 @@ export function GlobalSearch() {
 
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -126,11 +143,12 @@ export function GlobalSearch() {
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => { if(searchQuery) setPopoverOpen(true)}}
           />
         </div>
-      </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command>
+        <Command shouldFilter={false}>
           <CommandList>
             {loading ? (
                 <div className="flex items-center justify-center p-4">
