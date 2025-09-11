@@ -1,32 +1,35 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to wishlists, but only authenticated users can create them.
-    match /wishlists/{wishlistId} {
+    match /users/{userId} {
       allow read: if true;
-      allow create: if request.auth != null;
-      // Further updates and deletes should be restricted to the owner.
-      allow update, delete: if request.auth.uid == resource.data.authorId;
+      allow create, update: if request.auth.uid == userId;
     }
 
-    // Usernames must be unique. Only the user can create their username document.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth.uid == request.resource.data.uid;
     }
 
-    // Users can only read and create their own user document.
-    match /users/{userId} {
-      allow read, create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Allow authenticated users to create posts.
     match /posts/{postId} {
       allow read: if true;
       allow create: if request.auth != null;
       allow update, delete: if request.auth.uid == resource.data.authorId;
+    }
+
+    match /wishlists/{wishlistId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth.uid == resource.data.authorId;
+
+      // Allow creating, reading, updating, and deleting items in a wishlist
+      match /items/{itemId} {
+        allow read: if true;
+        // Only authenticated users can create items
+        allow create: if request.auth != null;
+        // Only the wishlist author can update or delete items
+        allow update, delete: if request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+      }
     }
   }
 }
