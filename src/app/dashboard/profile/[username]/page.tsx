@@ -5,13 +5,17 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mail, MapPin, UserPlus, Edit } from 'lucide-react';
+import { Mail, MapPin, UserPlus, Edit, Package, Globe, Users, Lock, Heart } from 'lucide-react';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, DocumentData, onSnapshot, orderBy } from 'firebase/firestore';
+import Link from 'next/link';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 interface UserProfile extends DocumentData {
   uid: string;
@@ -28,6 +32,18 @@ interface Post extends DocumentData {
   imageUrl: string | null;
   aiHint: string | null;
 }
+
+interface Wishlist extends DocumentData {
+  id: string;
+  title: string;
+  imageUrl: string;
+  aiHint: string;
+  category: string;
+  progress: number;
+  itemCount: number;
+  privacy: 'public' | 'private' | 'friends';
+}
+
 
 function ProfilePageSkeleton() {
     return (
@@ -48,7 +64,11 @@ function ProfilePageSkeleton() {
                 </CardContent>
             </Card>
             <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-64 w-full" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <Skeleton className="h-64 w-full" />
+                <Skeleton className="h-64 w-full" />
+                <Skeleton className="h-64 w-full" />
+            </div>
         </div>
     );
 }
@@ -58,28 +78,35 @@ export default function ProfilePage() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]); // Placeholder for favorites
   const [loading, setLoading] = useState(true);
 
   const username = params.username as string;
 
   useEffect(() => {
-    if (!username) return;
+    if (!username || !currentUser) {
+        if (!authLoading) setLoading(false);
+        return;
+    }
 
     const fetchUserProfile = async () => {
       setLoading(true);
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', username));
+      const userQuery = query(usersRef, where('username', '==', username));
       
       let unsubscribePosts = () => {};
+      let unsubscribeWishlists = () => {};
 
       try {
-        const querySnapshot = await getDocs(q);
+        const userSnapshot = await getDocs(userQuery);
 
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userData = userDoc.data() as UserProfile;
+        if (!userSnapshot.empty) {
+          const userDoc = userSnapshot.docs[0];
+          const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
           setProfileUser(userData);
+
+          const isOwnProfile = currentUser.uid === userData.uid;
 
           // Fetch user's posts
           const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
@@ -88,6 +115,22 @@ export default function ProfilePage() {
               setPosts(userPosts);
           });
           
+          // Fetch user's wishlists
+          const wishlistsRef = collection(db, 'wishlists');
+          let wishlistsQuery;
+          if (isOwnProfile) {
+            // Fetch all lists for own profile
+            wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
+          } else {
+            // Fetch only public lists for other profiles
+            wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), where('privacy', '==', 'public'), orderBy('createdAt', 'desc'));
+          }
+
+          unsubscribeWishlists = onSnapshot(wishlistsQuery, (snapshot) => {
+              const userWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+              setWishlists(userWishlists);
+          });
+
           // In the future, you would also fetch user's favorites here.
           setFavorites([]); // Resetting placeholder
 
@@ -101,12 +144,15 @@ export default function ProfilePage() {
          setLoading(false);
       }
       
-      return () => unsubscribePosts();
+      return () => {
+          unsubscribePosts();
+          unsubscribeWishlists();
+      };
     };
 
     fetchUserProfile();
 
-  }, [username]);
+  }, [username, currentUser, authLoading]);
   
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
@@ -116,6 +162,20 @@ export default function ProfilePage() {
       .join('');
   };
   
+  const getPrivacyIcon = (privacy: string) => {
+    switch (privacy) {
+      case 'public': return <Globe className="h-4 w-4" />;
+      case 'friends': return <Users className="h-4 w-4" />;
+      case 'private': return <Lock className="h-4 w-4" />;
+      default: return null;
+    }
+  };
+
+  const getPrivacyLabel = (privacy: string) => {
+      if (!privacy) return 'Public';
+      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  }
+
   if (loading || authLoading) {
     return <ProfilePageSkeleton />;
   }
@@ -183,11 +243,57 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="posts" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs defaultValue="wishlists" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="wishlists">Wishlists</TabsTrigger>
           <TabsTrigger value="posts">Posts</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
         </TabsList>
+        <TabsContent value="wishlists" className="mt-6">
+             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                {wishlists.length > 0 ? wishlists.map((list) => (
+                    <Link href={`/dashboard/wishlist/${list.id}`} key={list.id}>
+                        <Card className="group flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 hover:scale-105 hover:shadow-2xl">
+                           <CardHeader className="relative p-0 h-48">
+                               <Badge className="absolute right-3 top-3 z-10">{list.category}</Badge>
+                               <Image src={list.imageUrl} alt={list.title} data-ai-hint={list.aiHint} fill className="object-cover" />
+                           </CardHeader>
+                           <CardContent className="flex flex-1 flex-col p-4">
+                                <h3 className="font-headline text-lg font-bold">{list.title}</h3>
+                                <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-2">
+                                        <Package className="h-4 w-4" />
+                                        <span>{list.itemCount || 0} items</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        {getPrivacyIcon(list.privacy)}
+                                        <span>{getPrivacyLabel(list.privacy)}</span>
+                                    </div>
+                                </div>
+                                <div className="mt-auto pt-4">
+                                    <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                                        <span>Progress</span>
+                                        <span className="font-semibold">{list.progress || 0}%</span>
+                                    </div>
+                                    <Progress value={list.progress || 0} className="h-2" />
+                                </div>
+                           </CardContent>
+                           <Separator />
+                            <div className="flex items-center justify-end p-2 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5 p-1">
+                                    <Heart className="h-4 w-4" />
+                                    <span>{list.likes || 0}</span>
+                                </div>
+                            </div>
+                        </Card>
+                    </Link>
+                )) : (
+                     <div className="col-span-1 flex items-center justify-center rounded-lg border-2 border-dashed py-12 text-center sm:col-span-2 xl:col-span-3">
+                        <p className="text-muted-foreground">This user has no public wishlists yet.</p>
+                    </div>
+                )}
+            </div>
+        </TabsContent>
         <TabsContent value="posts" className="mt-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {posts.length > 0 ? posts.map((post) => (
