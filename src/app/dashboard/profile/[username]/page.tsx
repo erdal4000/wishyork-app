@@ -85,7 +85,7 @@ export default function ProfilePage() {
   const username = params.username as string;
 
   useEffect(() => {
-    if (!username || !currentUser) {
+    if (!username || authLoading) {
         if (!authLoading) setLoading(false);
         return;
     }
@@ -106,7 +106,7 @@ export default function ProfilePage() {
           const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
           setProfileUser(userData);
 
-          const isOwnProfile = currentUser.uid === userData.uid;
+          const isOwnProfile = currentUser?.uid === userData.uid;
 
           // Fetch user's posts
           const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
@@ -322,7 +322,7 @@ export default function ProfilePage() {
           </div>
         </TabsContent>
         <TabsContent value="favorites" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:col-span-3">
              <div className="flex items-center justify-center p-8 text-center text-muted-foreground md:col-span-2 xl:col-span-3">
                 <p>Favorites feature coming soon!</p>
             </div>
@@ -332,3 +332,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    
