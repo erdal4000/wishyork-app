@@ -1,5 +1,7 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -32,68 +34,106 @@ import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import { Progress } from '@/components/ui/progress';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
+import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
+
+
+interface Wishlist extends DocumentData {
+  id: string;
+  title: string;
+  category: string;
+  itemCount: number;
+  privacy: 'Public' | 'Friends' | 'Private';
+  imageUrl: string;
+  aiHint: string;
+  progress: number;
+  unitsFulfilled: number;
+  totalUnits: number;
+  likes: number;
+  comments: number;
+  saves: number;
+  createdAt: Timestamp;
+}
+
+function WishlistCardSkeleton() {
+  return (
+    <Card className="w-full overflow-hidden rounded-2xl shadow-lg">
+      <Skeleton className="h-80 w-full" />
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+          <Skeleton className="h-8 w-20" />
+        </div>
+        <Skeleton className="mt-4 h-6 w-3/4" />
+        <div className="mt-4 space-y-2">
+          <div className="flex justify-between">
+            <Skeleton className="h-4 w-1/4" />
+            <Skeleton className="h-4 w-1/5" />
+          </div>
+          <Skeleton className="h-2 w-full" />
+        </div>
+      </CardContent>
+      <Separator />
+      <CardFooter className="flex justify-between p-4">
+        <div className="flex gap-6">
+          <Skeleton className="h-6 w-10" />
+          <Skeleton className="h-6 w-10" />
+          <Skeleton className="h-6 w-10" />
+        </div>
+        <Skeleton className="h-8 w-8 rounded-full" />
+      </CardFooter>
+    </Card>
+  )
+}
 
 export default function WishlistPage() {
-  const wishlists = [
-    {
-      id: 1,
-      title: 'KINGFISHER PARADISE',
-      category: 'Fashion',
-      itemCount: 0,
-      privacy: 'Public',
-      imageUrl: 'https://picsum.photos/seed/kingfisher/1200/400',
-      aiHint: 'kingfisher bird',
-      progress: 0,
-      unitsFulfilled: 0,
-      totalUnits: 10,
-      likes: 0,
-      comments: 0,
-      saves: 0,
-    },
-    {
-      id: 2,
-      title: 'European Backpacking Trip',
-      category: 'Travel',
-      itemCount: 8,
-      privacy: 'Friends',
-      imageUrl: 'https://picsum.photos/seed/backpacking/1200/400',
-      aiHint: 'europe backpacking',
-      progress: 65,
-      unitsFulfilled: 13,
-      totalUnits: 20,
-      likes: 12,
-      comments: 4,
-      saves: 8,
-    },
-    {
-      id: 3,
-      title: 'New Home Essentials',
-      category: 'Home',
-      itemCount: 24,
-      privacy: 'Private',
-      imageUrl: 'https://picsum.photos/seed/newhome/1200/400',
-      aiHint: 'modern apartment',
-      progress: 43,
-      unitsFulfilled: 6,
-      totalUnits: 14,
-      likes: 45,
-      comments: 1,
-      saves: 18,
-    },
-  ];
+  const { user } = useAuth();
+  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+        setLoading(false);
+        return;
+    };
+
+    const q = query(collection(db, "wishlists"), where("authorId", "==", user.uid));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const lists: Wishlist[] = [];
+        querySnapshot.forEach((doc) => {
+            lists.push({ id: doc.id, ...doc.data() } as Wishlist);
+        });
+        setWishlists(lists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
 
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
-      case 'Public':
+      case 'public':
         return <Globe className="h-4 w-4" />;
-      case 'Friends':
+      case 'friends':
         return <Users className="h-4 w-4" />;
-      case 'Private':
+      case 'private':
         return <Lock className="h-4 w-4" />;
       default:
         return null;
     }
   };
+  
+  const getPrivacyLabel = (privacy: string) => {
+      if (!privacy) return 'Public';
+      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -106,8 +146,13 @@ export default function WishlistPage() {
           </Button>
         </CreateWishlistDialog>
       </div>
-
-      {wishlists.length > 0 ? (
+      
+      {loading ? (
+        <div className="grid grid-cols-1 gap-8">
+            <WishlistCardSkeleton />
+            <WishlistCardSkeleton />
+        </div>
+      ) : wishlists.length > 0 ? (
         <div className="grid grid-cols-1 gap-8">
           {wishlists.map((list) => (
              <Link href={`/dashboard/wishlist/${list.id}`} key={list.id} className="block group">
@@ -134,9 +179,9 @@ export default function WishlistPage() {
                         </Badge>
                      </div>
                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
+                        <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
                             {getPrivacyIcon(list.privacy)}
-                            <span>{list.privacy}</span>
+                            <span>{getPrivacyLabel(list.privacy)}</span>
                         </Badge>
                         <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -205,7 +250,7 @@ export default function WishlistPage() {
         <div className="flex h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed">
           <h3 className="text-xl font-semibold">No wishlists yet!</h3>
           <p className="mt-2 text-muted-foreground">
-            Click "Create new wishlist" to get started.
+            Click "Create Wishlist" to get started.
           </p>
         </div>
       )}
