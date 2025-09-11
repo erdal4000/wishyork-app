@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -19,6 +20,7 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -293,3 +295,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
