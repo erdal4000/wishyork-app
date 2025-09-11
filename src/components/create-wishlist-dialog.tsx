@@ -88,7 +88,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             // Default values for new wishlists
             itemCount: 0,
             imageUrl: `https://picsum.photos/seed/${values.wishlistName.replace(/\s/g, '-')}/1200/400`,
-            aiHint: values.category,
+            aiHint: values.category.toLowerCase(),
             progress: 0,
             unitsFulfilled: 0,
             totalUnits: 0,
@@ -102,8 +102,11 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             description: "Your wishlist has been created.",
         });
 
-        form.reset();
-        setOpen(false);
+        setTimeout(() => {
+          form.reset();
+          setOpen(false);
+        }, 100);
+
 
     } catch (error) {
         console.error("Error creating wishlist:", error);
