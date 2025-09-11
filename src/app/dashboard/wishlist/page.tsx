@@ -52,6 +52,7 @@ import { collection, query, where, onSnapshot, DocumentData, Timestamp, getCount
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 
 
 interface Wishlist extends DocumentData {
@@ -270,16 +271,18 @@ export default function WishlistPage() {
                           variant="secondary"
                           size="icon"
                           className="h-8 w-8 rounded-full"
-                          onClick={(e) => e.stopPropagation()} // Stop propagation here too
+                          onClick={(e) => e.preventDefault()}
                           >
                           <MoreHorizontal className="h-5 w-5" />
                           </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
-                          <DropdownMenuItem onSelect={() => router.push(`/dashboard/wishlist/${list.id}`)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                          </DropdownMenuItem>
+                          <EditWishlistDialog wishlist={list}>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                            </DropdownMenuItem>
+                          </EditWishlistDialog>
                           <DropdownMenuItem onSelect={() => {/* Share logic here */}}>
                               <Share2 className="mr-2 h-4 w-4" />
                               Share
