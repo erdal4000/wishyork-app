@@ -1,7 +1,12 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useParams, notFound } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, limit, orderBy, DocumentData, onSnapshot } from 'firebase/firestore';
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -12,9 +17,10 @@ import Link from 'next/link';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { DocumentData } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
-// These types can be shared between server and client components
+
+// Data types
 interface UserProfile extends DocumentData {
   uid: string;
   name: string;
@@ -43,16 +49,136 @@ interface Wishlist extends DocumentData {
   likes?: number;
 }
 
-interface ProfilePageClientProps {
-    profileUser: UserProfile;
-    initialWishlists: Wishlist[];
-    initialPosts: Post[];
+
+function ProfilePageSkeleton() {
+    return (
+         <div className="space-y-6">
+            <Card className="overflow-hidden">
+                <Skeleton className="h-48 w-full md:h-64" />
+                <CardContent className="p-4 sm:p-6">
+                    <div className="relative flex flex-col items-center gap-4 sm:flex-row">
+                        <div className="-mt-16 flex-shrink-0 sm:-mt-24">
+                           <Skeleton className="h-24 w-24 rounded-full border-4 border-card sm:h-32 sm:w-32" />
+                        </div>
+                        <div className="flex-1 space-y-2 text-center sm:text-left">
+                            <Skeleton className="h-8 w-48" />
+                            <Skeleton className="h-5 w-32" />
+                            <Skeleton className="h-4 w-full max-w-lg" />
+                        </div>
+                         <div className="mt-2 flex-shrink-0 sm:mt-0">
+                             <Skeleton className="h-10 w-32" />
+                         </div>
+                    </div>
+                </CardContent>
+            </Card>
+             <Tabs defaultValue="wishlists" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="wishlists">Wishlists</TabsTrigger>
+                    <TabsTrigger value="posts">Posts</TabsTrigger>
+                    <TabsTrigger value="favorites">Favorites</TabsTrigger>
+                </TabsList>
+            </Tabs>
+             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-2xl" />)}
+            </div>
+        </div>
+    )
 }
 
 
-export function ProfilePageClient({ profileUser, initialWishlists, initialPosts }: ProfilePageClientProps) {
-  const { user: currentUser } = useAuth();
-  const favorites: any[] = []; // Placeholder for favorites
+export function ProfilePageClient() {
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const params = useParams();
+  const username = params?.username as string;
+
+  const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
+  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userFound, setUserFound] = useState(true);
+
+  useEffect(() => {
+    if (!username || authLoading) {
+      // If no username or auth is still loading, do nothing yet.
+      return;
+    }
+
+    setLoading(true);
+
+    const fetchUserProfile = async () => {
+      // Fetch user profile first
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('username', '==', username.toLowerCase()), limit(1));
+      
+      try {
+        const userSnapshot = await getDocs(q);
+
+        if (userSnapshot.empty) {
+          setUserFound(false);
+          setLoading(false);
+          return;
+        }
+
+        const userDoc = userSnapshot.docs[0];
+        const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+        setProfileUser(userData);
+
+        // Now that we have the user, set up listeners for posts and wishlists
+        const isOwnProfile = currentUser?.uid === userData.uid;
+        let unsubscribes: (() => void)[] = [];
+
+        // Wishlist listener
+        const wishlistsQuery = isOwnProfile
+          ? query(collection(db, 'wishlists'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'))
+          : query(collection(db, 'wishlists'), where('authorId', '==', userData.uid), where('privacy', '==', 'public'), orderBy('createdAt', 'desc'));
+          
+        const unsubscribeWishlists = onSnapshot(wishlistsQuery, async (snapshot) => {
+            const listsPromises = snapshot.docs.map(async (doc) => {
+                const listData = { id: doc.id, ...doc.data() } as Wishlist;
+                const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
+                const itemsSnapshot = await getDocs(itemsColRef);
+                listData.itemCount = itemsSnapshot.size;
+                return listData;
+            });
+            const lists = await Promise.all(listsPromises);
+            setWishlists(lists);
+        });
+        unsubscribes.push(unsubscribeWishlists);
+
+        // Posts listener
+        const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
+        const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+            const postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+            setPosts(postsData);
+        });
+        unsubscribes.push(unsubscribePosts);
+
+        setLoading(false);
+
+        // Cleanup function
+        return () => {
+            unsubscribes.forEach(unsub => unsub());
+        };
+
+      } catch (error) {
+        console.error("Error fetching profile data:", error);
+        setLoading(false);
+        setUserFound(false);
+      }
+    };
+
+    fetchUserProfile();
+
+  }, [username, authLoading, currentUser]);
+  
+  if (loading || authLoading) {
+    return <ProfilePageSkeleton />;
+  }
+  
+  if (!userFound || !profileUser) {
+    // This will render Next.js's default not-found page
+    return notFound();
+  }
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
@@ -83,11 +209,12 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
       <Card className="overflow-hidden">
         <div className="relative h-48 w-full bg-secondary md:h-64">
           <Image
-            src="https://picsum.photos/1200/400"
+            src={`https://picsum.photos/seed/${profileUser.uid}/1200/400`}
             alt="Cover image"
             data-ai-hint="abstract landscape"
             fill
             className="object-cover"
+            priority
           />
         </div>
         <CardContent className="p-4 sm:p-6">
@@ -98,7 +225,7 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
                   src={profileUser.photoURL ?? ''}
                   alt={profileUser.name ?? 'User'}
                 />
-                <AvatarFallback>{getInitials(profileUser.name)}</AvatarFallback>
+                <AvatarFallback className="text-3xl">{getInitials(profileUser.name)}</AvatarFallback>
               </Avatar>
             </div>
             <div className="flex-1 text-center sm:text-left">
@@ -111,10 +238,6 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
                 <div className="flex items-center gap-1">
                   <MapPin className="h-4 w-4" />
                   <span>Planet Earth</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Mail className="h-4 w-4" />
-                  <span>{profileUser.email}</span>
                 </div>
               </div>
             </div>
@@ -137,13 +260,13 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
 
       <Tabs defaultValue="wishlists" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="wishlists">Wishlists</TabsTrigger>
-          <TabsTrigger value="posts">Posts</TabsTrigger>
+          <TabsTrigger value="wishlists">Wishlists ({wishlists.length})</TabsTrigger>
+          <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
         </TabsList>
         <TabsContent value="wishlists" className="mt-6">
              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {initialWishlists.length > 0 ? initialWishlists.map((list) => (
+                {wishlists.length > 0 ? wishlists.map((list) => (
                     <Link href={`/dashboard/wishlist/${list.id}`} key={list.id}>
                         <Card className="group flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 hover:scale-105 hover:shadow-2xl">
                            <CardHeader className="relative p-0 h-48">
@@ -187,11 +310,14 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
             </div>
         </TabsContent>
         <TabsContent value="posts" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {initialPosts.length > 0 ? initialPosts.map((post) => (
-              <Card key={post.id}>
+          <div className="space-y-6">
+            {posts.length > 0 ? posts.map((post) => (
+               <Card key={post.id}>
+                <CardHeader>
+                    {/* Minimal post header, can be expanded */}
+                </CardHeader>
                 <CardContent className="p-4">
-                  <p className="mb-4 text-sm">{post.content}</p>
+                  <p className="mb-4 text-sm whitespace-pre-wrap">{post.content}</p>
                   {post.imageUrl && (
                     <div className="relative aspect-video w-full overflow-hidden rounded-lg">
                       <Image
@@ -207,17 +333,15 @@ export function ProfilePageClient({ profileUser, initialWishlists, initialPosts 
                 </CardContent>
               </Card>
             )) : (
-                 <div className="flex items-center justify-center p-8 text-center text-muted-foreground md:col-span-2 xl:col-span-3">
+                 <div className="flex items-center justify-center p-8 text-center text-muted-foreground rounded-lg border-2 border-dashed">
                     <p>This user hasn't made any posts yet.</p>
                 </div>
             )}
           </div>
         </TabsContent>
         <TabsContent value="favorites" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:col-span-3">
-             <div className="flex items-center justify-center p-8 text-center text-muted-foreground md:col-span-2 xl:col-span-3">
-                <p>Favorites feature coming soon!</p>
-            </div>
+           <div className="flex items-center justify-center p-8 text-center text-muted-foreground rounded-lg border-2 border-dashed">
+              <p>Favorites feature coming soon!</p>
           </div>
         </TabsContent>
       </Tabs>
