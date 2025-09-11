@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Users,
   Globe,
+  Loader2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -47,7 +49,7 @@ interface Wishlist extends DocumentData {
     authorName: string;
     authorUsername: string;
     authorAvatar: string;
-    coverImageUrl: string;
+    imageUrl: string;
     aiHint: string;
     category: string;
     privacy: 'public' | 'friends' | 'private';
@@ -58,6 +60,21 @@ interface Wishlist extends DocumentData {
     saves: number;
     progress: number;
     itemCount: number;
+}
+
+interface Item extends DocumentData {
+    id: string;
+    name: string;
+    source?: string;
+    status: 'available' | 'reserved' | 'fulfilled';
+    details?: string;
+    description?: string;
+    imageUrl: string;
+    aiHint?: string;
+    reservedBy?: string;
+    price?: string;
+    purchaseUrl?: string;
+    addedAt: any;
 }
 
 
@@ -108,7 +125,9 @@ export default function WishlistDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingItems, setLoadingItems] = useState(true);
 
    useEffect(() => {
     if (!id) return;
@@ -122,6 +141,24 @@ export default function WishlistDetailPage() {
         setWishlist(null); // Or handle not found state
       }
       setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoadingItems(true);
+    const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
+    const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const itemsData: Item[] = [];
+      querySnapshot.forEach((doc) => {
+        itemsData.push({ id: doc.id, ...doc.data() } as Item);
+      });
+      setItems(itemsData);
+      setLoadingItems(false);
     });
 
     return () => unsubscribe();
@@ -144,64 +181,6 @@ export default function WishlistDetailPage() {
       if (!privacy) return 'Public';
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
   }
-
-  // Placeholder for items - this will be dynamic later
-  const items = [
-    {
-      id: 1,
-      name: 'Item 1 - Fulfilled',
-      source: 'Amazon',
-      status: 'fulfilled',
-      details: 'One time, 1 required',
-      description: 'A fulfilled item description.',
-      imageUrl: 'https://picsum.photos/seed/item1/100/100',
-      aiHint: 'gadget box',
-    },
-    {
-      id: 2,
-      name: 'Item 2 - Also Fulfilled',
-      source: 'Hepsiburada',
-      status: 'fulfilled',
-      details: 'One time, 1 required',
-      description: 'Another fulfilled item, showing the state.',
-      imageUrl: 'https://picsum.photos/seed/item2/100/100',
-      aiHint: 'book cover',
-    },
-    {
-      id: 3,
-      name: '8’li Çekmeceli Dolap İyi Düzenleyici Kutusu Set',
-      source: 'IKEA',
-      status: 'reserved',
-      details: 'Monthly, 10 required',
-      description: 'Tamam organize set.',
-      imageUrl: 'https://picsum.photos/seed/item3/100/100',
-      aiHint: 'storage box',
-      reservedBy: 'Ayşe Yılmaz',
-    },
-    {
-      id: 4,
-      name: 'Mathilda King Size Nevresim Takımı',
-      source: 'Zara Home',
-      status: 'available',
-      price: '999,99 TL',
-      details: 'One time, 1 required',
-      description:
-        '100% cotton sateen for a soft, smooth feel.',
-      imageUrl: 'https://picsum.photos/seed/item4/100/100',
-      aiHint: 'bedding set',
-    },
-     {
-      id: 5,
-      name: 'King Size 100% Pamuk Karartma Düz Pike',
-      source: 'Mudo',
-      status: 'available',
-      price: '899,00 TL',
-      description:
-        'A stylish and comfortable king size pike.',
-      imageUrl: 'https://picsum.photos/seed/item5/100/100',
-      aiHint: 'cotton blanket',
-    },
-  ];
 
   if (loading) {
     return <WishlistDetailSkeleton />;
@@ -310,92 +289,110 @@ export default function WishlistDetailPage() {
           </AddItemDialog>
         </div>
         <Separator />
+        
+        {loadingItems ? (
+             <div className="flex justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-12 text-center">
+                 <h3 className="text-xl font-semibold">No items yet!</h3>
+                <p className="mt-2 text-muted-foreground">
+                    Click "Add Item" to start building your wishlist.
+                </p>
+            </div>
+        ) : (
+          <div className="space-y-4">
+            {items.map((item) => (
+              <Card key={item.id} className="overflow-hidden">
+                <div className="flex">
+                  {/* Image / Icon */}
+                  <div
+                    className={`flex w-32 flex-shrink-0 items-center justify-center ${
+                      item.status === 'fulfilled'
+                        ? 'bg-green-100 dark:bg-green-900/50'
+                        : ''
+                    }`}
+                  >
+                    {item.status === 'fulfilled' ? (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white">
+                        <Gift className="h-8 w-8" />
+                      </div>
+                    ) : (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        data-ai-hint={item.aiHint}
+                        width={128}
+                        height={128}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
 
-        <div className="space-y-4">
-          {items.map((item) => (
-            <Card key={item.id} className="overflow-hidden">
-              <div className="flex">
-                {/* Image / Icon */}
-                <div
-                  className={`flex w-32 flex-shrink-0 items-center justify-center ${
-                    item.status === 'fulfilled'
-                      ? 'bg-green-100 dark:bg-green-900/50'
-                      : ''
-                  }`}
-                >
-                  {item.status === 'fulfilled' ? (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white">
-                      <Gift className="h-8 w-8" />
-                    </div>
-                  ) : (
-                    <Image
-                      src={item.imageUrl}
-                      alt={item.name}
-                      data-ai-hint={item.aiHint}
-                      width={128}
-                      height={128}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
+                  {/* Content */}
+                  <div className="flex-1">
+                    <CardHeader className="flex flex-row items-start justify-between pb-2">
+                      <div>
+                        <CardTitle className="text-lg">{item.name}</CardTitle>
+                         {item.addedAt && (
+                           <p className="text-sm text-muted-foreground">
+                            Added {formatDistanceToNow(item.addedAt.toDate(), { addSuffix: true })}
+                           </p>
+                         )}
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>Edit</DropdownMenuItem>
+                          <DropdownMenuItem>Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardHeader>
+                    <CardContent className="space-y-2 pb-4 pt-0 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Badge variant="outline">{item.recurrence}</Badge>
+                        <Badge variant="outline">{item.quantity} required</Badge>
+                         <Badge variant="outline">Priority: {item.priority}</Badge>
+                      </div>
+                      {item.description && <p>{item.description}</p>}
+                      {item.price && <p className="font-bold">{item.price}</p>}
+                      {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" className="text-primary hover:underline">View Product</Link>}
+                    </CardContent>
+
+                    {item.status === 'fulfilled' && (
+                      <CardFooter className="bg-muted/50 py-3">
+                          <p className="text-sm font-medium text-green-600 dark:text-green-400">Fulfilled</p>
+                      </CardFooter>
+                    )}
+
+                    {item.status === 'reserved' && (
+                      <div className="px-6 pb-4">
+                          <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
+                              <div className="flex items-start gap-3">
+                                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
+                                  <div>
+                                      <p className="font-semibold">Reserved by {item.reservedBy}</p>
+                                      <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
+                                  </div>
+                              </div>
+                            <Button className="mt-3 w-full">Mark as purchased</Button>
+                          </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                {/* Content */}
-                <div className="flex-1">
-                  <CardHeader className="flex flex-row items-start justify-between pb-2">
-                    <div>
-                      <CardTitle className="text-lg">{item.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {item.source}
-                      </p>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pb-4 pt-0 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                       <Badge variant="outline">{item.details}</Badge>
-                    </div>
-                    <p>{item.description}</p>
-                    {item.price && <p className="font-bold">{item.price}</p>}
-                    <Link href="#" className="text-primary hover:underline">View Product</Link>
-                  </CardContent>
-
-                  {item.status === 'fulfilled' && (
-                     <CardFooter className="bg-muted/50 py-3">
-                        <p className="text-sm font-medium text-green-600 dark:text-green-400">Fulfilled</p>
-                     </CardFooter>
-                  )}
-
-                  {item.status === 'reserved' && (
-                    <div className="px-6 pb-4">
-                        <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
-                            <div className="flex items-start gap-3">
-                                <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
-                                <div>
-                                    <p className="font-semibold">Reserved by {item.reservedBy}</p>
-                                    <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
-                                </div>
-                            </div>
-                           <Button className="mt-3 w-full">Mark as purchased</Button>
-                        </div>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+    
