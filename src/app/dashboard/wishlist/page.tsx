@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -210,9 +211,6 @@ export default function WishlistPage() {
                         </DropdownMenu>
                      </div>
                   </div>
-                   <p className="mt-2 text-sm text-muted-foreground">
-                        {list.itemCount} item types
-                   </p>
                    <div className="mt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
                             <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
