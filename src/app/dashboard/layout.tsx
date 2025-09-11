@@ -24,7 +24,7 @@ import {
   ListTodo,
   Sparkles,
   LogOut,
-  Plus,
+  PlusCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ScrollToTop } from '@/components/ui/scroll-to-top';
@@ -289,12 +289,15 @@ export default function DashboardLayout({
             </SidebarContent>
              <SidebarFooter>
                 <CreateWishlistDialog>
-                    <SidebarMenuButton className="w-full" size="lg" tooltip={{children: "Create Wishlist", side: "right"}}>
-                        <Plus />
-                        <span className="group-data-[collapsible=icon]:hidden">
-                            Create Wishlist
-                        </span>
-                    </SidebarMenuButton>
+                  <Button
+                    variant="default"
+                    className="w-full justify-center group-data-[collapsible=icon]:h-12 group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+                  >
+                    <PlusCircle className="h-5 w-5" />
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      Create Wishlist
+                    </span>
+                  </Button>
                 </CreateWishlistDialog>
             </SidebarFooter>
           </Sidebar>
