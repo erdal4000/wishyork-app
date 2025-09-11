@@ -54,7 +54,6 @@ export function GlobalSearch() {
     }
 
     setLoading(true);
-    setPopoverOpen(true);
     
     const searchText = trimmedQuery.startsWith('@') ? trimmedQuery.substring(1) : trimmedQuery;
     const lowerCaseQuery = searchText.toLowerCase();
@@ -63,22 +62,21 @@ export function GlobalSearch() {
       // --- Users Query ---
       const usersQuery = query(
         collection(db, 'users'),
-        orderBy('username'), // Using username which is already lowercase
-        where('username', '>=', lowerCaseQuery),
-        where('username', '<=', lowerCaseQuery + '\uf8ff'),
+        orderBy('username_lowercase'),
+        where('username_lowercase', '>=', lowerCaseQuery),
+        where('username_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
         limit(5)
       );
       
       // --- Wishlists Query ---
       const wishlistsQuery = query(
         collection(db, 'wishlists'),
+        where('privacy', '==', 'public'),
         orderBy('title_lowercase'),
         where('title_lowercase', '>=', lowerCaseQuery),
         where('title_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
-        where('privacy', '==', 'public'),
         limit(5)
       );
-
 
       const [userSnap, wishlistSnap] = await Promise.all([
         getDocs(usersQuery),
@@ -112,13 +110,29 @@ export function GlobalSearch() {
     router.push(path);
   };
   
+  const handleFocus = () => {
+    if (searchQuery.trim().length > 0) {
+      setPopoverOpen(true);
+    }
+  }
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const query = e.target.value;
+      setSearchQuery(query);
+      if (query.trim().length > 0) {
+          setPopoverOpen(true);
+      } else {
+          setPopoverOpen(false);
+      }
+  }
+
   const handleBlur = () => {
     // We delay closing the popover slightly to allow click events on items to register
     setTimeout(() => {
         if (!inputRef.current?.matches(':focus-within')) {
            setPopoverOpen(false);
         }
-    }, 100);
+    }, 150);
   }
 
   const hasResults = results.users.length > 0 || results.wishlists.length > 0;
@@ -134,8 +148,8 @@ export function GlobalSearch() {
             placeholder="Search users, wishlists..."
             className="pl-10"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setPopoverOpen(searchQuery.length > 0)}
+            onChange={handleInputChange}
+            onFocus={handleFocus}
           />
         </div>
       </PopoverAnchor>
@@ -156,9 +170,9 @@ export function GlobalSearch() {
               ) : null}
               
               {results.users.length > 0 && (
-                <CommandGroup heading="Users">
+                <CommandGroup heading="People">
                   {results.users.map((user) => (
-                    <CommandItem key={user.id} onSelect={() => handleSelect(`/dashboard/profile/${user.username}`)}>
+                    <CommandItem key={user.id} onSelect={() => handleSelect(`/dashboard/profile/${user.username}`)} value={`user-${user.username}`}>
                       <Avatar className="mr-2 h-6 w-6">
                         <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`} alt={user.name} />
                         <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
@@ -175,7 +189,7 @@ export function GlobalSearch() {
               {results.wishlists.length > 0 && (
                 <CommandGroup heading="Wishlists">
                   {results.wishlists.map((wishlist) => (
-                    <CommandItem key={wishlist.id} onSelect={() => handleSelect(`/dashboard/wishlist/${wishlist.id}`)}>
+                    <CommandItem key={wishlist.id} onSelect={() => handleSelect(`/dashboard/wishlist/${wishlist.id}`)} value={`wishlist-${wishlist.title}`}>
                       <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-sm bg-secondary">
                         <List className="h-4 w-4 text-muted-foreground" />
                       </div>
