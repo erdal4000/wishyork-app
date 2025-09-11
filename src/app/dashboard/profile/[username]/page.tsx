@@ -18,6 +18,7 @@ interface Post {
   content: string;
   imageUrl: string | null;
   aiHint: string | null;
+  // Add other post fields as necessary
 }
 
 interface Wishlist {
@@ -30,6 +31,7 @@ interface Wishlist {
   itemCount: number;
   privacy: 'public' | 'private' | 'friends';
   likes?: number;
+  // Add other wishlist fields as necessary
 }
 
 // Helper function to fetch user data by username from Firestore
@@ -64,7 +66,16 @@ async function getPublicWishlistsByAuthorId(authorId: string): Promise<Wishlist[
     ...doc.data(),
   })) as Wishlist[];
 
-  return wishlists;
+  // Fetch itemCount for each wishlist
+  const wishlistsWithItemCount = await Promise.all(
+    wishlists.map(async (list) => {
+      const itemsColRef = collection(db, 'wishlists', list.id, 'items');
+      const snapshot = await getDocs(itemsColRef);
+      return { ...list, itemCount: snapshot.size };
+    })
+  );
+
+  return wishlistsWithItemCount;
 }
 
 // Helper function to fetch posts for a given author ID
