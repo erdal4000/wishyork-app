@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, notFound } from 'next/navigation';
+import { useParams, notFound, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import {
@@ -37,6 +37,7 @@ import {
   Bookmark,
   Trash2,
   Repeat2,
+  Share2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -107,8 +108,8 @@ function ProfilePageSkeleton() {
               <Skeleton className="h-24 w-24 rounded-full border-4 border-card sm:h-32 sm:w-32" />
             </div>
             <div className="flex-1 space-y-2 text-center sm:text-left">
-              <Skeleton className="h-8 w-48" />
-              <Skeleton className="h-5 w-32" />
+              <Skeleton className="mx-auto h-8 w-48 sm:mx-0" />
+              <Skeleton className="mx-auto h-5 w-32 sm:mx-0" />
               <Skeleton className="h-4 w-full max-w-lg" />
             </div>
             <div className="mt-2 flex-shrink-0 sm:mt-0">
@@ -124,8 +125,11 @@ function ProfilePageSkeleton() {
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
         </TabsList>
       </Tabs>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-        {[...Array(3)].map((_, i) => (
+      <div className="relative my-4">
+        <Skeleton className="h-10 w-full" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        {[...Array(2)].map((_, i) => (
           <Skeleton key={i} className="h-80 w-full rounded-2xl" />
         ))}
       </div>
@@ -177,13 +181,13 @@ export function ProfilePageClient() {
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
+        
         let initialWishlistsLoaded = false;
         let initialPostsLoaded = false;
-
         const turnOffLoading = () => {
-          if (initialWishlistsLoaded && initialPostsLoaded) {
-            setLoading(false);
-          }
+            if (initialWishlistsLoaded && initialPostsLoaded) {
+              setLoading(false);
+            }
         };
 
         const wishlistsQuery = isOwnProfile
@@ -198,7 +202,7 @@ export function ProfilePageClient() {
               where('privacy', '==', 'public'),
               orderBy('createdAt', 'desc')
             );
-        
+
         const unsubscribeWishlists = onSnapshot(wishlistsQuery, async (snapshot) => {
             const listsPromises = snapshot.docs.map(async (doc) => {
               const listData = { id: doc.id, ...doc.data() } as Wishlist;
@@ -211,22 +215,18 @@ export function ProfilePageClient() {
             setWishlists(lists);
             initialWishlistsLoaded = true;
             turnOffLoading();
-          },
-          (error) => {
+          }, (error) => {
             console.error('Error fetching wishlists: ', error);
             initialWishlistsLoaded = true;
             turnOffLoading();
           }
         );
-        
-        // Handle case where query returns no documents
         getDocs(wishlistsQuery).then(snap => {
-            if (snap.empty && !initialWishlistsLoaded) {
+            if (snap.empty) {
                 initialWishlistsLoaded = true;
                 turnOffLoading();
             }
         });
-
 
         const postsQuery = query(
           collection(db, 'posts'),
@@ -241,8 +241,7 @@ export function ProfilePageClient() {
             setPosts(postsData);
             initialPostsLoaded = true;
             turnOffLoading();
-          },
-          (error) => {
+          }, (error) => {
             console.error('Error fetching posts: ', error);
             initialPostsLoaded = true;
             turnOffLoading();
@@ -250,18 +249,16 @@ export function ProfilePageClient() {
         );
 
         getDocs(postsQuery).then(snap => {
-            if (snap.empty && !initialPostsLoaded) {
+            if (snap.empty) {
                 initialPostsLoaded = true;
                 turnOffLoading();
             }
         });
 
-
         return () => {
           unsubscribeWishlists();
           unsubscribePosts();
         };
-
       } catch (error) {
         console.error('Error fetching profile:', error);
         setUserFound(false);
@@ -270,7 +267,6 @@ export function ProfilePageClient() {
     };
 
     fetchUserProfile();
-
   }, [username, authLoading, currentUser]);
 
   if (loading) {
@@ -301,11 +297,11 @@ export function ProfilePageClient() {
         return null;
     }
   };
-  
+
   const getPrivacyLabel = (privacy: string) => {
-      if (!privacy) return 'Public';
-      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
-  }
+    if (!privacy) return 'Public';
+    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  };
 
   const handleDeleteWishlist = async (wishlistId: string) => {
     try {
@@ -320,7 +316,6 @@ export function ProfilePageClient() {
       });
     }
   };
-
 
   const isOwnProfile = currentUser?.uid === profileUser?.uid;
 
@@ -394,139 +389,156 @@ export function ProfilePageClient() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {wishlists.length > 0 ? (
               wishlists.map((list) => (
-                <Card
-                  key={list.id}
-                  className="group flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 hover:scale-105 hover:shadow-2xl"
-                >
-                  <CardHeader className="relative h-48 p-0">
-                    <Link
-                      href={`/dashboard/wishlist/${list.id}`}
-                      className="absolute inset-0 z-0"
-                    >
-                      <span className="sr-only">View Wishlist</span>
-                    </Link>
-                    <Image
-                      src={list.imageUrl}
-                      alt={list.title}
-                      data-ai-hint={list.aiHint}
-                      fill
-                      className="object-cover"
-                    />
-                    <Badge
-                      variant="secondary"
-                      className="absolute left-3 top-3 z-10"
-                    >
-                      {list.category}
-                    </Badge>
-                    <div className="absolute right-3 top-3 z-10">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
+                <div key={list.id} className="group relative block">
+                  <Link
+                    href={`/dashboard/wishlist/${list.id}`}
+                    className="absolute inset-0 z-0"
+                    aria-label={`View ${list.title} wishlist`}
+                  />
+                  <Card className="relative z-10 flex h-full flex-col overflow-hidden rounded-2xl shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+                    <CardHeader className="relative h-48 p-0">
+                      <Image
+                        src={list.imageUrl}
+                        alt={list.title}
+                        data-ai-hint={list.aiHint}
+                        fill
+                        className="object-cover"
+                      />
+                      <Badge
+                        variant="secondary"
+                        className="absolute left-3 top-3 z-10"
+                      >
+                        {list.category}
+                      </Badge>
+                      <div className="absolute right-3 top-3 z-20">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                            >
+                              <MoreHorizontal className="h-5 w-5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <MoreHorizontal className="h-5 w-5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {isOwnProfile ? (
-                            <>
-                              <DropdownMenuItem
-                                onSelect={() => setEditingWishlist(list)}
-                              >
-                                <Edit className="mr-2 h-4 w-4" /> Edit
-                              </DropdownMenuItem>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <DropdownMenuItem
-                                    onSelect={(e) => e.preventDefault()}
-                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                  </DropdownMenuItem>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Are you absolutely sure?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone. This will
-                                      permanently delete this wishlist.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>
-                                      Cancel
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() =>
-                                        handleDeleteWishlist(list.id)
-                                      }
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      Yes, delete wishlist
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </>
-                          ) : (
-                            <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                              <AlertTriangle className="mr-2 h-4 w-4" /> Report
+                            <DropdownMenuItem>
+                              <Share2 className="mr-2 h-4 w-4" /> Share
                             </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex flex-1 flex-col p-4">
-                    <h3 className="font-headline text-lg font-bold">
-                      {list.title}
-                    </h3>
-                    <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4" />
-                        <span>{list.itemCount || 0} items</span>
+                            {isOwnProfile ? (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() => setEditingWishlist(list)}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" /> Edit
+                                </DropdownMenuItem>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem
+                                      onSelect={(e) => e.preventDefault()}
+                                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                    </DropdownMenuItem>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>
+                                        Are you absolutely sure?
+                                      </AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This action cannot be undone. This will
+                                        permanently delete this wishlist.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>
+                                        Cancel
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() =>
+                                          handleDeleteWishlist(list.id)
+                                        }
+                                        className="bg-destructive hover:bg-destructive/90"
+                                      >
+                                        Yes, delete wishlist
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            ) : (
+                              <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                <AlertTriangle className="mr-2 h-4 w-4" />{' '}
+                                Report
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {getPrivacyIcon(list.privacy)}
-                        <span>{getPrivacyLabel(list.privacy)}</span>
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col p-4">
+                      <h3 className="font-headline text-lg font-bold">
+                        {list.title}
+                      </h3>
+                      <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          <span>{list.itemCount || 0} items</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {getPrivacyIcon(list.privacy)}
+                          <span>{getPrivacyLabel(list.privacy)}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-auto pt-4">
-                      <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                        <span>Progress</span>
-                        <span className="font-semibold">
-                          {list.progress || 0}%
-                        </span>
+                      <div className="mt-auto pt-4">
+                        <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                          <span>Progress</span>
+                          <span className="font-semibold">
+                            {list.progress || 0}%
+                          </span>
+                        </div>
+                        <Progress value={list.progress || 0} className="h-2" />
                       </div>
-                      <Progress value={list.progress || 0} className="h-2" />
-                    </div>
-                  </CardContent>
-                  <Separator />
-                  <div className="flex items-center justify-between p-2 text-sm text-muted-foreground">
-                    <div className="flex">
-                      <Button variant="ghost" size="sm">
-                        <Heart className="mr-1.5 h-4 w-4" />
-                        {list.likes || 0}
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <MessageCircle className="mr-1.5 h-4 w-4" />
-                        {list.comments || 0}
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Bookmark className="mr-1.5 h-4 w-4" />
-                        {list.saves || 0}
-                      </Button>
-                    </div>
-                    <Button variant="ghost" size="sm">
+                    </CardContent>
+                    <Separator />
+                    <div className="flex items-center justify-between p-2 text-sm text-muted-foreground">
+                      <div className="flex">
+                        <Button variant="ghost" size="sm" className="px-2">
+                          <Heart className="mr-1.5 h-4 w-4" />
+                          <span className="font-medium">
+                            {list.likes || 0}
+                          </span>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="px-2">
+                          <MessageCircle className="mr-1.5 h-4 w-4" />
+                          <span className="font-medium">
+                            {list.comments || 0}
+                          </span>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="px-2">
+                          <Bookmark className="mr-1.5 h-4 w-4" />
+                          <span className="font-medium">
+                            {list.saves || 0}
+                          </span>
+                        </Button>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.preventDefault(); /* handle repost */
+                        }}
+                      >
                         <Repeat2 className="mr-1.5 h-4 w-4" />
                         Repost
-                    </Button>
-                  </div>
-                </Card>
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
               ))
             ) : (
               <div className="col-span-1 flex items-center justify-center rounded-lg border-2 border-dashed py-12 text-center sm:col-span-2">
@@ -544,9 +556,6 @@ export function ProfilePageClient() {
             {posts.length > 0 ? (
               posts.map((post) => (
                 <Card key={post.id}>
-                  <CardHeader>
-                    {/* Minimal post header, can be expanded */}
-                  </CardHeader>
                   <CardContent className="p-4">
                     <p className="mb-4 whitespace-pre-wrap text-sm">
                       {post.content}
