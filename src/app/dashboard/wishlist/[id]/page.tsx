@@ -1,6 +1,10 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
   Bookmark,
@@ -11,6 +15,8 @@ import {
   Lock,
   Gift,
   AlertTriangle,
+  Users,
+  Globe,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -32,29 +38,113 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
 import Link from 'next/link';
+import { Skeleton } from '@/components/ui/skeleton';
+
+interface Wishlist extends DocumentData {
+    id: string;
+    title: string;
+    authorName: string;
+    authorUsername: string;
+    authorAvatar: string;
+    coverImageUrl: string;
+    aiHint: string;
+    category: string;
+    privacy: 'public' | 'friends' | 'private';
+    unitsFulfilled: number;
+    totalUnits: number;
+    likes: number;
+    comments: number;
+    saves: number;
+    progress: number;
+    itemCount: number;
+}
+
+
+function WishlistDetailSkeleton() {
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                 <Skeleton className="h-10 w-24" />
+                 <Skeleton className="h-10 w-24" />
+            </div>
+             <Card className="overflow-hidden">
+                <Skeleton className="h-48 w-full" />
+                <CardContent className="pt-16">
+                     <Skeleton className="h-6 w-24 mb-2" />
+                     <Skeleton className="h-8 w-1/2 mb-2" />
+                     <Skeleton className="h-5 w-1/3 mb-4" />
+                     <div className="space-y-2">
+                        <div className="flex justify-between">
+                            <Skeleton className="h-4 w-1/4" />
+                            <Skeleton className="h-4 w-1/5" />
+                        </div>
+                        <Skeleton className="h-2 w-full" />
+                     </div>
+                </CardContent>
+                <CardFooter className="flex items-center justify-between px-6 pb-4">
+                     <div className="flex gap-4">
+                        <Skeleton className="h-6 w-10" />
+                        <Skeleton className="h-6 w-10" />
+                        <Skeleton className="h-6 w-10" />
+                     </div>
+                     <Skeleton className="h-8 w-8" />
+                </CardFooter>
+            </Card>
+             <div className="flex items-center justify-between">
+                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-10 w-28" />
+            </div>
+             <Separator />
+             <div className="space-y-4">
+                 <Skeleton className="h-32 w-full rounded-lg" />
+                 <Skeleton className="h-32 w-full rounded-lg" />
+            </div>
+        </div>
+    )
+}
 
 export default function WishlistDetailPage() {
-  const wishlist = {
-    id: 1,
-    title: 'Duman',
-    author: 'Jade Delon',
-    authorUsername: 'jadedelon',
-    authorAvatar: 'A',
-    coverImageUrl: 'https://picsum.photos/seed/duman/1200/400',
-    aiHint: 'concert crowd',
-    category: 'Health',
-    privacy: 'Public',
-    unitsFulfilled: 6,
-    totalUnits: 14,
-    likes: 1,
-    comments: 0,
-    bookmarks: 0,
+  const params = useParams();
+  const id = params.id as string;
+  const [wishlist, setWishlist] = useState<Wishlist | null>(null);
+  const [loading, setLoading] = useState(true);
+
+   useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    const docRef = doc(db, 'wishlists', id);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setWishlist({ id: docSnap.id, ...docSnap.data() } as Wishlist);
+      } else {
+        console.log("No such document!");
+        setWishlist(null); // Or handle not found state
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [id]);
+  
+  const getPrivacyIcon = (privacy: string) => {
+    switch (privacy) {
+      case 'public':
+        return <Globe className="h-4 w-4" />;
+      case 'friends':
+        return <Users className="h-4 w-4" />;
+      case 'private':
+        return <Lock className="h-4 w-4" />;
+      default:
+        return <Globe className="h-4 w-4" />;
+    }
   };
+  
+  const getPrivacyLabel = (privacy: string) => {
+      if (!privacy) return 'Public';
+      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  }
 
-  const progress = Math.round(
-    (wishlist.unitsFulfilled / wishlist.totalUnits) * 100
-  );
-
+  // Placeholder for items - this will be dynamic later
   const items = [
     {
       id: 1,
@@ -112,13 +202,21 @@ export default function WishlistDetailPage() {
     },
   ];
 
+  if (loading) {
+    return <WishlistDetailSkeleton />;
+  }
+
+  if (!wishlist) {
+    return <div>Wishlist not found.</div>; // Or a more elaborate "Not Found" component
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="ghost" asChild>
           <Link href="/dashboard/wishlist">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
+            Back to Wishlists
           </Link>
         </Button>
         <DropdownMenu>
@@ -139,7 +237,7 @@ export default function WishlistDetailPage() {
       <Card className="overflow-hidden">
         <CardHeader className="relative h-48 w-full p-0">
           <Image
-            src={wishlist.coverImageUrl}
+            src={wishlist.imageUrl}
             alt={wishlist.title}
             data-ai-hint={wishlist.aiHint}
             fill
@@ -147,9 +245,9 @@ export default function WishlistDetailPage() {
           />
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <Avatar className="h-24 w-24 border-4 border-card">
-              <AvatarImage src="" alt={wishlist.author} />
+              <AvatarImage src="" alt={wishlist.authorName} />
               <AvatarFallback className="text-3xl">
-                {wishlist.authorAvatar}
+                {wishlist.authorName.charAt(0)}
               </AvatarFallback>
             </Avatar>
           </div>
@@ -157,13 +255,16 @@ export default function WishlistDetailPage() {
         <CardContent className="pt-16">
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{wishlist.category}</Badge>
-            <Badge variant="outline">{wishlist.privacy}</Badge>
+             <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
+                {getPrivacyIcon(wishlist.privacy)}
+                <span>{getPrivacyLabel(wishlist.privacy)}</span>
+            </Badge>
           </div>
           <h1 className="mt-2 text-3xl font-bold">{wishlist.title}</h1>
           <p className="text-muted-foreground">
             by{' '}
             <Link href={`/profile/${wishlist.authorUsername}`} className="text-primary hover:underline">
-              {wishlist.author}
+              {wishlist.authorName}
             </Link>
           </p>
 
@@ -173,9 +274,9 @@ export default function WishlistDetailPage() {
                 {wishlist.unitsFulfilled} of {wishlist.totalUnits} units
                 fulfilled
               </span>
-              <span>{progress}%</span>
+              <span>{wishlist.progress}%</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <Progress value={wishlist.progress} className="h-2" />
           </div>
         </CardContent>
         <CardFooter className="flex items-center justify-between px-6 pb-4">
@@ -187,7 +288,7 @@ export default function WishlistDetailPage() {
               <MessageCircle className="h-5 w-5" /> {wishlist.comments}
             </span>
             <span className="flex items-center gap-1.5">
-              <Bookmark className="h-5 w-5" /> {wishlist.bookmarks}
+              <Bookmark className="h-5 w-5" /> {wishlist.saves}
             </span>
           </div>
           <Button variant="ghost" size="icon">
