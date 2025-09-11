@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
   Users,
   Globe,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +36,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
@@ -42,6 +54,7 @@ import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { formatDistanceToNow } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -75,6 +88,9 @@ interface Item extends DocumentData {
     price?: string;
     purchaseUrl?: string;
     addedAt: any;
+    priority: string;
+    recurrence: string;
+    quantity: number;
 }
 
 
@@ -128,6 +144,7 @@ export default function WishlistDetailPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(true);
+  const { toast } = useToast();
 
    useEffect(() => {
     if (!id) return;
@@ -159,10 +176,14 @@ export default function WishlistDetailPage() {
       });
       setItems(itemsData);
       setLoadingItems(false);
+    }, (error) => {
+        console.error("Error fetching items: ", error);
+        toast({ title: "Error", description: "Could not fetch items.", variant: "destructive" });
+        setLoadingItems(false);
     });
 
     return () => unsubscribe();
-  }, [id]);
+  }, [id, toast]);
   
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
@@ -180,6 +201,17 @@ export default function WishlistDetailPage() {
   const getPrivacyLabel = (privacy: string) => {
       if (!privacy) return 'Public';
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+  }
+
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+        await deleteDoc(itemRef);
+        toast({ title: "Success", description: "Item removed from wishlist." });
+    } catch (error) {
+        console.error("Error deleting item: ", error);
+        toast({ title: "Error", description: "Could not remove the item. Please try again.", variant: "destructive" });
+    }
   }
 
   if (loading) {
@@ -349,12 +381,34 @@ export default function WishlistDetailPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuItem>Delete</DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the item
+                                        from your wishlist.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteItem(item.id)}>
+                                        Yes, delete item
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </CardHeader>
                     <CardContent className="space-y-2 pb-4 pt-0 text-sm">
-                      <div className="flex items-center gap-2 text-muted-foreground">
+                      <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
                         <Badge variant="outline">{item.recurrence}</Badge>
                         <Badge variant="outline">{item.quantity} required</Badge>
                          <Badge variant="outline">Priority: {item.priority}</Badge>
