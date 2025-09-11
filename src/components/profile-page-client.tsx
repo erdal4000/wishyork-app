@@ -98,18 +98,24 @@ export function ProfilePageClient() {
 
   useEffect(() => {
     if (!username || authLoading) {
-      if (!authLoading) setLoading(false);
+      if (!authLoading && !username) {
+        setLoading(false);
+        setUserFound(false);
+      }
       return;
     }
 
     setLoading(true);
+    let isMounted = true;
     
-    const fetchUserProfile = async () => {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', username.toLowerCase()), limit(1));
-      
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', username.toLowerCase()), limit(1));
+    
+    const fetchProfileData = async () => {
       try {
         const userSnapshot = await getDocs(q);
+
+        if (!isMounted) return;
 
         if (userSnapshot.empty) {
           setUserFound(false);
@@ -122,14 +128,16 @@ export function ProfilePageClient() {
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
+        
+        // Setup listeners and turn off loading when they fire for the first time
         let initialWishlistsLoaded = false;
         let initialPostsLoaded = false;
-
+        
         const turnOffLoading = () => {
             if (initialWishlistsLoaded && initialPostsLoaded) {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
-        }
+        };
 
         // Wishlist listener
         const wishlistsQuery = isOwnProfile
@@ -145,37 +153,75 @@ export function ProfilePageClient() {
                 return listData;
             });
             const lists = await Promise.all(listsPromises);
-            setWishlists(lists);
-            initialWishlistsLoaded = true;
-            turnOffLoading();
+            if (isMounted) {
+                setWishlists(lists);
+                initialWishlistsLoaded = true;
+                turnOffLoading();
+            }
+        }, () => { // Error callback
+            if (isMounted) {
+                initialWishlistsLoaded = true;
+                turnOffLoading();
+            }
         });
+        
+        if (wishlistsQuery) {
+            // Check if there are any documents to begin with. If not, we can consider it "loaded".
+             getDocs(wishlistsQuery).then(snap => {
+                 if (snap.empty) {
+                     initialWishlistsLoaded = true;
+                     turnOffLoading();
+                 }
+             })
+        }
+
 
         // Posts listener
         const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
         const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
             const postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-            setPosts(postsData);
-            initialPostsLoaded = true;
-            turnOffLoading();
+            if (isMounted) {
+                setPosts(postsData);
+                initialPostsLoaded = true;
+                turnOffLoading();
+            }
+        }, () => { // Error callback
+             if (isMounted) {
+                initialPostsLoaded = true;
+                turnOffLoading();
+            }
         });
+        
+         if (postsQuery) {
+            // Check if there are any documents to begin with. If not, we can consider it "loaded".
+             getDocs(postsQuery).then(snap => {
+                 if (snap.empty) {
+                     initialPostsLoaded = true;
+                     turnOffLoading();
+                 }
+             })
+        }
+
 
         return () => {
-            unsubscribeWishlists();
-            unsubscribePosts();
+          isMounted = false;
+          unsubscribeWishlists();
+          unsubscribePosts();
         };
 
       } catch (error) {
         console.error("Error fetching profile data:", error);
-        setUserFound(false);
-        setLoading(false);
+        if (isMounted) {
+          setUserFound(false);
+          setLoading(false);
+        }
       }
     };
-
-    const cleanupPromise = fetchUserProfile();
-
-    return () => {
-        cleanupPromise.then(cleanup => cleanup && cleanup());
-    };
+    
+    fetchProfileData();
+    
+    // Return a cleanup function for the main effect
+    return () => { isMounted = false; };
 
   }, [username, authLoading, currentUser]);
   
