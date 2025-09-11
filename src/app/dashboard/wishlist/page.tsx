@@ -103,7 +103,7 @@ export default function WishlistPage() {
               key={list.id}
               className="group w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl"
             >
-              <CardHeader className="relative h-64 w-full p-0">
+              <CardHeader className="relative h-80 w-full p-0">
                 <Image
                   src={list.imageUrl}
                   alt={list.title}
