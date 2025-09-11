@@ -294,7 +294,9 @@ export function ProfilePageClient() {
 
   const isOwnProfile = currentUser?.uid === profileUser?.uid;
 
-  const profilePhoto = profileUser.photoURL || `https://picsum.photos/seed/${profileUser.uid}/200/200`;
+  const profilePhoto =
+    profileUser.photoURL ||
+    `https://picsum.photos/seed/${profileUser.uid}/200/200`;
 
   return (
     <div className="space-y-6">
@@ -365,12 +367,10 @@ export function ProfilePageClient() {
         <TabsContent value="wishlists" className="mt-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {wishlists.length > 0 ? (
-               wishlists.map((list) => (
-                <div key={list.id} className="block group relative">
+              wishlists.map((list) => (
+                <div key={list.id} className="group relative block">
                   <Link href={`/dashboard/wishlist/${list.id}`}>
-                    <Card
-                      className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl"
-                    >
+                    <Card className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl">
                       <CardHeader className="relative h-48 w-full p-0">
                         <Image
                           src={list.imageUrl}
@@ -379,7 +379,7 @@ export function ProfilePageClient() {
                           fill
                           className="object-cover transition-transform duration-300 group-hover:scale-105"
                         />
-                         <Badge
+                        <Badge
                           variant="secondary"
                           className="absolute left-3 top-3 z-10"
                         >
@@ -400,12 +400,12 @@ export function ProfilePageClient() {
                             <span>{getPrivacyLabel(list.privacy)}</span>
                           </div>
                         </div>
-                         <div className="mt-4">
-                              <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                  <span>{list.progress || 0}% complete</span>
-                              </div>
-                              <Progress value={list.progress || 0} className="h-2" />
-                         </div>
+                        <div className="mt-4">
+                          <div className="mb-1 flex justify-between text-sm text-muted-foreground">
+                            <span>{list.progress || 0}% complete</span>
+                          </div>
+                          <Progress value={list.progress || 0} className="h-2" />
+                        </div>
                       </CardContent>
                       <Separator />
                       <div className="flex justify-between p-2 text-sm text-muted-foreground">
@@ -418,81 +418,95 @@ export function ProfilePageClient() {
                             <MessageCircle className="mr-1.5 h-4 w-4" />
                             <span className="font-medium">{list.comments || 0}</span>
                           </Button>
-                           <Button variant="ghost" size="sm" className="px-2">
+                          <Button variant="ghost" size="sm" className="px-2">
                             <Bookmark className="mr-1.5 h-4 w-4" />
                             <span className="font-medium">{list.saves || 0}</span>
                           </Button>
                         </div>
-                         <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); /* handle repost */}}>
-                            <Repeat2 className="mr-1.5 h-4 w-4" />
-                            Repost
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            /* handle repost */
+                          }}
+                        >
+                          <Repeat2 className="mr-1.5 h-4 w-4" />
+                          Repost
                         </Button>
                       </div>
                     </Card>
                   </Link>
-                    <div className="absolute top-3 right-3 z-10">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                              <Button
-                              variant="secondary"
-                              size="icon"
-                              className="h-8 w-8 rounded-full"
-                              onClick={(e) => e.preventDefault()}
-                              >
-                              <MoreHorizontal className="h-5 w-5" />
-                              </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
-                              <DropdownMenuItem onSelect={() => {/* Share logic here */}}>
-                                  <Share2 className="mr-2 h-4 w-4" />
-                                  Share
-                              </DropdownMenuItem>
-                              {isOwnProfile ? (
-                                <>
-                                  <DropdownMenuItem
-                                    onSelect={() => setEditingWishlist(list)}
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                  </DropdownMenuItem>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <DropdownMenuItem
-                                        onSelect={(e) => e.preventDefault()}
-                                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                      >
-                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                      </DropdownMenuItem>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>
-                                          Are you absolutely sure?
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          This action cannot be undone. This will
-                                          permanently delete this wishlist.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => handleDeleteWishlist(list.id)}
-                                          className="bg-destructive hover:bg-destructive/90"
-                                        >
-                                          Yes, delete wishlist
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </>
-                              ) : (
-                                <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                                  <AlertTriangle className="mr-2 h-4 w-4" /> Report
+                  <div className="absolute right-3 top-3 z-20">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          <MoreHorizontal className="h-5 w-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            /* Share logic here */
+                          }}
+                        >
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Share
+                        </DropdownMenuItem>
+                        {isOwnProfile ? (
+                          <>
+                            <DropdownMenuItem
+                              onSelect={() => setEditingWishlist(list)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem
+                                  onSelect={(e) => e.preventDefault()}
+                                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
                                 </DropdownMenuItem>
-                              )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Are you absolutely sure?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will
+                                    permanently delete this wishlist.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteWishlist(list.id)}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                  >
+                                    Yes, delete wishlist
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        ) : (
+                          <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                            <AlertTriangle className="mr-2 h-4 w-4" /> Report
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               ))
             ) : (
