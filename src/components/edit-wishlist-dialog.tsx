@@ -13,7 +13,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -57,26 +56,25 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-export function EditWishlistDialog({ children, wishlist }: { children: React.ReactNode, wishlist: Wishlist }) {
-  const [open, setOpen] = useState(false);
+interface EditWishlistDialogProps {
+  wishlist: Wishlist;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+export function EditWishlistDialog({ wishlist, open, onOpenChange, onSuccess }: EditWishlistDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      wishlistName: wishlist.title || "",
-      description: wishlist.description || "",
-      category: wishlist.category || "",
-      privacy: wishlist.privacy || "public",
-    },
+    // Default values are set by the useEffect below
   });
-  
-  // This useEffect ensures the form is re-initialized if the wishlist prop changes
-  // and the dialog is opened.
+
   useEffect(() => {
-    if (open) {
+    if (wishlist) {
       form.reset({
         wishlistName: wishlist.title || "",
         description: wishlist.description || "",
@@ -84,7 +82,7 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
         privacy: wishlist.privacy || "public",
       });
     }
-  }, [wishlist, open, form]);
+  }, [wishlist, form]);
 
 
   async function onSubmit(values: FormData) {
@@ -108,7 +106,7 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
             description: "Your wishlist has been updated.",
         });
         
-        setOpen(false); // Close dialog on success
+        onSuccess(); // Signal success to the parent component
 
     } catch (error) {
         console.error("Error updating wishlist:", error);
@@ -118,15 +116,12 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
             variant: "destructive",
         });
     } finally {
-        setIsSubmitting(false); // Ensure this runs always
+        setIsSubmitting(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children}
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[525px] grid-rows-[auto_1fr_auto] max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Edit Wishlist</DialogTitle>
@@ -239,7 +234,7 @@ export function EditWishlistDialog({ children, wishlist }: { children: React.Rea
                 )}
               />
             <DialogFooter className="pt-4 pr-6">
-              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Changes

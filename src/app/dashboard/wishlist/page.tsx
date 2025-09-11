@@ -58,9 +58,10 @@ import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 interface Wishlist extends DocumentData {
   id: string;
   title: string;
+  description?: string;
   category: string;
-  itemCount: number; // This will now be dynamically populated
-  privacy: 'Public' | 'Friends' | 'Private';
+  itemCount: number; 
+  privacy: 'public' | 'friends' | 'private';
   imageUrl: string;
   aiHint: string;
   progress: number;
@@ -112,6 +113,7 @@ export default function WishlistPage() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const router = useRouter();
+  const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -126,7 +128,6 @@ export default function WishlistPage() {
         const listsPromises = querySnapshot.docs.map(async (doc) => {
             const wishlistData = { id: doc.id, ...doc.data() } as Wishlist;
             
-            // For each wishlist, get the count of items in the subcollection
             const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
             const snapshot = await getCountFromServer(itemsColRef);
             wishlistData.itemCount = snapshot.data().count;
@@ -277,12 +278,10 @@ export default function WishlistPage() {
                           </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
-                          <EditWishlistDialog wishlist={list}>
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                            </DropdownMenuItem>
-                          </EditWishlistDialog>
+                          <DropdownMenuItem onSelect={() => setEditingWishlist(list)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => {/* Share logic here */}}>
                               <Share2 className="mr-2 h-4 w-4" />
                               Share
@@ -321,6 +320,21 @@ export default function WishlistPage() {
             Click "Create Wishlist" to get started.
           </p>
         </div>
+      )}
+      {editingWishlist && (
+        <EditWishlistDialog
+          wishlist={editingWishlist}
+          open={!!editingWishlist}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setEditingWishlist(null);
+            }
+          }}
+          onSuccess={() => {
+            setEditingWishlist(null);
+            // No need to manually refetch, onSnapshot will do it.
+          }}
+        />
       )}
     </div>
   );
