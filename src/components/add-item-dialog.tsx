@@ -42,7 +42,7 @@ import {
 import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, doc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -99,8 +99,8 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     try {
         const wishlistRef = doc(db, 'wishlists', wishlistId);
         const itemsCollectionRef = collection(wishlistRef, 'items');
-        
-        await addDoc(itemsCollectionRef, {
+
+        const dataToSave: any = {
             name: values.itemName,
             description: values.notes,
             quantity: values.quantity,
@@ -108,13 +108,18 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
             priority: values.priority,
             recurrence: values.recurrence,
             purchaseUrl: values.purchaseUrl,
-            neededBy: values.neededBy,
             status: 'available',
             addedAt: serverTimestamp(),
             addedBy: user.uid,
             imageUrl: `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/100/100`, // Placeholder image
             aiHint: values.itemName.split(' ').slice(0,2).join(' '),
-        });
+        };
+
+        if (values.neededBy) {
+            dataToSave.neededBy = Timestamp.fromDate(values.neededBy);
+        }
+        
+        await addDoc(itemsCollectionRef, dataToSave);
 
         toast({ title: "Success!", description: "New item has been added to your wishlist." });
 
@@ -125,7 +130,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
     } catch (error) {
         console.error("Error adding item:", error);
-        toast({ title: "Error", description: "Something went wrong while adding the item.", variant: "destructive" });
+        toast({ title: "Error", description: "Something went wrong while adding the item. Check the console for details.", variant: "destructive" });
     } finally {
         setIsSubmitting(false);
     }
@@ -206,7 +211,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
                         </FormControl>
@@ -226,7 +231,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Recurrence</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
+                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select recurrence" /></SelectTrigger>
                         </FormControl>
@@ -250,7 +255,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <FormItem>
                       <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input type="number" {...field} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -263,7 +268,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <FormItem>
                       <FormLabel>Price (optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., ~$50" {...field} />
+                        <Input placeholder="e.g., ~$50" {...field} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -280,7 +285,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <div className="relative">
                        <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                        <FormControl>
-                         <Input placeholder="https://example.com/product/..." {...field} className="pl-9" />
+                         <Input placeholder="https://example.com/product/..." {...field} className="pl-9" disabled={isSubmitting}/>
                        </FormControl>
                     </div>
                     <FormMessage />
@@ -303,6 +308,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                               "w-full pl-3 text-left font-normal",
                               !field.value && "text-muted-foreground"
                             )}
+                            disabled={isSubmitting}
                           >
                             {field.value ? (
                               format(field.value, "PPP")
@@ -338,6 +344,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                       <Textarea
                         placeholder="Any specific details, like color, model, or where to buy it."
                         {...field}
+                        disabled={isSubmitting}
                       />
                     </FormControl>
                     <FormMessage />
