@@ -11,7 +11,7 @@ import { Mail, MapPin, UserPlus, Edit } from 'lucide-react';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, DocumentData, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, DocumentData, onSnapshot, orderBy } from 'firebase/firestore';
 
 interface UserProfile extends DocumentData {
   uid: string;
@@ -70,28 +70,38 @@ export default function ProfilePage() {
       setLoading(true);
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', username));
-      const querySnapshot = await getDocs(q);
+      
+      let unsubscribePosts = () => {};
 
-      if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        const userData = userDoc.data() as UserProfile;
-        setProfileUser(userData);
+      try {
+        const querySnapshot = await getDocs(q);
 
-        // Fetch user's posts
-        const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid));
-        const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
-            const userPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-            setPosts(userPosts);
-        });
-        
-        // In the future, you would also fetch user's favorites here.
-        setFavorites([]); // Resetting placeholder
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          const userData = userDoc.data() as UserProfile;
+          setProfileUser(userData);
 
-        return () => unsubscribePosts();
-      } else {
+          // Fetch user's posts
+          const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
+          unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+              const userPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+              setPosts(userPosts);
+          });
+          
+          // In the future, you would also fetch user's favorites here.
+          setFavorites([]); // Resetting placeholder
+
+        } else {
+          setProfileUser(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
         setProfileUser(null);
+      } finally {
+         setLoading(false);
       }
-      setLoading(false);
+      
+      return () => unsubscribePosts();
     };
 
     fetchUserProfile();
@@ -111,7 +121,7 @@ export default function ProfilePage() {
   }
 
   if (!profileUser) {
-    return <div>User not found.</div>;
+    return <div className="text-center p-8 text-muted-foreground">User not found.</div>;
   }
 
   const isOwnProfile = currentUser?.uid === profileUser?.uid;

@@ -56,7 +56,7 @@ function PostCard({ post }: { post: Post }) {
         <div className="flex-1">
           <p className="font-bold">{post.authorName}</p>
           <p className="text-sm text-muted-foreground">
-            <Link href={`/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
+            <Link href={`/dashboard/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
             · {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
           </p>
         </div>
@@ -106,6 +106,8 @@ export default function DashboardPage() {
   const [loadingPosts, setLoadingPosts] = useState(true);
 
   useEffect(() => {
+    // We don't need a user to fetch all posts for the public feed
+    setLoadingPosts(true);
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const postsData: Post[] = [];
@@ -120,7 +122,7 @@ export default function DashboardPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, []); // Re-fetch all posts when component mounts
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
