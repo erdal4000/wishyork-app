@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -218,6 +219,7 @@ export function IndividualSignupForm() {
           name: name,
           email: email,
           username: formattedUsername,
+          username_lowercase: formattedUsername,
           createdAt: serverTimestamp(),
           photoURL: photoURL,
       });
@@ -488,3 +490,5 @@ export function IndividualSignupForm() {
     </Form>
   );
 }
+
+    
