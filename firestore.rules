@@ -1,46 +1,24 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Users Collection
-    // - Allow users to read their own document.
-    // - Allow authenticated users to create their own user document.
-    // - Allow users to update their own document.
+    // Allow logged-in users to read and write their own user document
     match /users/{userId} {
-      allow read, update: if isAuthenticated() && request.auth.uid == userId;
-      allow create: if isAuthenticated();
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Usernames Collection
-    // - Used to ensure usernames are unique.
-    // - Allow any authenticated user to create a username document (on signup).
-    // - Disallow updates and deletes to prevent tampering.
-    // - Allow authenticated users to read (to check for existence).
+    // Allow logged-in users to create a username, but not change it
     match /usernames/{username} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
-        allow update, delete: if false;
+      allow read;
+      allow create: if request.auth != null;
     }
 
-    // Posts Collection
-    // - Allow any authenticated user to read all posts.
-    // - Allow any authenticated user to create a post.
-    // - Only allow the author of a post to update or delete it.
+    // Allow logged-in users to read and create posts.
+    // Allow post owners to update or delete their posts.
     match /posts/{postId} {
-      allow read, create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.authorId;
-    }
-
-    // Default deny all other reads/writes
-    match /{document=**} {
-      allow read, write: if false;
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.authorId == request.auth.uid;
     }
   }
 }
