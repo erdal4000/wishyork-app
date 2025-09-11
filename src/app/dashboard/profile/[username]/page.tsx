@@ -86,17 +86,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!username || authLoading) {
-        if (!authLoading) setLoading(false);
-        return;
+      if (!authLoading) setLoading(false);
+      return;
     }
+
+    let unsubscribePosts = () => {};
+    let unsubscribeWishlists = () => {};
 
     const fetchUserProfile = async () => {
       setLoading(true);
       const usersRef = collection(db, 'users');
       const userQuery = query(usersRef, where('username', '==', username));
-      
-      let unsubscribePosts = () => {};
-      let unsubscribeWishlists = () => {};
 
       try {
         const userSnapshot = await getDocs(userQuery);
@@ -111,27 +111,24 @@ export default function ProfilePage() {
           // Fetch user's posts
           const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
           unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
-              const userPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-              setPosts(userPosts);
+            const userPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+            setPosts(userPosts);
           });
-          
+
           // Fetch user's wishlists
           const wishlistsRef = collection(db, 'wishlists');
           let wishlistsQuery;
           if (isOwnProfile) {
-            // Fetch all lists for own profile
             wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
           } else {
-            // Fetch only public lists for other profiles
             wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), where('privacy', '==', 'public'), orderBy('createdAt', 'desc'));
           }
 
           unsubscribeWishlists = onSnapshot(wishlistsQuery, (snapshot) => {
-              const userWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
-              setWishlists(userWishlists);
+            const userWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+            setWishlists(userWishlists);
           });
 
-          // In the future, you would also fetch user's favorites here.
           setFavorites([]); // Resetting placeholder
 
         } else {
@@ -141,17 +138,17 @@ export default function ProfilePage() {
         console.error("Error fetching user profile:", error);
         setProfileUser(null);
       } finally {
-         setLoading(false);
+        setLoading(false);
       }
-      
-      return () => {
-          unsubscribePosts();
-          unsubscribeWishlists();
-      };
     };
 
     fetchUserProfile();
 
+    // Cleanup function
+    return () => {
+      unsubscribePosts();
+      unsubscribeWishlists();
+    };
   }, [username, currentUser, authLoading]);
   
   const getInitials = (name: string | null | undefined) => {
@@ -332,5 +329,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    
