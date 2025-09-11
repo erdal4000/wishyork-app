@@ -54,8 +54,9 @@ export function GlobalSearch() {
     }
 
     setLoading(true);
-
-    const lowerCaseQuery = queryText.toLowerCase();
+    
+    const searchText = queryText.startsWith('@') ? queryText.substring(1) : queryText;
+    const lowerCaseQuery = searchText.toLowerCase();
 
     try {
       // Search for users by username
@@ -108,9 +109,10 @@ export function GlobalSearch() {
   }, [searchQuery, debouncedSearch]);
   
   useEffect(() => {
-    if (searchQuery.trim().length > 0 && !popoverOpen) {
+    const hasQuery = searchQuery.trim().length > 0;
+    if (hasQuery && !popoverOpen) {
       setPopoverOpen(true);
-    } else if (searchQuery.trim().length === 0 && popoverOpen) {
+    } else if (!hasQuery && popoverOpen) {
       setPopoverOpen(false);
     }
   }, [searchQuery, popoverOpen]);
@@ -186,5 +188,3 @@ export function GlobalSearch() {
     </Popover>
   );
 }
-
-    
