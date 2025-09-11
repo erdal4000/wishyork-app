@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -59,6 +59,7 @@ import { AddItemDialog } from '@/components/add-item-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
+import { useAuth } from '@/context/auth-context';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -151,6 +152,7 @@ export default function WishlistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
    useEffect(() => {
     if (!id) return;
@@ -213,6 +215,24 @@ export default function WishlistDetailPage() {
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
   }
 
+  const handleReserveItem = async (itemId: string) => {
+    if (!user) {
+        toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
+        return;
+    }
+    try {
+        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+        await updateDoc(itemRef, {
+            status: 'reserved',
+            reservedBy: user.displayName, // Or user.uid for more robust linking
+        });
+        toast({ title: "Success", description: "Item has been reserved!" });
+    } catch (error) {
+        console.error("Error reserving item: ", error);
+        toast({ title: "Error", description: "Could not reserve the item. Please try again.", variant: "destructive" });
+    }
+  };
+
   const handleDeleteItem = async (itemId: string) => {
     try {
         const itemRef = doc(db, 'wishlists', id, 'items', itemId);
@@ -258,11 +278,11 @@ export default function WishlistDetailPage() {
             <Button variant="outline">Actions</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <EditWishlistDialog wishlist={wishlist}>
-              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                  <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
-              </DropdownMenuItem>
-            </EditWishlistDialog>
+             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <EditWishlistDialog wishlist={wishlist} open={true} onOpenChange={()=>{}} onSuccess={()=>{}}>
+                    <div className='flex items-center'><Edit className="mr-2 h-4 w-4" /> Edit Wishlist</div>
+                </EditWishlistDialog>
+            </DropdownMenuItem>
             <DropdownMenuItem>
                 <Share2 className="mr-2 h-4 w-4" /> Share
             </DropdownMenuItem>
@@ -467,26 +487,33 @@ export default function WishlistDetailPage() {
                       {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" className="text-primary hover:underline">View Product</Link>}
                     </CardContent>
 
-                    {item.status === 'fulfilled' && (
-                      <CardFooter className="bg-muted/50 py-3">
-                          <p className="text-sm font-medium text-green-600 dark:text-green-400">Fulfilled</p>
-                      </CardFooter>
-                    )}
-
-                    {item.status === 'reserved' && (
-                      <div className="px-6 pb-4">
-                          <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
-                              <div className="flex items-start gap-3">
-                                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
-                                  <div>
-                                      <p className="font-semibold">Reserved by {item.reservedBy}</p>
-                                      <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
-                                  </div>
-                              </div>
-                            <Button className="mt-3 w-full">Mark as purchased</Button>
-                          </div>
-                      </div>
-                    )}
+                    <div className="px-6 pb-4">
+                        {item.status === 'available' && (
+                            <Button className="w-full" onClick={() => handleReserveItem(item.id)}>
+                                Reserve this item
+                            </Button>
+                        )}
+                        {item.status === 'fulfilled' && (
+                            <div className="rounded-md border border-green-300 bg-green-50 p-4 dark:bg-green-900/30 dark:border-green-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Gift className="h-5 w-5 flex-shrink-0 text-green-500 dark:text-green-400"/>
+                                    <p className="font-semibold text-green-700 dark:text-green-300">Fulfilled</p>
+                                </div>
+                            </div>
+                        )}
+                        {item.status === 'reserved' && (
+                            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
+                                    <div>
+                                        <p className="font-semibold">Reserved by {item.reservedBy}</p>
+                                        <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
+                                    </div>
+                                </div>
+                                <Button className="mt-3 w-full">Mark as purchased</Button>
+                            </div>
+                        )}
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -497,3 +524,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
