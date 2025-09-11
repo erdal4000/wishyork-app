@@ -17,8 +17,9 @@ import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
+import { usePostInteraction } from '@/hooks/use-post-interaction';
 
-interface Post {
+interface Post extends DocumentData {
   id: string;
   authorName: string;
   authorUsername: string;
@@ -27,7 +28,75 @@ interface Post {
   imageUrl: string | null;
   aiHint: string | null;
   createdAt: any;
+  likes: number;
+  likedBy: string[];
 }
+
+function PostCard({ post }: { post: Post }) {
+  const { user } = useAuth();
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(post.id);
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-4 p-4">
+        <Avatar>
+          <AvatarImage src={post.authorAvatar} alt={post.authorName} />
+          <AvatarFallback>
+            {getInitials(post.authorName)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <p className="font-bold">{post.authorName}</p>
+          <p className="text-sm text-muted-foreground">
+            <Link href={`/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
+            · {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+          </p>
+        </div>
+        <Button variant="ghost" size="icon">
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4 px-4 pb-2">
+        <p className="whitespace-pre-wrap">{post.content}</p>
+        {post.imageUrl && (
+          <div className="relative aspect-video w-full overflow-hidden rounded-xl">
+            <Image
+              src={post.imageUrl}
+              alt={`Post by ${post.authorName}`}
+              fill
+              className="object-cover"
+              data-ai-hint={post.aiHint ?? ''}
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="p-2">
+        <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
+          <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+          <span className="text-sm">{post.likes ?? 0}</span>
+        </Button>
+        <Button variant="ghost" className="flex items-center gap-2">
+          <MessageCircle className="h-5 w-5" />
+          <span className="text-sm">0</span>
+        </Button>
+        <Button variant="ghost" className="flex items-center gap-2">
+          <Share2 className="h-5 w-5" />
+          <span className="text-sm">Share</span>
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -45,6 +114,9 @@ export default function DashboardPage() {
       });
       setPosts(postsData);
       setLoadingPosts(false);
+    }, (error) => {
+        console.error("Error fetching posts:", error);
+        setLoadingPosts(false);
     });
 
     return () => unsubscribe();
@@ -60,18 +132,18 @@ export default function DashboardPage() {
         content: postContent,
         authorId: user.uid,
         authorName: user.displayName,
-        authorUsername: user.email?.split('@')[0], // Placeholder, ideally from user profile
+        authorUsername: user.email?.split('@')[0],
         authorAvatar: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
         createdAt: serverTimestamp(),
         imageUrl: null,
         aiHint: null,
         likes: 0,
+        likedBy: [],
         comments: 0,
       });
       setPostContent('');
     } catch (error) {
       console.error("Error creating post: ", error);
-      // You could show a toast message here for the error
     } finally {
       setIsSubmitting(false);
     }
@@ -130,57 +202,10 @@ export default function DashboardPage() {
         </Card>
       ) : (
         posts.map((post) => (
-          <Card key={post.id}>
-            <CardHeader className="flex flex-row items-center gap-4 p-4">
-              <Avatar>
-                <AvatarImage src={post.authorAvatar} alt={post.authorName} />
-                <AvatarFallback>
-                  {getInitials(post.authorName)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <p className="font-bold">{post.authorName}</p>
-                <p className="text-sm text-muted-foreground">
-                  <Link href={`/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
-                  · {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                </p>
-              </div>
-              <Button variant="ghost" size="icon">
-                <MoreHorizontal className="h-5 w-5" />
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 pb-2">
-              <p className="whitespace-pre-wrap">{post.content}</p>
-              {post.imageUrl && (
-                <div className="relative aspect-video w-full overflow-hidden rounded-xl">
-                  <Image
-                    src={post.imageUrl}
-                    alt={`Post by ${post.authorName}`}
-                    fill
-                    className="object-cover"
-                    data-ai-hint={post.aiHint ?? ''}
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                  />
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="p-2">
-              <Button variant="ghost" className="flex items-center gap-2">
-                <Heart className="h-5 w-5" />
-                <span className="text-sm">0</span>
-              </Button>
-              <Button variant="ghost" className="flex items-center gap-2">
-                <MessageCircle className="h-5 w-5" />
-                <span className="text-sm">0</span>
-              </Button>
-              <Button variant="ghost" className="flex items-center gap-2">
-                <Share2 className="h-5 w-5" />
-                <span className="text-sm">Share</span>
-              </Button>
-            </CardFooter>
-          </Card>
+          <PostCard key={post.id} post={post} />
         ))
       )}
     </div>
   );
 }
+    
