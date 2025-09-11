@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -17,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -33,11 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Globe, Users, Lock, Image as ImageIcon, Link2, Loader2 } from 'lucide-react';
+import { Globe, Users, Lock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -125,16 +126,16 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[525px] grid-rows-[auto_1fr_auto] max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Create a New Wishlist</DialogTitle>
           <DialogDescription>
             Fill in the details below to start your new wishlist.
           </DialogDescription>
         </DialogHeader>
+        <ScrollArea className="pr-6 -mr-6">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
               <FormField
                 control={form.control}
                 name="wishlistName"
@@ -236,8 +237,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                   </FormItem>
                 )}
               />
-            </div>
-            <DialogFooter>
+            <DialogFooter className="pt-4 pr-6">
               <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancel</Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -246,6 +246,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             </DialogFooter>
           </form>
         </Form>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
