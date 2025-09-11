@@ -75,17 +75,23 @@ export async function GET(request: NextRequest) {
 
       const batch = adminDb.batch();
 
+      const photoURL = picture || `https://picsum.photos/seed/${uid}/200/200`;
+
       batch.set(userDocRef, {
         uid: uid,
         name: name || 'New User',
         email: email,
         username: username,
         createdAt: Timestamp.now(),
-        photoURL: picture || null,
+        photoURL: photoURL,
       });
 
       batch.set(usernameDocRef, { uid: uid });
       await batch.commit();
+
+      // Also update the Auth user record
+      await adminAuth.updateUser(uid, { photoURL });
+
     }
 
     const customToken = await adminAuth.createCustomToken(uid);

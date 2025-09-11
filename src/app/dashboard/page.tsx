@@ -106,7 +106,6 @@ export default function DashboardPage() {
   const [loadingPosts, setLoadingPosts] = useState(true);
 
   useEffect(() => {
-    // We don't need a user to fetch all posts for the public feed
     setLoadingPosts(true);
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -122,7 +121,7 @@ export default function DashboardPage() {
     });
 
     return () => unsubscribe();
-  }, []); // Re-fetch all posts when component mounts
+  }, []);
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
@@ -135,7 +134,7 @@ export default function DashboardPage() {
         authorId: user.uid,
         authorName: user.displayName,
         authorUsername: user.email?.split('@')[0],
-        authorAvatar: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
+        authorAvatar: user.photoURL, // Directly use the photoURL from auth user
         createdAt: serverTimestamp(),
         imageUrl: null,
         aiHint: null,

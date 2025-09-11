@@ -203,7 +203,12 @@ export function IndividualSignupForm() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      await updateProfile(user, { displayName: name });
+      const photoURL = `https://picsum.photos/seed/${user.uid}/200/200`;
+      
+      await updateProfile(user, { 
+          displayName: name,
+          photoURL: photoURL
+      });
 
       const batch = writeBatch(db);
       
@@ -214,7 +219,7 @@ export function IndividualSignupForm() {
           email: email,
           username: formattedUsername,
           createdAt: serverTimestamp(),
-          photoURL: user.photoURL,
+          photoURL: photoURL,
       });
 
       const usernameDocRef = doc(db, 'usernames', formattedUsername);
@@ -223,8 +228,6 @@ export function IndividualSignupForm() {
       await batch.commit();
       
       toast({ title: "Welcome!", description: "Your account has been created successfully." });
-      // The onAuthStateChanged listener in auth-context will handle the redirect.
-      // We don't need to push the router here, it might cause a race condition.
 
     } catch (error: any) {
         const errorCode = error.code;
@@ -241,8 +244,6 @@ export function IndividualSignupForm() {
         });
         setIsSubmitting(false);
     } 
-    // We don't set isSubmitting to false in the success case
-    // because the component will unmount on redirect.
   };
 
   return (
