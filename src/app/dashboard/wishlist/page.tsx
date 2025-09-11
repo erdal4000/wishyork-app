@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/card';
 import {
   MoreHorizontal,
-  Plus,
+  PlusCircle,
   Users,
   Lock,
   Edit,
@@ -184,7 +185,7 @@ export default function WishlistPage() {
         <h1 className="text-3xl font-bold tracking-tight">My Wishlists</h1>
         <CreateWishlistDialog>
           <Button>
-            <Plus className="mr-2 h-5 w-5" />
+            <PlusCircle className="mr-2 h-5 w-5" />
             Create Wishlist
           </Button>
         </CreateWishlistDialog>

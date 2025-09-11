@@ -19,7 +19,7 @@ const config = {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Figtree', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
