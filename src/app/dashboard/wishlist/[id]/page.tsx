@@ -64,6 +64,7 @@ interface Wishlist extends DocumentData {
     id: string;
     title: string;
     description?: string;
+    authorId: string;
     authorName: string;
     authorUsername: string;
     authorAvatar: string;
@@ -296,6 +297,16 @@ export default function WishlistDetailPage() {
     return <div>Wishlist not found.</div>; // Or a more elaborate "Not Found" component
   }
 
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
+
+  const authorPhoto = wishlist.authorAvatar || `https://picsum.photos/seed/${wishlist.authorId}/200/200`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -352,9 +363,9 @@ export default function WishlistDetailPage() {
           />
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <Avatar className="h-24 w-24 border-4 border-card">
-              <AvatarImage src={wishlist.authorAvatar} alt={wishlist.authorName} />
+              <AvatarImage src={authorPhoto} alt={wishlist.authorName} />
               <AvatarFallback className="text-3xl">
-                {wishlist.authorName.charAt(0)}
+                {getInitials(wishlist.authorName)}
               </AvatarFallback>
             </Avatar>
           </div>
