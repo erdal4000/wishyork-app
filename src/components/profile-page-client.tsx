@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, notFound } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit, orderBy, DocumentData, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, DocumentData, onSnapshot, getCountFromServer } from 'firebase/firestore';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -120,7 +120,7 @@ export function ProfilePageClient() {
         }
 
         const userDoc = userSnapshot.docs[0];
-        const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
+        const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
@@ -134,12 +134,10 @@ export function ProfilePageClient() {
             const listsPromises = snapshot.docs.map(async (doc) => {
                 const listData = { id: doc.id, ...doc.data() } as Wishlist;
                 const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-                // Use getDocs for a one-time count, which is more efficient here
-                const itemsSnapshot = await getDocs(itemsColRef);
-                listData.itemCount = itemsSnapshot.size;
+                const itemsSnapshot = await getCountFromServer(itemsColRef);
+                listData.itemCount = itemsSnapshot.data().count;
                 return listData;
             });
-            // Correctly wait for all promises to resolve
             const lists = await Promise.all(listsPromises);
             setWishlists(lists);
         });
@@ -345,5 +343,3 @@ export function ProfilePageClient() {
     </div>
   );
 }
-
-    
