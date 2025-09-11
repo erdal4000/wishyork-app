@@ -114,124 +114,21 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-secondary/30">
-        <Sidebar
-          variant="sidebar"
-          collapsible="icon"
-          className="hidden lg:flex"
-        >
-          <SidebarHeader>
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 p-2 font-bold text-lg"
-            >
-              <Waves className="h-6 w-6 text-primary" />
-              <span className="group-data-[collapsible=icon]:hidden">
-                WishYork
-              </span>
-            </Link>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <Link href="/dashboard">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard'}>
-                    <span>
-                      <Home />
-                      Home
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/wishlist">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/wishlist'}>
-                    <span>
-                      <ListTodo />
-                      My Wishlist
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/explore">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/explore'}>
-                    <span>
-                      <Search />
-                      Explore
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/notifications">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/notifications'}>
-                    <span>
-                      <Bell />
-                      Notifications
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/bookmarks">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/bookmarks'}>
-                    <span>
-                      <Bookmark />
-                      Bookmarks
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/inspiration">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/inspiration'}>
-                    <span>
-                      <Sparkles />
-                      Inspiration Box
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/messages">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/messages'}>
-                    <span>
-                      <Mail />
-                      Messages
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/profile">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/profile'}>
-                    <span>
-                      <User />
-                      Profile
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Link href="/dashboard/settings">
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'}>
-                    <span>
-                      <Settings />
-                      Settings
-                    </span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
-        </Sidebar>
-
-        <main className="flex-1">
-          <header className="flex h-16 items-center justify-between border-b bg-background px-4 lg:px-8">
+      <div className="min-h-screen w-full bg-secondary/30">
+        <header className="sticky top-0 z-40 w-full border-b bg-background">
+          <div className="container mx-auto flex h-16 max-w-screen-2xl items-center justify-between px-4">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="lg:hidden" />
-              <div className="hidden w-80 lg:block">
+              <Link
+                href="/dashboard"
+                className="hidden items-center gap-2 font-bold lg:flex"
+              >
+                <Waves className="h-6 w-6 text-primary" />
+                <span>WishYork</span>
+              </Link>
+            </div>
+            <div className="flex flex-1 justify-center px-4 lg:px-8">
+              <div className="w-full max-w-md">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -282,14 +179,118 @@ export default function DashboardLayout({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </header>
-          <div className="container mx-auto max-w-screen-2xl px-4 py-8">
+          </div>
+        </header>
+
+        <div className="container mx-auto flex max-w-screen-2xl gap-8 px-4">
+          <Sidebar
+            variant="sidebar"
+            collapsible="icon"
+            className="sticky top-16 hidden h-[calc(100vh-4rem)] lg:flex"
+          >
+            <SidebarContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <Link href="/dashboard">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'}>
+                      <span>
+                        <Home />
+                        Home
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/wishlist">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/wishlist'}>
+                      <span>
+                        <ListTodo />
+                        My Wishlist
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/explore">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/explore'}>
+                      <span>
+                        <Search />
+                        Explore
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/notifications">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/notifications'}>
+                      <span>
+                        <Bell />
+                        Notifications
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/bookmarks">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/bookmarks'}>
+                      <span>
+                        <Bookmark />
+                        Bookmarks
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/inspiration">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/inspiration'}>
+                      <span>
+                        <Sparkles />
+                        Inspiration Box
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/messages">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/messages'}>
+                      <span>
+                        <Mail />
+                        Messages
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/profile">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/profile'}>
+                      <span>
+                        <User />
+                        Profile
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/dashboard/settings">
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'}>
+                      <span>
+                        <Settings />
+                        Settings
+                      </span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarContent>
+          </Sidebar>
+
+          <main className="flex-1 py-8">
             <div className="grid grid-cols-12 gap-8">
               <div className="col-span-12 lg:col-span-8 xl:col-span-9">
                 {children}
               </div>
               <aside className="col-span-12 lg:col-span-4 xl:col-span-3">
-                <div className="sticky top-20 space-y-6">
+                <div className="sticky top-24 space-y-6">
                   <div className="rounded-xl border bg-card p-4 shadow">
                     <h3 className="font-bold">Trending Wishlists</h3>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -305,8 +306,8 @@ export default function DashboardLayout({
                 </div>
               </aside>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
 
         <ScrollToTop />
       </div>
