@@ -81,6 +81,7 @@ interface Post extends DocumentData {
   content: string;
   imageUrl: string | null;
   aiHint: string | null;
+  createdAt: any;
 }
 
 interface Wishlist extends DocumentData {
@@ -95,6 +96,7 @@ interface Wishlist extends DocumentData {
   likes?: number;
   comments?: number;
   saves?: number;
+  createdAt: any;
 }
 
 function ProfilePageSkeleton() {
@@ -181,26 +183,17 @@ export function ProfilePageClient() {
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
-        
-        let initialWishlistsLoaded = false;
-        let initialPostsLoaded = false;
-        const turnOffLoading = () => {
-            if (initialWishlistsLoaded && initialPostsLoaded) {
-              setLoading(false);
-            }
-        };
 
+        // Fetch Wishlists
         const wishlistsQuery = isOwnProfile
           ? query(
               collection(db, 'wishlists'),
-              where('authorId', '==', userData.uid),
-              orderBy('createdAt', 'desc')
+              where('authorId', '==', userData.uid)
             )
           : query(
               collection(db, 'wishlists'),
               where('authorId', '==', userData.uid),
-              where('privacy', '==', 'public'),
-              orderBy('createdAt', 'desc')
+              where('privacy', '==', 'public')
             );
 
         const unsubscribeWishlists = onSnapshot(wishlistsQuery, async (snapshot) => {
@@ -212,22 +205,13 @@ export function ProfilePageClient() {
               return listData;
             });
             const lists = await Promise.all(listsPromises);
-            setWishlists(lists);
-            initialWishlistsLoaded = true;
-            turnOffLoading();
+            setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
           }, (error) => {
             console.error('Error fetching wishlists: ', error);
-            initialWishlistsLoaded = true;
-            turnOffLoading();
           }
         );
-        getDocs(wishlistsQuery).then(snap => {
-            if (snap.empty) {
-                initialWishlistsLoaded = true;
-                turnOffLoading();
-            }
-        });
 
+        // Fetch Posts
         const postsQuery = query(
           collection(db, 'posts'),
           where('authorId', '==', userData.uid),
@@ -239,21 +223,12 @@ export function ProfilePageClient() {
               (doc) => ({ id: doc.id, ...doc.data() } as Post)
             );
             setPosts(postsData);
-            initialPostsLoaded = true;
-            turnOffLoading();
           }, (error) => {
             console.error('Error fetching posts: ', error);
-            initialPostsLoaded = true;
-            turnOffLoading();
           }
         );
-
-        getDocs(postsQuery).then(snap => {
-            if (snap.empty) {
-                initialPostsLoaded = true;
-                turnOffLoading();
-            }
-        });
+        
+        setLoading(false);
 
         return () => {
           unsubscribeWishlists();
@@ -389,8 +364,8 @@ export function ProfilePageClient() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {wishlists.length > 0 ? (
               wishlists.map((list) => (
-                <div key={list.id} className="group relative block">
-                  <Link
+                 <div key={list.id} className="group relative block">
+                   <Link
                     href={`/dashboard/wishlist/${list.id}`}
                     className="absolute inset-0 z-0"
                     aria-label={`View ${list.title} wishlist`}
@@ -410,13 +385,14 @@ export function ProfilePageClient() {
                       >
                         {list.category}
                       </Badge>
-                      <div className="absolute right-3 top-3 z-20">
+                       <div className="absolute right-3 top-3 z-20">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="secondary"
                               size="icon"
                               className="h-8 w-8 rounded-full"
+                              onClick={(e) => e.preventDefault()}
                             >
                               <MoreHorizontal className="h-5 w-5" />
                             </Button>
@@ -505,7 +481,7 @@ export function ProfilePageClient() {
                       </div>
                     </CardContent>
                     <Separator />
-                    <div className="flex items-center justify-between p-2 text-sm text-muted-foreground">
+                     <div className="flex items-center justify-between p-2 text-sm text-muted-foreground">
                       <div className="flex">
                         <Button variant="ghost" size="sm" className="px-2">
                           <Heart className="mr-1.5 h-4 w-4" />
@@ -530,7 +506,9 @@ export function ProfilePageClient() {
                         variant="ghost"
                         size="sm"
                         onClick={(e) => {
-                          e.preventDefault(); /* handle repost */
+                           e.preventDefault();
+                           e.stopPropagation();
+                           /* handle repost */
                         }}
                       >
                         <Repeat2 className="mr-1.5 h-4 w-4" />
