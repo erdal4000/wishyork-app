@@ -39,6 +39,7 @@ import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AddItemDialog } from '@/components/add-item-dialog';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -245,7 +246,7 @@ export default function WishlistDetailPage() {
           />
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <Avatar className="h-24 w-24 border-4 border-card">
-              <AvatarImage src="" alt={wishlist.authorName} />
+              <AvatarImage src={wishlist.authorAvatar} alt={wishlist.authorName} />
               <AvatarFallback className="text-3xl">
                 {wishlist.authorName.charAt(0)}
               </AvatarFallback>
@@ -302,9 +303,11 @@ export default function WishlistDetailPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Items ({items.length})</h2>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" /> Add Item
-          </Button>
+          <AddItemDialog wishlistId={id}>
+            <Button>
+                <Plus className="mr-2 h-4 w-4" /> Add Item
+            </Button>
+          </AddItemDialog>
         </div>
         <Separator />
 
@@ -396,5 +399,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
