@@ -99,14 +99,14 @@ export function ProfilePageClient() {
 
   useEffect(() => {
     if (!username || authLoading) {
-      // If no username or auth is still loading, do nothing yet.
+      if (!authLoading) setLoading(false);
       return;
     }
 
     setLoading(true);
+    const unsubscribes: (() => void)[] = [];
 
     const fetchUserProfile = async () => {
-      // Fetch user profile first
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', username.toLowerCase()), limit(1));
       
@@ -120,12 +120,10 @@ export function ProfilePageClient() {
         }
 
         const userDoc = userSnapshot.docs[0];
-        const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+        const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
         setProfileUser(userData);
 
-        // Now that we have the user, set up listeners for posts and wishlists
         const isOwnProfile = currentUser?.uid === userData.uid;
-        let unsubscribes: (() => void)[] = [];
 
         // Wishlist listener
         const wishlistsQuery = isOwnProfile
@@ -136,10 +134,12 @@ export function ProfilePageClient() {
             const listsPromises = snapshot.docs.map(async (doc) => {
                 const listData = { id: doc.id, ...doc.data() } as Wishlist;
                 const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
+                // Use getDocs for a one-time count, which is more efficient here
                 const itemsSnapshot = await getDocs(itemsColRef);
                 listData.itemCount = itemsSnapshot.size;
                 return listData;
             });
+            // Correctly wait for all promises to resolve
             const lists = await Promise.all(listsPromises);
             setWishlists(lists);
         });
@@ -153,30 +153,27 @@ export function ProfilePageClient() {
         });
         unsubscribes.push(unsubscribePosts);
 
-        setLoading(false);
-
-        // Cleanup function
-        return () => {
-            unsubscribes.forEach(unsub => unsub());
-        };
-
       } catch (error) {
         console.error("Error fetching profile data:", error);
-        setLoading(false);
         setUserFound(false);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchUserProfile();
 
+    return () => {
+        unsubscribes.forEach(unsub => unsub());
+    };
+
   }, [username, authLoading, currentUser]);
   
-  if (loading || authLoading) {
+  if (loading) {
     return <ProfilePageSkeleton />;
   }
   
   if (!userFound || !profileUser) {
-    // This will render Next.js's default not-found page
     return notFound();
   }
 
@@ -348,3 +345,5 @@ export function ProfilePageClient() {
     </div>
   );
 }
+
+    
