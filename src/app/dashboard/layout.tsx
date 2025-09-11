@@ -94,12 +94,8 @@ export default function DashboardLayout({
     }
   }, [user, loading, router]);
   
-  if (loading) {
+  if (loading || !user) {
     return <FullPageLoader />;
-  }
-
-  if (!user) {
-    return null; // or a minimal loader, as redirection is happening
   }
 
 
