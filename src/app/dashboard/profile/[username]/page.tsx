@@ -89,7 +89,7 @@ export default function ProfilePage() {
       if (!authLoading) setLoading(false);
       return;
     }
-
+    
     const listeners: Unsubscribe[] = [];
 
     const fetchUserProfile = async () => {
@@ -103,9 +103,9 @@ export default function ProfilePage() {
           const userDoc = userSnapshot.docs[0];
           const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
           setProfileUser(userData);
-
+          
           const isOwnProfile = currentUser?.uid === userData.uid;
-
+          
           // Fetch user's posts
           const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
           const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
@@ -113,7 +113,7 @@ export default function ProfilePage() {
             setPosts(userPosts);
           });
           listeners.push(postsUnsubscribe);
-
+          
           // Fetch user's wishlists
           const wishlistsRef = collection(db, 'wishlists');
           let wishlistsQuery;
@@ -122,7 +122,7 @@ export default function ProfilePage() {
           } else {
             wishlistsQuery = query(wishlistsRef, where('authorId', '==', userData.uid), where('privacy', '==', 'public'), orderBy('createdAt', 'desc'));
           }
-
+          
           const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
             const userWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
             setWishlists(userWishlists);
@@ -141,14 +141,14 @@ export default function ProfilePage() {
         setLoading(false);
       }
     };
-
+    
     fetchUserProfile();
 
     // Cleanup function to unsubscribe from all listeners
     return () => {
       listeners.forEach(unsubscribe => unsubscribe());
     };
-  }, [username, currentUser, authLoading]);
+}, [username, currentUser, authLoading]);
   
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
