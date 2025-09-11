@@ -96,6 +96,7 @@ export function EditWishlistDialog({ wishlist, open, onOpenChange, onSuccess }: 
         const wishlistRef = doc(db, 'wishlists', wishlist.id);
         await updateDoc(wishlistRef, {
             title: values.wishlistName,
+            title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,
             category: values.category,
             privacy: values.privacy,
@@ -250,3 +251,5 @@ export function EditWishlistDialog({ wishlist, open, onOpenChange, onSuccess }: 
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
+    

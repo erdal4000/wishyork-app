@@ -82,6 +82,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             authorName: user.displayName,
             authorUsername: user.email?.split('@')[0], // Placeholder
             title: values.wishlistName,
+            title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,
             category: values.category,
             privacy: values.privacy,
@@ -254,3 +255,5 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
+    

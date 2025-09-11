@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -66,17 +67,7 @@ export function GlobalSearch() {
         limit(5)
       );
 
-      // Search for wishlists by title (case-insensitive would be ideal but Firestore is limited)
-      // We will fetch by lowercase title if we store it, for now, we'll try a case-sensitive range query
-      const wishlistsQuery = query(
-        collection(db, 'wishlists'),
-        orderBy('title'),
-        where('title', '>=', queryText),
-        where('title', '<=', queryText + '\uf8ff'),
-        where('privacy', '==', 'public'),
-        limit(5)
-      );
-      
+      // Search for wishlists by title (case-insensitive)
       const wishlistsQueryLowercase = query(
         collection(db, 'wishlists'),
         orderBy('title_lowercase'),
@@ -89,7 +80,7 @@ export function GlobalSearch() {
 
       const [userSnap, wishlistSnap] = await Promise.all([
         getDocs(usersQuery),
-        getDocs(wishlistsQuery),
+        getDocs(wishlistsQueryLowercase),
       ]);
 
       const users = userSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -195,3 +186,5 @@ export function GlobalSearch() {
     </Popover>
   );
 }
+
+    
