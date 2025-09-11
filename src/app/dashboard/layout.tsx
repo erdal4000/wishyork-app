@@ -87,6 +87,8 @@ export default function DashboardLayout({
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const userProfilePath = `/dashboard/profile/${user?.email?.split('@')[0]}`;
+
 
   React.useEffect(() => {
     if (!loading && !user) {
@@ -160,7 +162,7 @@ export default function DashboardLayout({
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/dashboard/profile">
+                    <Link href={userProfilePath}>
                       <User className="mr-2 h-4 w-4" />
                       Profile
                     </Link>
@@ -261,8 +263,8 @@ export default function DashboardLayout({
                   </Link>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/profile">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/profile'}>
+                  <Link href={userProfilePath}>
+                    <SidebarMenuButton asChild isActive={pathname.startsWith('/dashboard/profile')}>
                       <span>
                         <User />
                         Profile
