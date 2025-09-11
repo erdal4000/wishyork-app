@@ -442,7 +442,6 @@ export function ProfilePageClient() {
                             className="h-8 w-8 rounded-full"
                              onClick={(e) => {
                                 e.preventDefault();
-                                e.stopPropagation();
                              }}
                           >
                             <MoreHorizontal className="h-5 w-5" />
@@ -452,7 +451,6 @@ export function ProfilePageClient() {
                           align="end"
                            onClick={(e) => {
                               e.preventDefault();
-                              e.stopPropagation();
                            }}
                         >
                           <DropdownMenuItem>
