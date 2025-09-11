@@ -94,7 +94,7 @@ export default function WishlistPage() {
       </div>
 
       {wishlists.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6">
           {wishlists.map((list) => (
             <Card key={list.id} className="group flex flex-col overflow-hidden">
                 <div className="relative aspect-video w-full overflow-hidden rounded-t-lg">
