@@ -1,8 +1,9 @@
 
+
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
@@ -19,6 +20,8 @@ import {
   Globe,
   Loader2,
   Trash2,
+  Share2,
+  Edit,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +48,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -55,6 +57,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { AlertDialogTrigger } from '@radix-ui/react-alert-dialog';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -140,6 +143,7 @@ function WishlistDetailSkeleton() {
 export default function WishlistDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,10 +162,14 @@ export default function WishlistDetailPage() {
         setWishlist(null); // Or handle not found state
       }
       setLoading(false);
+    }, (error) => {
+        console.error("Error fetching wishlist: ", error);
+        toast({ title: "Error", description: "Could not fetch wishlist.", variant: "destructive" });
+        setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [id]);
+  }, [id, toast]);
 
   useEffect(() => {
     if (!id) return;
@@ -214,6 +222,18 @@ export default function WishlistDetailPage() {
     }
   }
 
+  const handleDeleteWishlist = async () => {
+    if (!id) return;
+     try {
+        await deleteDoc(doc(db, 'wishlists', id));
+        toast({ title: "Success", description: "Wishlist has been deleted." });
+        router.push('/dashboard/wishlist');
+    } catch (error) {
+        console.error("Error deleting wishlist: ", error);
+        toast({ title: "Error", description: "Could not delete the wishlist. Please try again.", variant: "destructive" });
+    }
+  }
+
   if (loading) {
     return <WishlistDetailSkeleton />;
   }
@@ -236,11 +256,34 @@ export default function WishlistDetailPage() {
             <Button variant="outline">Actions</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Edit Wishlist</DropdownMenuItem>
-            <DropdownMenuItem>Share</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
-              Delete
+            <DropdownMenuItem>
+                <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
             </DropdownMenuItem>
+            <DropdownMenuItem>
+                <Share2 className="mr-2 h-4 w-4" /> Share
+            </DropdownMenuItem>
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete this
+                            wishlist and all its items.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteWishlist} className="bg-destructive hover:bg-destructive/90">
+                            Yes, delete wishlist
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -380,10 +423,12 @@ export default function WishlistDetailPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>Edit</DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     Delete
                                 </DropdownMenuItem>
@@ -398,7 +443,7 @@ export default function WishlistDetailPage() {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteItem(item.id)}>
+                                    <AlertDialogAction onClick={() => handleDeleteItem(item.id)} className="bg-destructive hover:bg-destructive/90">
                                         Yes, delete item
                                     </AlertDialogAction>
                                 </AlertDialogFooter>

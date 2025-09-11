@@ -21,6 +21,7 @@ import {
   Bookmark,
   Share2,
   Globe,
+  Package,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -36,7 +37,7 @@ import { Progress } from '@/components/ui/progress';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, DocumentData, Timestamp, getCountFromServer } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 
@@ -44,7 +45,7 @@ interface Wishlist extends DocumentData {
   id: string;
   title: string;
   category: string;
-  itemCount: number;
+  itemCount: number; // This will now be dynamically populated
   privacy: 'Public' | 'Friends' | 'Private';
   imageUrl: string;
   aiHint: string;
@@ -104,11 +105,21 @@ export default function WishlistPage() {
 
     const q = query(collection(db, "wishlists"), where("authorId", "==", user.uid));
     
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const lists: Wishlist[] = [];
-        querySnapshot.forEach((doc) => {
-            lists.push({ id: doc.id, ...doc.data() } as Wishlist);
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        setLoading(true);
+        const listsPromises = querySnapshot.docs.map(async (doc) => {
+            const wishlistData = { id: doc.id, ...doc.data() } as Wishlist;
+            
+            // For each wishlist, get the count of items in the subcollection
+            const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
+            const snapshot = await getCountFromServer(itemsColRef);
+            wishlistData.itemCount = snapshot.data().count;
+
+            return wishlistData;
         });
+
+        const lists = await Promise.all(listsPromises);
+        
         setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
         setLoading(false);
     });
@@ -211,6 +222,10 @@ export default function WishlistPage() {
                         </DropdownMenu>
                      </div>
                   </div>
+                   <p className="mt-4 flex items-center text-muted-foreground">
+                        <Package className="mr-2 h-4 w-4" />
+                        {list.itemCount} {list.itemCount === 1 ? 'item' : 'items'}
+                    </p>
                    <div className="mt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
                             <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
