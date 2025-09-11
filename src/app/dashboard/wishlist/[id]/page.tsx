@@ -58,10 +58,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 
 interface Wishlist extends DocumentData {
     id: string;
     title: string;
+    description?: string;
     authorName: string;
     authorUsername: string;
     authorAvatar: string;
@@ -256,9 +258,11 @@ export default function WishlistDetailPage() {
             <Button variant="outline">Actions</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>
-                <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
-            </DropdownMenuItem>
+            <EditWishlistDialog wishlist={wishlist}>
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
+              </DropdownMenuItem>
+            </EditWishlistDialog>
             <DropdownMenuItem>
                 <Share2 className="mr-2 h-4 w-4" /> Share
             </DropdownMenuItem>
@@ -493,7 +497,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
-
-    
