@@ -33,7 +33,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Globe, Users, Lock, Image as ImageIcon, Link2 } from 'lucide-react';
+import { Globe, Users, Lock, Image as ImageIcon, Link2, Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -46,6 +50,9 @@ type FormData = z.infer<typeof formSchema>;
 
 export function CreateWishlistDialog({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -57,11 +64,57 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
     },
   });
 
-  function onSubmit(values: FormData) {
-    console.log(values);
-    // TODO: Handle form submission to create the wishlist
-    setOpen(false); // Close the dialog on successful submission
-    form.reset();
+  async function onSubmit(values: FormData) {
+    if (!user) {
+        toast({
+            title: "Error",
+            description: "You must be logged in to create a wishlist.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    setIsSubmitting(true);
+    try {
+        await addDoc(collection(db, 'wishlists'), {
+            authorId: user.uid,
+            authorName: user.displayName,
+            authorUsername: user.email?.split('@')[0], // Placeholder
+            title: values.wishlistName,
+            description: values.description,
+            category: values.category,
+            privacy: values.privacy,
+            createdAt: serverTimestamp(),
+            // Default values for new wishlists
+            itemCount: 0,
+            imageUrl: `https://picsum.photos/seed/${values.wishlistName.replace(/\s/g, '-')}/1200/400`,
+            aiHint: values.category,
+            progress: 0,
+            unitsFulfilled: 0,
+            totalUnits: 0,
+            likes: 0,
+            comments: 0,
+            saves: 0,
+        });
+
+        toast({
+            title: "Success!",
+            description: "Your wishlist has been created.",
+        });
+
+        form.reset();
+        setOpen(false);
+
+    } catch (error) {
+        console.error("Error creating wishlist:", error);
+        toast({
+            title: "Error",
+            description: "Something went wrong while creating your wishlist. Please try again.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsSubmitting(false);
+    }
   }
 
   return (
@@ -86,7 +139,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                   <FormItem>
                     <FormLabel>Wishlist Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., My Birthday Wishlist" {...field} />
+                      <Input placeholder="e.g., My Birthday Wishlist" {...field} disabled={isSubmitting}/>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -102,6 +155,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                       <Textarea
                         placeholder="A short description of your wishlist's purpose."
                         {...field}
+                        disabled={isSubmitting}
                       />
                     </FormControl>
                     <FormMessage />
@@ -113,12 +167,8 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                 <div className="flex h-40 w-full items-center justify-center rounded-lg border-2 border-dashed">
                   <div className="text-center text-muted-foreground">
                     <ImageIcon className="mx-auto h-10 w-10" />
-                    <p className="mt-2 text-sm font-medium">No cover image</p>
+                    <p className="mt-2 text-sm font-medium">Image upload coming soon</p>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" type="button">Upload from Device</Button>
-                    <Button variant="outline" type="button">Add from URL</Button>
                 </div>
               </div>
                <FormField
@@ -127,19 +177,19 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a category" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="fashion">Fashion</SelectItem>
-                        <SelectItem value="travel">Travel</SelectItem>
-                        <SelectItem value="home">Home</SelectItem>
-                        <SelectItem value="tech">Technology</SelectItem>
-                        <SelectItem value="health">Health</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="Fashion">Fashion</SelectItem>
+                        <SelectItem value="Travel">Travel</SelectItem>
+                        <SelectItem value="Home">Home</SelectItem>
+                        <SelectItem value="Technology">Technology</SelectItem>
+                        <SelectItem value="Health">Health</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -157,6 +207,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                         className="flex space-x-4"
+                        disabled={isSubmitting}
                       >
                         <FormItem className="flex items-center space-x-2 space-y-0">
                           <FormControl>
@@ -184,8 +235,11 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
               />
             </div>
             <DialogFooter>
-              <Button variant="ghost" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit">Create</Button>
+              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create
+              </Button>
             </DialogFooter>
           </form>
         </Form>
