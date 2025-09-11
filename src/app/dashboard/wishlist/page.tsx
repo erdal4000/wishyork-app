@@ -29,6 +29,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -37,8 +48,10 @@ import { Progress } from '@/components/ui/progress';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, DocumentData, Timestamp, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, DocumentData, Timestamp, getCountFromServer, deleteDoc, doc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 
 interface Wishlist extends DocumentData {
@@ -96,6 +109,8 @@ export default function WishlistPage() {
   const { user } = useAuth();
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     if (!user) {
@@ -122,10 +137,14 @@ export default function WishlistPage() {
         
         setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
         setLoading(false);
+    }, (error) => {
+        console.error("Error fetching wishlists: ", error);
+        toast({ title: "Error", description: "Could not fetch wishlists.", variant: "destructive" });
+        setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, toast]);
 
 
   const getPrivacyIcon = (privacy: string) => {
@@ -145,6 +164,17 @@ export default function WishlistPage() {
       if (!privacy) return 'Public';
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
   }
+
+  const handleDeleteWishlist = async (wishlistId: string) => {
+    try {
+        await deleteDoc(doc(db, 'wishlists', wishlistId));
+        toast({ title: "Success", description: "Wishlist has been deleted." });
+    } catch (error) {
+        console.error("Error deleting wishlist: ", error);
+        toast({ title: "Error", description: "Could not delete the wishlist. Please try again.", variant: "destructive" });
+    }
+  }
+
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -166,96 +196,119 @@ export default function WishlistPage() {
       ) : wishlists.length > 0 ? (
         <div className="grid grid-cols-1 gap-8">
           {wishlists.map((list) => (
-             <Link href={`/dashboard/wishlist/${list.id}`} key={list.id} className="block group">
-              <Card
-                className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl"
-              >
-                <CardHeader className="relative h-80 w-full p-0">
-                  <Image
-                    src={list.imageUrl}
-                    alt={list.title}
-                    data-ai-hint={list.aiHint}
-                    fill
-                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
-                     <div className="flex items-center gap-4">
-                        <h3 className="font-headline text-2xl font-bold">
-                            {list.title}
-                        </h3>
-                        <Badge variant="secondary" className="text-sm">
-                            {list.category}
-                        </Badge>
+             <div key={list.id} className="block group relative">
+              <Link href={`/dashboard/wishlist/${list.id}`}>
+                <Card
+                  className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl"
+                >
+                  <CardHeader className="relative h-80 w-full p-0">
+                    <Image
+                      src={list.imageUrl}
+                      alt={list.title}
+                      data-ai-hint={list.aiHint}
+                      fill
+                      className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4">
+                       <div className="flex-1">
+                          <div className="flex items-center gap-4">
+                              <h3 className="font-headline text-2xl font-bold">
+                                  {list.title}
+                              </h3>
+                              <Badge variant="secondary" className="text-sm">
+                                  {list.category}
+                              </Badge>
+                          </div>
+                          <p className="mt-2 flex items-center text-muted-foreground">
+                            <Package className="mr-2 h-4 w-4" />
+                            {list.itemCount} {list.itemCount === 1 ? 'item' : 'items'}
+                          </p>
+                       </div>
+                       <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
+                              {getPrivacyIcon(list.privacy)}
+                              <span>{getPrivacyLabel(list.privacy)}</span>
+                          </Badge>
+                       </div>
+                    </div>
+                     <div className="mt-4">
+                          <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                              <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
+                              <span>{list.progress}%</span>
+                          </div>
+                          <Progress value={list.progress} className="h-2" />
                      </div>
-                     <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5 text-muted-foreground">
-                            {getPrivacyIcon(list.privacy)}
-                            <span>{getPrivacyLabel(list.privacy)}</span>
-                        </Badge>
-                        <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
-                            onClick={(e) => e.preventDefault()}
-                            >
-                            <MoreHorizontal className="h-5 w-5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                            <Share2 className="mr-2 h-4 w-4" />
-                            Share
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                        </DropdownMenu>
-                     </div>
-                  </div>
-                   <p className="mt-4 flex items-center text-muted-foreground">
-                        <Package className="mr-2 h-4 w-4" />
-                        {list.itemCount} {list.itemCount === 1 ? 'item' : 'items'}
-                    </p>
-                   <div className="mt-4">
-                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                            <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
-                            <span>{list.progress}%</span>
-                        </div>
-                        <Progress value={list.progress} className="h-2" />
-                   </div>
-                </CardContent>
-                <Separator />
-                <CardFooter className="flex justify-between p-4 text-sm text-muted-foreground">
-                  <div className="flex gap-6">
-                    <div className="flex items-center gap-1.5">
-                      <Heart className="h-5 w-5" />
-                      <span className="font-medium">{list.likes}</span>
+                  </CardContent>
+                  <Separator />
+                  <CardFooter className="flex justify-between p-4 text-sm text-muted-foreground">
+                    <div className="flex gap-6">
+                      <div className="flex items-center gap-1.5">
+                        <Heart className="h-5 w-5" />
+                        <span className="font-medium">{list.likes}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <MessageCircle className="h-5 w-5" />
+                        <span className="font-medium">{list.comments}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Bookmark className="h-5 w-5" />
+                        <span className="font-medium">{list.saves}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <MessageCircle className="h-5 w-5" />
-                      <span className="font-medium">{list.comments}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Bookmark className="h-5 w-5" />
-                      <span className="font-medium">{list.saves}</span>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={(e) => e.preventDefault()}>
-                      <Share2 className="h-5 w-5" />
-                  </Button>
-                </CardFooter>
-              </Card>
-            </Link>
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); /* handle share */}}>
+                        <Share2 className="h-5 w-5" />
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </Link>
+                <div className="absolute top-4 right-4 z-10">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                          <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={(e) => e.stopPropagation()} // Stop propagation here too
+                          >
+                          <MoreHorizontal className="h-5 w-5" />
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
+                          <DropdownMenuItem onSelect={() => router.push(`/dashboard/wishlist/${list.id}`)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => {/* Share logic here */}}>
+                              <Share2 className="mr-2 h-4 w-4" />
+                              Share
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete this wishlist.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteWishlist(list.id)} className="bg-destructive hover:bg-destructive/90">
+                                        Yes, delete wishlist
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
           ))}
         </div>
       ) : (
