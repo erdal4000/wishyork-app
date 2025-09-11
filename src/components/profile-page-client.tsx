@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -104,8 +103,7 @@ export function ProfilePageClient() {
     }
 
     setLoading(true);
-    const unsubscribes: (() => void)[] = [];
-
+    
     const fetchUserProfile = async () => {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', username.toLowerCase()), limit(1));
@@ -124,6 +122,14 @@ export function ProfilePageClient() {
         setProfileUser(userData);
 
         const isOwnProfile = currentUser?.uid === userData.uid;
+        let initialWishlistsLoaded = false;
+        let initialPostsLoaded = false;
+
+        const turnOffLoading = () => {
+            if (initialWishlistsLoaded && initialPostsLoaded) {
+                setLoading(false);
+            }
+        }
 
         // Wishlist listener
         const wishlistsQuery = isOwnProfile
@@ -140,29 +146,35 @@ export function ProfilePageClient() {
             });
             const lists = await Promise.all(listsPromises);
             setWishlists(lists);
+            initialWishlistsLoaded = true;
+            turnOffLoading();
         });
-        unsubscribes.push(unsubscribeWishlists);
 
         // Posts listener
         const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userData.uid), orderBy('createdAt', 'desc'));
         const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
             const postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
             setPosts(postsData);
+            initialPostsLoaded = true;
+            turnOffLoading();
         });
-        unsubscribes.push(unsubscribePosts);
+
+        return () => {
+            unsubscribeWishlists();
+            unsubscribePosts();
+        };
 
       } catch (error) {
         console.error("Error fetching profile data:", error);
         setUserFound(false);
-      } finally {
         setLoading(false);
       }
     };
 
-    fetchUserProfile();
+    const cleanupPromise = fetchUserProfile();
 
     return () => {
-        unsubscribes.forEach(unsub => unsub());
+        cleanupPromise.then(cleanup => cleanup && cleanup());
     };
 
   }, [username, authLoading, currentUser]);
@@ -299,7 +311,7 @@ export function ProfilePageClient() {
                     </Link>
                 )) : (
                      <div className="col-span-1 flex items-center justify-center rounded-lg border-2 border-dashed py-12 text-center sm:col-span-2 xl:col-span-3">
-                        <p className="text-muted-foreground">This user has no public wishlists yet.</p>
+                        <p className="text-muted-foreground">{isOwnProfile ? "You haven't created any wishlists yet." : "This user has no public wishlists yet."}</p>
                     </div>
                 )}
             </div>
@@ -329,7 +341,7 @@ export function ProfilePageClient() {
               </Card>
             )) : (
                  <div className="flex items-center justify-center p-8 text-center text-muted-foreground rounded-lg border-2 border-dashed">
-                    <p>This user hasn't made any posts yet.</p>
+                    <p>{isOwnProfile ? "You haven't made any posts yet." : "This user hasn't made any posts yet."}</p>
                 </div>
             )}
           </div>
