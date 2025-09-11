@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -109,7 +108,7 @@ export default function WishlistPage() {
         querySnapshot.forEach((doc) => {
             lists.push({ id: doc.id, ...doc.data() } as Wishlist);
         });
-        setWishlists(lists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+        setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
         setLoading(false);
     });
 
