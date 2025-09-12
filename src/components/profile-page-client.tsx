@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -233,13 +234,13 @@ export function ProfilePageClient({
 
   const FollowButton = () => {
     if (isTogglingFollow) {
-      return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait</Button>
+      return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait</Button>;
     }
     if (isFollowing) {
-      return <Button variant="outline" onClick={toggleFollow}><UserCheck className="mr-2 h-4 w-4" /> Following</Button>
+      return <Button variant="outline" onClick={toggleFollow}><UserCheck className="mr-2 h-4 w-4" /> Following</Button>;
     }
-    return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>
-  }
+    return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>;
+  };
   
   const visibleWishlists = wishlists.filter(list => {
       if (isOwnProfile) return true;
