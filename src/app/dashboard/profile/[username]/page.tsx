@@ -25,6 +25,7 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
     const adminDb = getFirestore(adminApp);
     
     const usersRef = adminDb.collection('users');
+    // The query now correctly uses the method chaining syntax of the Admin SDK
     const q = usersRef
       .where('username_lowercase', '==', username.toLowerCase())
       .limit(1);
@@ -32,12 +33,13 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
     const querySnapshot = await q.get();
 
     if (querySnapshot.empty) {
-      return null; // User not found
+      console.log(`User not found for username: ${username}`);
+      return null;
     }
 
     const userDoc = querySnapshot.docs[0];
-    // Manually serialize the data to a plain object for Next.js props
     const data = userDoc.data();
+    
     const profileData: UserProfile = {
       uid: userDoc.id,
       name: data.name,
@@ -48,11 +50,11 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
       followingCount: data.followingCount || 0,
     };
     return profileData;
+
   } catch (error) {
       console.error("Error fetching user by username on server:", error);
-      // We throw the error to let Next.js catch it and show a generic error page.
-      // This prevents exposing detailed errors to the client.
-      throw new Error("Failed to fetch user data.");
+      // We throw a more generic error to avoid leaking implementation details.
+      throw new Error("Failed to fetch user data due to a server error.");
   }
 }
 
@@ -74,5 +76,6 @@ export default async function ProfilePage({
   }
 
   // 4. If the user exists, pass the fetched data as a prop to the Client Component.
+  // This separates the server-side data fetching from the client-side interactivity.
   return <ProfilePageClient initialProfileUser={profileUser} />;
 }
