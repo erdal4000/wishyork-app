@@ -17,18 +17,16 @@ function getServiceAccount(): ServiceAccount {
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin SDK environment variables are not set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set.'
+      'Firebase Admin SDK environment variables are not set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set in your .env file.'
     );
   }
   
-  // The private key from the environment variable might still have escaped newlines.
-  // This ensures they are actual newlines before being used.
-  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
-
+  // By taking the private key directly from the env (when correctly formatted with \n in quotes),
+  // we avoid parsing issues.
   return {
     projectId,
     clientEmail,
-    privateKey: formattedPrivateKey,
+    privateKey,
   } as ServiceAccount;
 }
 
@@ -48,6 +46,7 @@ export async function getAdminApp(): Promise<App> {
     return newApp;
   } catch (error) {
     console.error("Failed to initialize Firebase Admin SDK.", error);
+    // Re-throw the original error to see the exact cause in the logs.
     throw error;
   }
 }
