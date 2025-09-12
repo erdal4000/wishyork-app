@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -30,7 +31,7 @@ import Link from 'next/link';
 import { ScrollToTop } from '@/components/ui/scroll-to-top';
 import { useAuth } from '@/context/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -45,6 +46,11 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { GlobalSearch } from '@/components/global-search';
+import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
+
+interface UserProfile extends DocumentData {
+  username?: string;
+}
 
 function FullPageLoader() {
     return (
@@ -88,21 +94,33 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, loading } = useAuth();
+  const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const userProfilePath = `/dashboard/profile/${user?.email?.split('@')[0]}`;
-
 
   React.useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
   }, [user, loading, router]);
-  
+
+  React.useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setUserProfile(doc.data() as UserProfile);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
+
   if (loading || !user) {
     return <FullPageLoader />;
   }
 
+  const userProfilePath = userProfile?.username ? `/dashboard/profile/${userProfile.username}` : '#';
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -328,3 +346,5 @@ export default function DashboardLayout({
     </SidebarProvider>
   );
 }
+
+    
