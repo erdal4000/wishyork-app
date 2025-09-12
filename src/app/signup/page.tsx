@@ -1,3 +1,4 @@
+
 import { SignupForm } from '@/components/signup-form';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
