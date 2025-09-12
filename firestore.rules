@@ -1,55 +1,88 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user is the owner of a document
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // Users can read their own profile, and anyone can read anyone's basic profile
+    // Allow logged-in users to read any user profile
     match /users/{userId} {
-      allow read: if true;
-      allow write: if isOwner(userId);
+      allow read: if request.auth != null;
+
+      // Allow a user to update their OWN document for any field
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // SPECIFIC RULE FOR FOLLOWING:
+      // Allow a user to update ANOTHER user's document ONLY IF
+      // they are just changing the followers/followersCount fields.
+      allow update: if request.auth != null
+                    // The user being updated is NOT the current user
+                    && request.auth.uid != userId
+                    // Only these three fields are being modified
+                    && request.resource.data.keys().hasOnly(['followers', 'followersCount', 'name', 'username', 'username_lowercase', 'createdAt', 'photoURL', 'uid', 'email', 'following', 'followingCount', 'bio'])
+                    // Check that they are only adding/removing themselves from the followers list
+                    && (
+                      // Follow action: adding their UID to the list
+                      (request.resource.data.followers == resource.data.followers.concat([request.auth.uid]))
+                      ||
+                      // Unfollow action: removing their UID from the list
+                      (request.resource.data.followers == resource.data.followers.removeAll([request.auth.uid]))
+                    )
+                    // Check that the followersCount is being incremented/decremented by exactly 1
+                    && (
+                      request.resource.data.followersCount == resource.data.followersCount + 1
+                      ||
+                      request.resource.data.followersCount == resource.data.followersCount - 1
+                    );
+
+      // Deny creation/deletion of user docs by clients
+      allow create, delete: if false;
     }
-    
-    // Usernames must be unique. Only the owner of the username can create it.
+
+    // Allow anyone to read a username document (for username availability checks)
     match /usernames/{username} {
-      allow read: if true;
-      allow create: if isOwner(request.resource.data.uid);
+      allow get: if true;
+      // Only the server (or authenticated user for their own) should create username docs
+      allow create: if request.auth != null;
+      allow update, delete: if false;
     }
 
-    // Wishlists security
-    match /wishlists/{wishlistId} {
-      // Anyone can read public wishlists
-      allow read: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
-      
-      // A user can create a wishlist if they are logged in and the authorId matches their own UID
-      allow create: if request.auth != null && isOwner(request.resource.data.authorId);
-
-      // A user can update or delete a wishlist only if they are the owner
-      allow update, delete: if isOwner(resource.data.authorId);
-      
-      // Items within a wishlist
-      match /items/{itemId} {
-        // Anyone who can view the wishlist can view its items
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-        
-        // The owner of the wishlist can add, update, or delete items
-        allow create, update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-      }
-    }
-
-    // Posts security
+    // Rules for Posts
     match /posts/{postId} {
-      // Anyone can read any post
+      // Anyone can read posts
       allow read: if true;
-      // Users can create posts if they are logged in and are the author
-      allow create: if request.auth != null && isOwner(request.resource.data.authorId);
-      // Users can only update/delete their own posts
-      allow update, delete: if isOwner(resource.data.authorId);
+      // Only authenticated users can create posts
+      allow create: if request.auth != null;
+      // Allow user to update their own post (for likes, etc.)
+      // More specific rules can be added here (e.g., only allow 'likes' field to be updated)
+      allow update: if request.auth != null;
+      // Only the author of a post can delete it
+      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+    }
+
+    // Rules for Wishlists and their items
+    match /wishlists/{wishlistId} {
+      // Allow read based on privacy settings
+      allow read: if resource.data.privacy == 'public'
+                  || (resource.data.privacy == 'private' && request.auth.uid == resource.data.authorId)
+                  || (resource.data.privacy == 'friends'); // Needs friend logic
+
+      // Only authenticated users can create wishlists
+      allow create: if request.auth != null;
+
+      // Only the author can update or delete their wishlist
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+
+      // Rules for items within a wishlist
+      match /items/{itemId} {
+        // Inherits read access from parent wishlist
+        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public'
+                   || (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'private' && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+
+        // Only the wishlist author can add/delete items
+        allow create, delete: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+
+        // Any logged-in user (except the author) can update an item (to reserve/fulfill it)
+        allow update: if request.auth != null;
+      }
     }
   }
 }
