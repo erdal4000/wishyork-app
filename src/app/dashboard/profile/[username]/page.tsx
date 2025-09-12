@@ -7,8 +7,8 @@ import {
   getDocs,
   limit,
   DocumentData,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+} from 'firebase-admin/firestore';
+import { getAdminApp } from '@/lib/firebase-admin';
 import { notFound } from 'next/navigation';
 import { ProfilePageClient } from '@/components/profile-page-client';
 
@@ -18,12 +18,17 @@ interface UserProfile extends DocumentData {
   username: string;
   photoURL?: string;
   bio?: string;
+  followersCount: number;
+  followingCount: number;
 }
 
 // This function runs on the server to fetch the user's data.
 async function getUserByUsername(username: string): Promise<UserProfile | null> {
   if (!username) return null;
-  const usersRef = collection(db, 'users');
+  const adminApp = await getAdminApp();
+  const adminDb = adminApp.firestore();
+  
+  const usersRef = adminDb.collection('users');
   const q = query(
     usersRef,
     where('username_lowercase', '==', username.toLowerCase()),

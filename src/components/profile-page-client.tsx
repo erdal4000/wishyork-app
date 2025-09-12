@@ -97,6 +97,8 @@ interface Wishlist extends DocumentData {
   comments: number;
   saves: number;
   createdAt: any;
+  unitsFulfilled: number;
+  totalUnits: number;
 }
 
 
