@@ -9,6 +9,7 @@ import {
   DocumentData,
 } from 'firebase-admin/firestore';
 import { getAdminApp } from '@/lib/firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import { notFound } from 'next/navigation';
 import { ProfilePageClient } from '@/components/profile-page-client';
 
@@ -26,9 +27,9 @@ interface UserProfile extends DocumentData {
 async function getUserByUsername(username: string): Promise<UserProfile | null> {
   if (!username) return null;
   const adminApp = await getAdminApp();
-  const adminDb = adminApp.firestore();
+  const adminDb = getFirestore(adminApp);
   
-  const usersRef = adminDb.collection('users');
+  const usersRef = collection(adminDb, 'users');
   const q = query(
     usersRef,
     where('username_lowercase', '==', username.toLowerCase()),

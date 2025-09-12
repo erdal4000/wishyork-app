@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     if (!userDoc.exists) {
       const username = (email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') ?? '') + Math.floor(Math.random() * 999);
       const usernameDocRef = adminDb.collection('usernames').doc(username);
+      const usernameLowercase = username.toLowerCase();
 
       const batch = adminDb.batch();
 
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
         name: name || 'New User',
         email: email,
         username: username,
+        username_lowercase: usernameLowercase,
         createdAt: Timestamp.now(),
         photoURL: photoURL,
       });
