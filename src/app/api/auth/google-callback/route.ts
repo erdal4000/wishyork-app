@@ -66,6 +66,24 @@ export async function GET(request: NextRequest) {
       throw new Error('UID or email not found in Google token payload');
     }
     
+    // Create or update the user in Firebase Auth. This is important!
+    try {
+      await adminAuth.getUser(uid);
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
+        // If user doesn't exist, create them in Firebase Auth
+        await adminAuth.createUser({
+          uid: uid,
+          email: email,
+          displayName: name,
+          photoURL: picture,
+        });
+      } else {
+        throw error; // Re-throw other errors
+      }
+    }
+
+
     const userDocRef = adminDb.collection('users').doc(uid);
     const userDoc = await userDocRef.get();
 
@@ -91,30 +109,25 @@ export async function GET(request: NextRequest) {
       batch.set(usernameDocRef, { uid: uid });
       await batch.commit();
 
-      // Also update the Auth user record
+      // Ensure the Auth user record has the photoURL
       await adminAuth.updateUser(uid, { photoURL });
-
     }
 
-    const customToken = await adminAuth.createCustomToken(uid);
+    // Instead of creating a custom token, we will let the client-side SDK
+    // handle the sign-in state. The user is already authenticated with Google,
+    // and the client will pick up the session.
     
-    const response = NextResponse.redirect(new URL('/dashboard', request.url));
-    cookies().set('customToken', customToken, {
-        path: '/',
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60, // 1 hour
-    });
-
+    // We just need to redirect to the dashboard. The client-side AuthProvider
+    // will detect the logged-in state.
+    const response = NextResponse.redirect(new URL('/login?googleSignIn=true', request.url));
+    
     cookies().delete('google_oauth_state');
 
     return response;
 
-  } catch (error: any)
-   {
+  } catch (error: any) {
     console.error('Google callback error:', error);
     const redirectUrl = new URL('/login', request.url);
-    // Use the error message from Google if available, otherwise a generic message.
     redirectUrl.searchParams.set('error', encodeURIComponent(error.message || 'An unexpected error occurred during Google sign-in.'));
     return NextResponse.redirect(redirectUrl);
   }

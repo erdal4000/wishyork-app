@@ -25,7 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Waves, LogIn, Loader2, AlertCircle } from "lucide-react";
 import Link from 'next/link';
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, getRedirectResult, GoogleAuthProvider } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { query, collection, where, getDocs } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -59,6 +59,7 @@ const isEmail = (str: string): boolean => {
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isHandlingRedirect, setIsHandlingRedirect] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -71,7 +72,33 @@ export function LoginForm() {
     if (authError) {
         setError(decodeURIComponent(authError));
     }
-  }, [searchParams]);
+    
+    // This effect will handle the result of the Google sign-in redirect
+    const handleRedirect = async () => {
+        try {
+            const result = await getRedirectResult(auth);
+            if (result) {
+                // User signed in. The onAuthStateChanged listener in AuthProvider
+                // will handle the user state update and redirect.
+                toast({ title: "Welcome!", description: "You have successfully signed in." });
+            }
+        } catch (error: any) {
+            console.error("Google sign-in redirect error:", error);
+            setError(error.message || "Failed to sign in with Google.");
+        } finally {
+            setIsHandlingRedirect(false);
+            // Clean up URL params
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        }
+    };
+    
+    if(searchParams.get('googleSignIn') === 'true') {
+        handleRedirect();
+    } else {
+        setIsHandlingRedirect(false);
+    }
+  }, [searchParams, toast]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -116,14 +143,32 @@ export function LoginForm() {
       await signInWithEmailAndPassword(auth, emailToLogin, values.password);
       
       toast({ title: "Login Successful!", description: "Redirecting you..." });
-      router.push('/dashboard');
-
+      // The useEffect for user state will handle the redirect
     } catch (error: any) {
         setError("Invalid username or password. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (loading || isHandlingRedirect) {
+      return (
+        <Card className="w-full max-w-md rounded-2xl shadow-xl">
+             <CardHeader className="text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <Waves className="h-8 w-8 text-primary" />
+                </div>
+                <CardTitle className="font-headline text-3xl">Welcome back</CardTitle>
+                <CardDescription>Finalizing your sign in...</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex justify-center items-center p-8">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                </div>
+            </CardContent>
+        </Card>
+      )
+  }
 
   return (
     <Card className="w-full max-w-md rounded-2xl shadow-xl">
