@@ -3,86 +3,59 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow logged-in users to read any user profile
+    // Kullanıcılar herkese açık profilleri okuyabilir.
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if true;
 
-      // Allow a user to update their OWN document for any field
+      // Bir kullanıcı sadece kendi belgesini güncelleyebilir (bio, name vb. için).
       allow update: if request.auth != null && request.auth.uid == userId;
 
-      // SPECIFIC RULE FOR FOLLOWING:
-      // Allow a user to update ANOTHER user's document ONLY IF
-      // they are just changing the followers/followersCount fields.
-      allow update: if request.auth != null
-                    // The user being updated is NOT the current user
-                    && request.auth.uid != userId
-                    // Only these three fields are being modified
-                    && request.resource.data.keys().hasOnly(['followers', 'followersCount', 'name', 'username', 'username_lowercase', 'createdAt', 'photoURL', 'uid', 'email', 'following', 'followingCount', 'bio'])
-                    // Check that they are only adding/removing themselves from the followers list
-                    && (
-                      // Follow action: adding their UID to the list
-                      (request.resource.data.followers == resource.data.followers.concat([request.auth.uid]))
-                      ||
-                      // Unfollow action: removing their UID from the list
-                      (request.resource.data.followers == resource.data.followers.removeAll([request.auth.uid]))
-                    )
-                    // Check that the followersCount is being incremented/decremented by exactly 1
-                    && (
-                      request.resource.data.followersCount == resource.data.followersCount + 1
-                      ||
-                      request.resource.data.followersCount == resource.data.followersCount - 1
-                    );
-
-      // Deny creation/deletion of user docs by clients
-      allow create, delete: if false;
+      // Takip Etme/Bırakma Mantığı:
+      // Bir kullanıcı, başka bir kullanıcının 'followers' veya 'followersCount'
+      // alanlarını ancak ve ancak kendi UID'sini ekleyip/çıkarıyorsa güncelleyebilir.
+      // Bu, takip etme ve takipten çıkma işlemlerinin güvenli bir şekilde çalışmasını sağlar.
+      allow update: if request.auth != null &&
+                      (request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['followers', 'followersCount'])) &&
+                      (request.resource.data.followers == resource.data.followers.concat([request.auth.uid]) ||
+                       request.resource.data.followers == resource.data.followers.removed(request.auth.uid));
     }
 
-    // Allow anyone to read a username document (for username availability checks)
+    // Kullanıcı adlarının benzersizliğini kontrol etmek için herkesin okumasına izin ver.
     match /usernames/{username} {
-      allow get: if true;
-      // Only the server (or authenticated user for their own) should create username docs
-      allow create: if request.auth != null;
-      allow update, delete: if false;
+      allow read, create: if true;
     }
 
-    // Rules for Posts
+    // Herkesin gönderileri okumasına izin ver.
+    // Bir kullanıcı sadece kendi gönderisini oluşturabilir/silebilir/güncelleyebilir.
     match /posts/{postId} {
-      // Anyone can read posts
       allow read: if true;
-      // Only authenticated users can create posts
-      allow create: if request.auth != null;
-      // Allow user to update their own post (for likes, etc.)
-      // More specific rules can be added here (e.g., only allow 'likes' field to be updated)
-      allow update: if request.auth != null;
-      // Only the author of a post can delete it
-      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+      allow create, update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
     }
 
-    // Rules for Wishlists and their items
+    // Wishlistler için kurallar
     match /wishlists/{wishlistId} {
-      // Allow read based on privacy settings
-      allow read: if resource.data.privacy == 'public'
-                  || (resource.data.privacy == 'private' && request.auth.uid == resource.data.authorId)
-                  || (resource.data.privacy == 'friends'); // Needs friend logic
+      // Herkes herkese açık wishlistleri okuyabilir.
+      // Kullanıcılar kendi özel veya arkadaş listelerini okuyabilir.
+      allow read: if resource.data.privacy == 'public' || 
+                     (request.auth != null && request.auth.uid == resource.data.authorId);
+      
+      // Kullanıcılar sadece kendi wishlistlerini oluşturabilir, güncelleyebilir, silebilir.
+      allow create, update, delete: if request.auth != null && request.auth.uid == request.resource.data.authorId;
 
-      // Only authenticated users can create wishlists
-      allow create: if request.auth != null;
-
-      // Only the author can update or delete their wishlist
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
-
-      // Rules for items within a wishlist
+      // Wishlist içindeki item'lar için kurallar
       match /items/{itemId} {
-        // Inherits read access from parent wishlist
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public'
-                   || (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'private' && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-
-        // Only the wishlist author can add/delete items
+        // Wishlist'i okuma izni olan herkes item'ları da okuyabilir.
+        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' ||
+                     (request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+        
+        // Wishlist sahibi item ekleyebilir/silebilir/güncelleyebilir.
         allow create, delete: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
-
-        // Any logged-in user (except the author) can update an item (to reserve/fulfill it)
+        
+        // Oturum açmış herhangi bir kullanıcı bir item'ı rezerve edebilir, satın alındı olarak işaretleyebilir veya rezervasyonunu iptal edebilir.
         allow update: if request.auth != null;
       }
     }
+
   }
 }
