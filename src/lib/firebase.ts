@@ -1,7 +1,7 @@
 
 "use client";
 
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApp, getApps, FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -14,8 +14,13 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// This check prevents re-initializing the app on hot reloads.
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase for SSR and SSG, prevent re-initialization on client
+let app: FirebaseApp;
+if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+} else {
+    app = getApp();
+}
 
 const auth = getAuth(app);
 const db = getFirestore(app);
