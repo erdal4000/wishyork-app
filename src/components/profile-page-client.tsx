@@ -153,7 +153,6 @@ export function ProfilePageClient() {
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userFound, setUserFound] = useState(true);
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
   const { toast } = useToast();
 
@@ -163,105 +162,89 @@ export function ProfilePageClient() {
   useEffect(() => {
     if (!username) return;
 
-    const fetchUserProfile = async () => {
-      setLoading(true);
-      const usersRef = collection(db, 'users');
-      const q = query(
-        usersRef,
-        where('username_lowercase', '==', username.toLowerCase()),
-        limit(1)
-      );
-      try {
-        
-        const unsubscribeUser = onSnapshot(q, (userSnapshot) => {
-            if (userSnapshot.empty) {
-                setUserFound(false);
-                setLoading(false);
-                return;
-            }
+    setLoading(true);
+    const usersRef = collection(db, 'users');
+    const q = query(
+      usersRef,
+      where('username_lowercase', '==', username.toLowerCase()),
+      limit(1)
+    );
 
-            const userDoc = userSnapshot.docs[0];
-            const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
-            setProfileUser(userData);
-
-            const isOwnProfile = currentUser?.uid === userData.uid;
-
-            // Fetch Wishlists
-            const wishlistsQuery = isOwnProfile
-            ? query(
-                collection(db, 'wishlists'),
-                where('authorId', '==', userData.uid)
-                )
-            : query(
-                collection(db, 'wishlists'),
-                where('authorId', '==', userData.uid),
-                where('privacy', 'in', ['public', 'friends']) // Show public and friends lists
-                );
-
-            const unsubscribeWishlists = onSnapshot(
-            wishlistsQuery,
-            async (snapshot) => {
-                const listsPromises = snapshot.docs.map(async (doc) => {
-                const listData = { id: doc.id, ...doc.data() } as Wishlist;
-                const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-                const itemsSnapshot = await getCountFromServer(itemsColRef);
-                listData.itemCount = itemsSnapshot.data().count;
-                return listData;
-                });
-                const lists = await Promise.all(listsPromises);
-                setWishlists(
-                lists.sort(
-                    (a, b) =>
-                    (b.createdAt?.toMillis() ?? 0) -
-                    (a.createdAt?.to-Millis() ?? 0)
-                )
-                );
-            }
-            );
-
-            // Fetch Posts
-            const postsQuery = query(
-            collection(db, 'posts'),
-            where('authorId', '==', userData.uid),
-            orderBy('createdAt', 'desc')
-            );
-
-            const unsubscribePosts = onSnapshot(
-            postsQuery,
-            (snapshot) => {
-                const postsData = snapshot.docs.map(
-                (doc) => ({ id: doc.id, ...doc.data() } as Post)
-                );
-                setPosts(postsData);
-            }
-            );
-            
-            setLoading(false);
-
-             return () => {
-                unsubscribeWishlists();
-                unsubscribePosts();
-            };
-
-        });
-        
-        return () => unsubscribeUser();
-
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-        setUserFound(false);
+    const unsubscribeUser = onSnapshot(q, (userSnapshot) => {
+      if (userSnapshot.empty) {
+        setProfileUser(null);
         setLoading(false);
+        return;
       }
-    };
 
-    fetchUserProfile();
-  }, [username, currentUser]);
+      const userDoc = userSnapshot.docs[0];
+      const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
+      setProfileUser(userData);
+
+      // Fetch Wishlists
+      const wishlistsQuery = query(
+        collection(db, 'wishlists'),
+        where('authorId', '==', userData.uid)
+      );
+
+      const unsubscribeWishlists = onSnapshot(
+        wishlistsQuery,
+        async (snapshot) => {
+          const listsPromises = snapshot.docs.map(async (doc) => {
+            const listData = { id: doc.id, ...doc.data() } as Wishlist;
+            const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
+            const itemsSnapshot = await getCountFromServer(itemsColRef);
+            listData.itemCount = itemsSnapshot.data().count;
+            return listData;
+          });
+          const lists = await Promise.all(listsPromises);
+          setWishlists(
+            lists.sort(
+              (a, b) =>
+                (b.createdAt?.toMillis() ?? 0) -
+                (a.createdAt?.toMillis() ?? 0)
+            )
+          );
+        }
+      );
+
+      // Fetch Posts
+      const postsQuery = query(
+        collection(db, 'posts'),
+        where('authorId', '==', userData.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribePosts = onSnapshot(
+        postsQuery,
+        (snapshot) => {
+          const postsData = snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() } as Post)
+          );
+          setPosts(postsData);
+        }
+      );
+      
+      setLoading(false);
+
+      return () => {
+        unsubscribeWishlists();
+        unsubscribePosts();
+      };
+    }, (error) => {
+      console.error('Error fetching profile:', error);
+      setProfileUser(null);
+      setLoading(false);
+    });
+
+    return () => unsubscribeUser();
+  }, [username]);
 
   if (loading || authLoading) {
     return <ProfilePageSkeleton />;
   }
 
-  if (!userFound || !profileUser) {
+  if (!profileUser) {
     return notFound();
   }
 
@@ -320,6 +303,13 @@ export function ProfilePageClient() {
     }
     return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>
   }
+  
+  const visibleWishlists = wishlists.filter(list => {
+      if (isOwnProfile) return true;
+      if (list.privacy === 'public') return true;
+      // TODO: Add 'friends' logic here if needed
+      return false;
+  });
 
   return (
     <div className="space-y-6">
@@ -379,7 +369,7 @@ export function ProfilePageClient() {
       <Tabs defaultValue="wishlists" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="wishlists">
-            Wishlists ({wishlists.length})
+            Wishlists ({visibleWishlists.length})
           </TabsTrigger>
           <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
@@ -390,8 +380,8 @@ export function ProfilePageClient() {
         </div>
         <TabsContent value="wishlists" className="mt-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            {wishlists.length > 0 ? (
-              wishlists.map((list) => (
+            {visibleWishlists.length > 0 ? (
+              visibleWishlists.map((list) => (
                 <div key={list.id} className="group relative block">
                   <Link href={`/dashboard/wishlist/${list.id}`}>
                     <Card className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl">
@@ -461,7 +451,7 @@ export function ProfilePageClient() {
                       </div>
                     </Card>
                   </Link>
-                  <div className="absolute right-3 top-3 z-20">
+                  {isOwnProfile && (<div className="absolute right-3 top-3 z-20">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -485,8 +475,7 @@ export function ProfilePageClient() {
                           <Share2 className="mr-2 h-4 w-4" />
                           Share
                         </DropdownMenuItem>
-                        {isOwnProfile ? (
-                          <>
+                        
                             <DropdownMenuItem
                               onSelect={() => setEditingWishlist(list)}
                             >
@@ -522,15 +511,10 @@ export function ProfilePageClient() {
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
-                          </>
-                        ) : (
-                          <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                            <AlertTriangle className="mr-2 h-4 w-4" /> Report
-                          </DropdownMenuItem>
-                        )}
+                          
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+                  </div>)}
                 </div>
               ))
             ) : (
