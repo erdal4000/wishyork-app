@@ -168,7 +168,7 @@ export function ProfilePageClient() {
       const usersRef = collection(db, 'users');
       const q = query(
         usersRef,
-        where('username', '==', username.toLowerCase()),
+        where('username_lowercase', '==', username.toLowerCase()),
         limit(1)
       );
       try {
@@ -213,7 +213,7 @@ export function ProfilePageClient() {
                 lists.sort(
                     (a, b) =>
                     (b.createdAt?.toMillis() ?? 0) -
-                    (a.createdAt?.toMillis() ?? 0)
+                    (a.createdAt?.to-Millis() ?? 0)
                 )
                 );
             }
@@ -602,5 +602,3 @@ export function ProfilePageClient() {
     </div>
   );
 }
-
-    
