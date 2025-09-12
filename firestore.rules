@@ -1,60 +1,72 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // Helper function to check if a user is authenticated
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Users Collection Rules
-    // - Anyone signed in can read any user's profile (for profile pages).
-    // - A user can only create or update their OWN profile.
+    // Helper function to check if the user ID matches the author ID of a resource
+    function isOwner(resource) {
+      return request.auth.uid == resource.data.authorId;
+    }
+
+    // Rules for the 'users' collection
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      // Anyone can read a user's public profile
+      allow read;
+      // Only the user themselves can create or update their own profile
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
-
-    // Usernames Collection Rules
-    // - Used to quickly check if a username is taken.
-    // - Anyone signed in can read the list of usernames.
-    // - A user can only create a username document that maps to their own UID.
+    
+    // Rules for the 'usernames' collection
     match /usernames/{username} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+        // Anyone can read to check if a username exists
+        allow read;
+        // Only an authenticated user can create their own username document
+        allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
     }
 
-    // Wishlists Collection Rules
-    // - A user can only create, update, or delete their own wishlists.
-    // - Read rules are more complex:
-    //   - Anyone can read a 'public' wishlist.
-    //   - 'private' lists can only be read by the owner.
-    //   - 'friends' lists logic would be implemented here later (e.g., check if author is in user's 'following' list).
-    match /wishlists/{wishlistId} {
-      allow create, update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
-      allow read: if (resource.data.privacy == 'public') ||
-                     (resource.data.privacy == 'private' && resource.data.authorId == request.auth.uid);
-      
-      // Items subcollection rules
-      match /items/{itemId} {
-        allow read: if (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public') ||
-                       (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid);
-        allow create, update, delete: if isSignedIn() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
-      }
-    }
-
-    // Posts Collection Rules
-    // - Anyone signed in can read any post.
-    // - A user can only create their own posts.
-    // - A user can only update their own post's likes/comments, not content.
-    // - A user can only delete their own posts.
+    // Rules for the 'posts' collection
     match /posts/{postId} {
-       allow read: if isSignedIn();
-       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-       allow update: if isSignedIn(); // Simplified for now to allow liking
-       allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        // Anyone can read public posts
+        allow read;
+        // Users can only create/update/delete their own posts
+        allow write: if isSignedIn() && isOwner(resource);
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+    }
+
+    // Rules for the 'wishlists' collection and its items subcollection
+    match /wishlists/{wishlistId} {
+      // Read access logic:
+      // 1. Anyone can read a 'public' wishlist.
+      // 2. Logged-in users can read 'friends' wishlists (future-proofing).
+      // 3. The owner can always read their own wishlist, regardless of privacy.
+      allow read: if resource.data.privacy == 'public' 
+                  || (isSignedIn() && resource.data.privacy == 'friends') 
+                  || (isSignedIn() && isOwner(resource));
+
+      // Create access logic:
+      // A user must be signed in, and the new wishlist's authorId must be their own UID.
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+
+      // Update/Delete access logic:
+      // A user must be the owner of the wishlist to update or delete it.
+      allow update, delete: if isSignedIn() && isOwner(resource);
+
+      // Rules for the 'items' subcollection within a wishlist
+      match /items/{itemId} {
+        // Anyone who can read the parent wishlist can also read its items.
+        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public'
+                    || (isSignedIn() && isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId))))
+                    || (isSignedIn() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'friends');
+        
+        // Write access (create, update, delete) for items:
+        // Only the owner of the parent wishlist can add, update, or remove items.
+        allow write: if isSignedIn() && isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)));
+      }
     }
   }
 }
