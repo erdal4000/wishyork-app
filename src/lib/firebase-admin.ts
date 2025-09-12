@@ -17,7 +17,7 @@ function getServiceAccount(): ServiceAccount {
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin SDK environment variables are not set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set in your .env file.'
+      'Firebase Admin server credentials are not set. Please add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY to your environment variables on your hosting platform (e.g., Vercel).'
     );
   }
   
