@@ -1,38 +1,35 @@
-
 'use server';
 
-import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { initializeApp, getApps, App, ServiceAccount } from 'firebase-admin/app';
 import * as admin from 'firebase-admin';
 
 const FIREBASE_ADMIN_APP_NAME = 'firebase-admin-app-singleton';
 
-function getServiceAccount() {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!serviceAccountJson) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not found. Please check your Vercel settings.');
-  }
-  try {
-    const serviceAccount = JSON.parse(serviceAccountJson);
+/**
+ * Constructs a service account object from individual environment variables.
+ * This is a more robust method than parsing a single JSON string, as it avoids
+ * issues with escaped characters in private keys when stored in environment variables.
+ */
+function getServiceAccount(): ServiceAccount {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    // This is the crucial fix: Vercel (or other environments) might not correctly handle
-    // the newlines in the private key when it's stored as a single-line environment variable.
-    // We need to replace the escaped newlines ('\\n') with actual newline characters ('\n').
-    if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-    }
-
-    if (
-      !serviceAccount.project_id ||
-      !serviceAccount.private_key ||
-      !serviceAccount.client_email
-    ) {
-      throw new Error('Service account JSON is invalid or missing required fields.');
-    }
-    return serviceAccount;
-  } catch (error: any) {
-    console.error('Service account JSON parsing error:', error.message);
-    throw new Error('The FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not valid JSON.');
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      'Missing Firebase Admin SDK credentials. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set in your environment variables.'
+    );
   }
+
+  // Vercel and other platforms might not handle newlines in the private key correctly.
+  // This replaces the escaped newlines ('\\n') with actual newline characters ('\n').
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey: formattedPrivateKey,
+  };
 }
 
 export async function getAdminApp(): Promise<App> {
