@@ -1,35 +1,57 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Users Collection
+    // - Anyone can create their own user document.
+    // - Users can only read/update their own document.
+    // - Other signed-in users can READ user documents (for profiles).
     match /users/{userId} {
-      allow read: if true;
-      allow create, update: if request.auth.uid == userId;
+      allow create: if request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow update, delete: if request.auth.uid == userId;
     }
-
+    
+    // Usernames Collection
+    // - Used to ensure unique usernames.
+    // - Anyone can read to check for username availability.
+    // - Only the owner can create their username document.
     match /usernames/{username} {
-      allow read: if true;
-      allow create: if request.auth.uid == request.resource.data.uid;
+      allow read;
+      allow create: if isSignedIn();
     }
 
-    match /posts/{postId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth.uid == resource.data.authorId;
-    }
-
+    // Wishlists Collection
     match /wishlists/{wishlistId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth.uid == resource.data.authorId;
+      // General read access is determined by the 'privacy' field.
+      allow read: if resource.data.privacy == 'public'
+                  || (resource.data.privacy == 'friends' && isSignedIn()) // Future: Add friend logic
+                  || resource.data.authorId == request.auth.uid;
+                  
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
 
-      // Allow creating, reading, updating, and deleting items in a wishlist
+      // Items Subcollection
       match /items/{itemId} {
-        allow read: if true;
-        // Only authenticated users can create items
-        allow create: if request.auth != null;
-        // Only the wishlist author can update or delete items
-        allow update, delete: if request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy != 'private'
+                    || get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+                    
+        allow create, update, delete: if isSignedIn() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
       }
+    }
+    
+     // Posts Collection
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
     }
   }
 }
