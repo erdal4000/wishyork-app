@@ -1,15 +1,7 @@
 'use server';
 
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-  DocumentData,
-} from 'firebase-admin/firestore';
 import { getAdminApp } from '@/lib/firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, DocumentData } from 'firebase-admin/firestore';
 import { notFound } from 'next/navigation';
 import { ProfilePageClient } from '@/components/profile-page-client';
 
@@ -23,22 +15,21 @@ interface UserProfile extends DocumentData {
   followingCount: number;
 }
 
-// This function runs on the server to fetch the user's data.
+// Bu fonksiyon, kullanıcıyı kullanıcı adına göre Firestore'dan getirir.
 async function getUserByUsername(username: string): Promise<UserProfile | null> {
   if (!username) return null;
   const adminApp = await getAdminApp();
   const adminDb = getFirestore(adminApp);
   
-  const usersRef = collection(adminDb, 'users');
-  const q = query(
-    usersRef,
-    where('username_lowercase', '==', username.toLowerCase()),
-    limit(1)
-  );
-  const querySnapshot = await getDocs(q);
+  const usersRef = adminDb.collection('users');
+  const q = usersRef
+    .where('username_lowercase', '==', username.toLowerCase())
+    .limit(1);
+    
+  const querySnapshot = await q.get();
 
   if (querySnapshot.empty) {
-    return null; // User not found
+    return null; // Kullanıcı bulunamadı
   }
 
   const userDoc = querySnapshot.docs[0];
@@ -56,23 +47,23 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
   return profileData;
 }
 
-// This is the main Server Component for the profile page.
+// Bu, ana Sunucu Bileşenidir.
 export default async function ProfilePage({
   params,
 }: {
   params: { username: string };
 }) {
-  // 1. Get the username from the URL.
+  // 1. URL'den kullanıcı adını al.
   const { username } = params;
 
-  // 2. Fetch the user data on the server.
+  // 2. Sunucuda kullanıcı verisini çek.
   const profileUser = await getUserByUsername(username);
 
-  // 3. If the user is not found, render the 404 page.
+  // 3. Eğer kullanıcı bulunamazsa, 404 sayfasını göster.
   if (!profileUser) {
     notFound();
   }
 
-  // 4. If the user is found, pass the data as a prop to the Client Component.
+  // 4. Kullanıcı bulunduysa, veriyi İstemci Bileşenine prop olarak gönder.
   return <ProfilePageClient initialProfileUser={profileUser} />;
 }
