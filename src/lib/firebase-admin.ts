@@ -7,39 +7,32 @@ import * as admin from 'firebase-admin';
 const FIREBASE_ADMIN_APP_NAME = 'firebase-admin-app-singleton';
 
 /**
- * Parses the service account key from a single environment variable.
- * This method is robust against formatting issues with private keys,
- * as long as the \n characters have been escaped to \\n.
+ * Gets the Firebase Admin SDK credentials from individual environment variables.
+ * This is a more robust method that avoids JSON parsing and private key formatting issues.
  */
 function getServiceAccount(): ServiceAccount {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  if (!serviceAccountJson) {
+  if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin SDK credentials are not set. Please ensure FIREBASE_SERVICE_ACCOUNT_KEY is set in your environment variables as a JSON string.'
+      'Firebase Admin SDK environment variables are not set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set.'
     );
   }
+  
+  // The private key from the environment variable might still have escaped newlines.
+  // This ensures they are actual newlines before being used.
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
 
-  try {
-    const serviceAccount = JSON.parse(serviceAccountJson);
-
-    // *** CRITICAL FIX ***
-    // The private key in the environment variable has its newlines escaped as "\\n".
-    // The `cert` function expects actual newline characters "\n".
-    // We must replace them before passing the object to the SDK.
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-    }
-
-    return serviceAccount;
-  } catch (error: any) {
-    console.error('CRITICAL: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. Ensure it is a valid, single-line JSON string in your .env file.', error.message);
-    throw new Error('The FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not a valid JSON string.');
-  }
+  return {
+    projectId,
+    clientEmail,
+    privateKey: formattedPrivateKey,
+  } as ServiceAccount;
 }
 
 export async function getAdminApp(): Promise<App> {
-  // This is a singleton pattern to avoid re-initializing the app on every server-side render.
   const existingApp = getApps().find(app => app.name === FIREBASE_ADMIN_APP_NAME);
   if (existingApp) {
     return existingApp;
@@ -54,7 +47,6 @@ export async function getAdminApp(): Promise<App> {
 
     return newApp;
   } catch (error) {
-    // Re-throw the error to be caught by Next.js error boundaries.
     console.error("Failed to initialize Firebase Admin SDK.", error);
     throw error;
   }
