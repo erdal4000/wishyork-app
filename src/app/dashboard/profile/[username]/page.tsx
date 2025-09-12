@@ -53,8 +53,8 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
 
   } catch (error) {
       console.error("Error fetching user by username on server:", error);
-      // We throw a more generic error to avoid leaking implementation details.
-      throw new Error("Failed to fetch user data due to a server error.");
+      // We throw the original error to see the real cause.
+      throw error;
   }
 }
 
