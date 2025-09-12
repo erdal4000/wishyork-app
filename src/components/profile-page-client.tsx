@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17,7 +18,7 @@ import {
   deleteDoc,
   doc,
 } from 'firebase/firestore';
-
+import { useFollow } from '@/hooks/use-follow';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -38,6 +39,8 @@ import {
   Trash2,
   Repeat2,
   Share2,
+  UserCheck,
+  Loader2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -74,6 +77,8 @@ interface UserProfile extends DocumentData {
   email: string;
   photoURL?: string;
   bio?: string;
+  followersCount: number;
+  followingCount: number;
 }
 
 interface Post extends DocumentData {
@@ -152,6 +157,9 @@ export function ProfilePageClient() {
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
   const { toast } = useToast();
 
+  const { isFollowing, isTogglingFollow, toggleFollow } = useFollow(profileUser?.uid);
+
+
   useEffect(() => {
     if (!username) return;
 
@@ -164,76 +172,81 @@ export function ProfilePageClient() {
         limit(1)
       );
       try {
-        const userSnapshot = await getDocs(q);
+        
+        const unsubscribeUser = onSnapshot(q, (userSnapshot) => {
+            if (userSnapshot.empty) {
+                setUserFound(false);
+                setLoading(false);
+                return;
+            }
 
-        if (userSnapshot.empty) {
-          setUserFound(false);
-          setLoading(false);
-          return;
-        }
+            const userDoc = userSnapshot.docs[0];
+            const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
+            setProfileUser(userData);
 
-        const userDoc = userSnapshot.docs[0];
-        const userData = { ...userDoc.data(), uid: userDoc.id } as UserProfile;
-        setProfileUser(userData);
+            const isOwnProfile = currentUser?.uid === userData.uid;
 
-        const isOwnProfile = currentUser?.uid === userData.uid;
+            // Fetch Wishlists
+            const wishlistsQuery = isOwnProfile
+            ? query(
+                collection(db, 'wishlists'),
+                where('authorId', '==', userData.uid)
+                )
+            : query(
+                collection(db, 'wishlists'),
+                where('authorId', '==', userData.uid),
+                where('privacy', 'in', ['public', 'friends']) // Show public and friends lists
+                );
 
-        // Fetch Wishlists
-        const wishlistsQuery = isOwnProfile
-          ? query(
-              collection(db, 'wishlists'),
-              where('authorId', '==', userData.uid)
-            )
-          : query(
-              collection(db, 'wishlists'),
-              where('authorId', '==', userData.uid),
-              where('privacy', 'in', ['public', 'friends']) // Show public and friends lists
+            const unsubscribeWishlists = onSnapshot(
+            wishlistsQuery,
+            async (snapshot) => {
+                const listsPromises = snapshot.docs.map(async (doc) => {
+                const listData = { id: doc.id, ...doc.data() } as Wishlist;
+                const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
+                const itemsSnapshot = await getCountFromServer(itemsColRef);
+                listData.itemCount = itemsSnapshot.data().count;
+                return listData;
+                });
+                const lists = await Promise.all(listsPromises);
+                setWishlists(
+                lists.sort(
+                    (a, b) =>
+                    (b.createdAt?.toMillis() ?? 0) -
+                    (a.createdAt?.toMillis() ?? 0)
+                )
+                );
+            }
             );
 
-        const unsubscribeWishlists = onSnapshot(
-          wishlistsQuery,
-          async (snapshot) => {
-            const listsPromises = snapshot.docs.map(async (doc) => {
-              const listData = { id: doc.id, ...doc.data() } as Wishlist;
-              const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-              const itemsSnapshot = await getCountFromServer(itemsColRef);
-              listData.itemCount = itemsSnapshot.data().count;
-              return listData;
-            });
-            const lists = await Promise.all(listsPromises);
-            setWishlists(
-              lists.sort(
-                (a, b) =>
-                  (b.createdAt?.toMillis() ?? 0) -
-                  (a.createdAt?.toMillis() ?? 0)
-              )
+            // Fetch Posts
+            const postsQuery = query(
+            collection(db, 'posts'),
+            where('authorId', '==', userData.uid),
+            orderBy('createdAt', 'desc')
             );
-          }
-        );
 
-        // Fetch Posts
-        const postsQuery = query(
-          collection(db, 'posts'),
-          where('authorId', '==', userData.uid),
-          orderBy('createdAt', 'desc')
-        );
-
-        const unsubscribePosts = onSnapshot(
-          postsQuery,
-          (snapshot) => {
-            const postsData = snapshot.docs.map(
-              (doc) => ({ id: doc.id, ...doc.data() } as Post)
+            const unsubscribePosts = onSnapshot(
+            postsQuery,
+            (snapshot) => {
+                const postsData = snapshot.docs.map(
+                (doc) => ({ id: doc.id, ...doc.data() } as Post)
+                );
+                setPosts(postsData);
+            }
             );
-            setPosts(postsData);
-          }
-        );
+            
+            setLoading(false);
 
-        setLoading(false);
+             return () => {
+                unsubscribeWishlists();
+                unsubscribePosts();
+            };
 
-        return () => {
-          unsubscribeWishlists();
-          unsubscribePosts();
-        };
+        });
+        
+        return () => unsubscribeUser();
+
       } catch (error) {
         console.error('Error fetching profile:', error);
         setUserFound(false);
@@ -298,6 +311,16 @@ export function ProfilePageClient() {
     profileUser.photoURL ||
     `https://picsum.photos/seed/${profileUser.uid}/200/200`;
 
+  const FollowButton = () => {
+    if (isTogglingFollow) {
+      return <Button disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait</Button>
+    }
+    if (isFollowing) {
+      return <Button variant="outline" onClick={toggleFollow}><UserCheck className="mr-2 h-4 w-4" /> Following</Button>
+    }
+    return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>
+  }
+
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
@@ -331,6 +354,10 @@ export function ProfilePageClient() {
               <p className="text-sm text-muted-foreground">
                 @{profileUser.username}
               </p>
+               <div className="mt-2 flex justify-center sm:justify-start gap-4 text-sm">
+                    <p><span className="font-bold">{profileUser.followersCount || 0}</span> Followers</p>
+                    <p><span className="font-bold">{profileUser.followingCount || 0}</span> Following</p>
+                </div>
               <p className="mt-2 max-w-2xl text-sm">
                 {profileUser.bio ?? "This user hasn't set a bio yet."}
               </p>
@@ -342,10 +369,7 @@ export function ProfilePageClient() {
                   Edit Profile
                 </Button>
               ) : (
-                <Button>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Follow
-                </Button>
+                <FollowButton />
               )}
             </div>
           </div>
@@ -578,3 +602,5 @@ export function ProfilePageClient() {
     </div>
   );
 }
+
+    

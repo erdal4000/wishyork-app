@@ -222,6 +222,10 @@ export function IndividualSignupForm() {
           username_lowercase: formattedUsername,
           createdAt: serverTimestamp(),
           photoURL: photoURL,
+          followers: [],
+          following: [],
+          followersCount: 0,
+          followingCount: 0,
       });
 
       const usernameDocRef = doc(db, 'usernames', formattedUsername);
@@ -490,5 +494,7 @@ export function IndividualSignupForm() {
     </Form>
   );
 }
+
+    
 
     
