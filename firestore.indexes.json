@@ -2,6 +2,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "username_lowercase",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "wishlists",
       "queryScope": "COLLECTION",
       "fields": [
