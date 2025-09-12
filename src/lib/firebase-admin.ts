@@ -13,16 +13,18 @@ const FIREBASE_ADMIN_APP_NAME = 'firebase-admin-app-singleton';
 function getServiceAccount(): ServiceAccount {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  // This replace call is the key fix. Vercel and other hosting platforms
+  // often escape newline characters in multi-line environment variables.
+  // This line ensures that the private key is correctly formatted with real
+  // newlines before being passed to the Firebase Admin SDK.
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin server credentials are not set. Please add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY to your environment variables on your hosting platform (e.g., Vercel).'
+      'Firebase Admin server credentials are not fully set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are correctly set in your hosting environment (e.g., Vercel).'
     );
   }
   
-  // By taking the private key directly from the env (when correctly formatted with \n in quotes),
-  // we avoid parsing issues.
   return {
     projectId,
     clientEmail,
@@ -45,7 +47,7 @@ export async function getAdminApp(): Promise<App> {
 
     return newApp;
   } catch (error) {
-    console.error("Failed to initialize Firebase Admin SDK.", error);
+    console.error("Failed to initialize Firebase Admin SDK. Check your server-side environment variables.", error);
     // Re-throw the original error to see the exact cause in the logs.
     throw error;
   }
