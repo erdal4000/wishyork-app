@@ -21,9 +21,15 @@ function getServiceAccount(): ServiceAccount {
   }
 
   try {
-    // The JSON string from the .env file should already have escaped newlines (\\n).
-    // JSON.parse will correctly interpret this into a string with actual newlines (\n).
     const serviceAccount = JSON.parse(serviceAccountJson);
+
+    // *** CRITICAL FIX ***
+    // The private key in the environment variable has its newlines escaped as "\\n".
+    // The `cert` function expects actual newline characters "\n".
+    // We must replace them before passing the object to the SDK.
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
 
     return serviceAccount;
   } catch (error: any) {
