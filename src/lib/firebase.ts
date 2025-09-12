@@ -4,7 +4,9 @@
 import { initializeApp, getApp, getApps, FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
+// İstemci tarafı Firebase yapılandırma anahtarlarınız
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -14,15 +16,23 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase for SSR and SSG, prevent re-initialization on client
-let app: FirebaseApp;
-if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-} else {
-    app = getApp();
-}
+// Bu fonksiyon, uygulamanın sadece bir kez başlatılmasını garanti eder.
+const getClientFirebaseApp = (): FirebaseApp => {
+  if (getApps().length === 0) {
+    // Henüz bir uygulama başlatılmamışsa, yenisini başlat.
+    return initializeApp(firebaseConfig);
+  } else {
+    // Zaten bir uygulama varsa, mevcut olanı geri döndür.
+    return getApp();
+  }
+};
 
+// Fonksiyonu çağırarak app örneğini alalım
+const app = getClientFirebaseApp();
+
+// İhtiyacımız olan Firebase servislerini export edelim
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { app, auth, db };
+export { app, auth, db, storage };
