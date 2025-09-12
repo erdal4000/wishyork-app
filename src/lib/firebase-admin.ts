@@ -6,30 +6,30 @@ import * as admin from 'firebase-admin';
 const FIREBASE_ADMIN_APP_NAME = 'firebase-admin-app-singleton';
 
 /**
- * Constructs a service account object from individual environment variables.
- * This is a more robust method than parsing a single JSON string, as it avoids
- * issues with escaped characters in private keys when stored in environment variables.
+ * Parses the service account key from a single environment variable.
+ * This method is robust against formatting issues with private keys.
  */
 function getServiceAccount(): ServiceAccount {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
-  if (!projectId || !clientEmail || !privateKey) {
+  if (!serviceAccountJson) {
     throw new Error(
-      'Missing Firebase Admin SDK credentials. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are set in your environment variables.'
+      'Firebase Admin SDK credentials are not set. Please ensure FIREBASE_SERVICE_ACCOUNT_KEY is set in your environment variables as a JSON string.'
     );
   }
 
-  // Vercel and other platforms might not handle newlines in the private key correctly.
-  // This replaces the escaped newlines ('\\n') with actual newline characters ('\n').
-  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+  try {
+    const serviceAccount = JSON.parse(serviceAccountJson);
 
-  return {
-    projectId,
-    clientEmail,
-    privateKey: formattedPrivateKey,
-  };
+    // This is the crucial fix: ensure the private_key has the correct newline characters.
+    // Vercel and other platforms often escape newlines, which breaks the PEM format.
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+    return serviceAccount;
+  } catch (error: any) {
+    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:', error.message);
+    throw new Error('The FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not a valid JSON string.');
+  }
 }
 
 export async function getAdminApp(): Promise<App> {
