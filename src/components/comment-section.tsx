@@ -24,7 +24,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, MessageSquareReply, Heart } from 'lucide-react';
+import { Loader2, Trash2, MessageSquareReply, Heart, CornerDownRight } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -111,7 +111,8 @@ function CommentForm({
           newCommentData.parentAuthorUsername = parentComment.authorUsername;
         }
   
-        batch.set(doc(commentsColRef), newCommentData);
+        const newCommentRef = doc(commentsColRef);
+        batch.set(newCommentRef, newCommentData);
   
         if (parentComment) {
           const parentCommentRef = doc(commentsColRef, parentComment.id);
@@ -164,13 +165,22 @@ function CommentForm({
     );
 }
 
-function CommentWithReplies({ comment, docId, collectionType }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists' }) {
+function CommentWithReplies({ comment, docId, collectionType, activeReplyId, setActiveReplyId }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists', activeReplyId: string | null, setActiveReplyId: (id: string | null) => void }) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const [showReplyForm, setShowReplyForm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showReplies, setShowReplies] = useState(false);
     const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
+
+    const isReplyFormOpen = activeReplyId === comment.id;
+
+    const handleToggleReplyForm = () => {
+        if(isReplyFormOpen) {
+            setActiveReplyId(null);
+        } else {
+            setActiveReplyId(comment.id);
+        }
+    }
   
     const handleDeleteComment = async (commentToDelete: Comment) => {
       if (!user || isDeleting) return;
@@ -211,23 +221,28 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
     };
   
     return (
-      <div className="flex items-start gap-2 sm:gap-4">
-        <Avatar className="h-9 w-9">
-          <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-          <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-        </Avatar>
+      <div className="relative flex items-start gap-2 sm:gap-4">
+        {comment.parentId && <div className="absolute left-4 top-0 h-10 w-px bg-border -translate-x-1/2"></div>}
+        <div className="flex-shrink-0">
+            <Avatar className="h-9 w-9">
+              <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+              <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+            </Avatar>
+        </div>
         <div className="flex-1">
           <div className="group space-y-2">
             <div className="rounded-lg bg-muted p-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">
-                  <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
-                    {comment.authorName}
-                  </Link>
-                   <span className='text-xs font-normal text-muted-foreground ml-2'>
-                    · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                  </span>
-                </p>
+                <div className="flex items-center gap-2 text-sm">
+                  <p className="font-semibold">
+                    <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
+                      {comment.authorName}
+                    </Link>
+                  </p>
+                  <p className='text-xs text-muted-foreground'>
+                     · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                  </p>
+                </div>
                 {user?.uid === comment.authorId && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -262,29 +277,37 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
                 <Heart className={`mr-1 h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
                 {comment.likes > 0 ? comment.likes : ''}
               </Button>
-              <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplyForm(!showReplyForm)}>
+              <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={handleToggleReplyForm}>
                 <MessageSquareReply className="mr-1 h-3 w-3" />
                 Reply
               </Button>
             </div>
           </div>
   
-          {showReplyForm && (
-            <div className="pt-2">
-              <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setShowReplyForm(false)} />
+          {isReplyFormOpen && (
+            <div className="pt-4">
+              <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
             </div>
           )}
   
-          {comment.replyCount > 0 && (
-             <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(!showReplies)}>
-                 {showReplies ? 'Hide replies' : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`}
+          {comment.replyCount > 0 && !showReplies && (
+             <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(true)}>
+                 View {comment.replyCount} {comment.replyCount === 1 ? 'reply' : 'replies'}
             </Button>
+          )}
+
+          {showReplies && (
+            <div className='pt-4'>
+                <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(false)}>
+                    Hide replies
+                </Button>
+            </div>
           )}
 
           {showReplies && comment.replies && comment.replies.length > 0 && (
              <div className="pt-4 space-y-4">
                 {comment.replies.map(reply => (
-                    <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} />
+                    <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
                 ))}
              </div>
           )}
@@ -297,6 +320,7 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
 export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
+  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -315,19 +339,16 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
       allComments.forEach(comment => {
         comment.replies = [];
         commentMap.set(comment.id, comment);
-        if (!comment.parentId) {
-          topLevelComments.push(comment);
-        }
       });
-
+      
       allComments.forEach(comment => {
         if (comment.parentId) {
           const parent = commentMap.get(comment.parentId);
           if (parent) {
             parent.replies?.push(comment);
-          } else {
-             console.warn("Orphaned reply found:", comment.id);
           }
+        } else {
+          topLevelComments.push(comment);
         }
       });
 
@@ -354,7 +375,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : comments.length > 0 ? (
           comments.map((comment) => (
-            <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} />
+            <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
           ))
         ) : (
           <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to comment!</p>
