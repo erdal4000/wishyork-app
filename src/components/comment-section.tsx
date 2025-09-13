@@ -51,6 +51,7 @@ interface Comment extends DocumentData {
   text: string;
   createdAt: Timestamp;
   parentId: string | null;
+  parentAuthorUsername?: string;
   replyCount: number;
   replies?: Comment[];
 }
@@ -63,12 +64,12 @@ interface CommentSectionProps {
 function CommentForm({
     docId,
     collectionType,
-    parentId = null,
+    parentComment,
     onCommentPosted,
   }: {
     docId: string;
     collectionType: 'posts' | 'wishlists';
-    parentId?: string | null;
+    parentComment?: Comment | null;
     onCommentPosted: () => void;
   }) {
     const { user } = useAuth();
@@ -92,26 +93,28 @@ function CommentForm({
   
         const batch = writeBatch(db);
   
-        const newCommentData = {
+        const newCommentData: any = {
           text: commentText,
           authorId: user.uid,
           authorName: userData?.name || user.displayName,
           authorUsername: userData?.username || 'user',
           authorAvatar: userData?.photoURL || user.photoURL,
           createdAt: serverTimestamp(),
-          parentId: parentId,
+          parentId: parentComment?.id || null,
           replyCount: 0,
         };
+
+        if (parentComment) {
+          newCommentData.parentAuthorUsername = parentComment.authorUsername;
+        }
   
         batch.set(doc(commentsColRef), newCommentData);
   
-        if (parentId) {
-          // It's a reply, increment replyCount on the parent comment
-          const parentCommentRef = doc(commentsColRef, parentId);
+        if (parentComment) {
+          const parentCommentRef = doc(commentsColRef, parentComment.id);
           batch.update(parentCommentRef, { replyCount: increment(1) });
         }
   
-        // Always increment the main post's comment count for both comments and replies
         batch.update(parentDocRef, { commentCount: increment(1) });
   
         await batch.commit();
@@ -135,22 +138,22 @@ function CommentForm({
         </Avatar>
         <div className="flex-1">
           <Textarea
-            placeholder={parentId ? "Write a reply..." : "Add a comment..."}
+            placeholder={parentComment ? `Replying to @${parentComment.authorUsername}...` : "Add a comment..."}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            rows={parentId ? 2 : 2}
+            rows={2}
             className="bg-secondary/50"
             disabled={isSubmitting}
           />
           <div className="mt-2 flex justify-end gap-2">
-            {parentId && (
+            {parentComment && (
               <Button type="button" variant="ghost" onClick={onCommentPosted} disabled={isSubmitting}>
                 Cancel
               </Button>
             )}
-            <Button type="submit" size={parentId ? "sm" : "default"} disabled={isSubmitting || !commentText.trim()}>
+            <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim()}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {parentId ? "Reply" : "Post"}
+              {parentComment ? "Reply" : "Post"}
             </Button>
           </div>
         </div>
@@ -163,6 +166,7 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
     const { toast } = useToast();
     const [showReplyForm, setShowReplyForm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [showReplies, setShowReplies] = useState(false);
   
     const handleDeleteComment = async (commentToDelete: Comment) => {
       if (!user || isDeleting) return;
@@ -173,28 +177,23 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
         const parentDocRef = doc(db, collectionType, docId);
         const commentsColRef = collection(parentDocRef, 'comments');
   
-        // 1. Find all replies to be deleted (even if not loaded)
         const repliesQuery = query(commentsColRef, where("parentId", "==", commentToDelete.id));
         const repliesSnapshot = await getDocs(repliesQuery);
-        let deletedCount = 1; // Start with the main comment itself
+        let deletedCount = 1;
 
-        // 2. Delete the main comment
         const mainCommentRef = doc(commentsColRef, commentToDelete.id);
         batch.delete(mainCommentRef);
   
-        // 3. Delete all its replies
         repliesSnapshot.forEach(replyDoc => {
           batch.delete(replyDoc.ref);
           deletedCount++;
         });
 
-        // 4. If it's a reply, decrement the replyCount of its parent comment
         if (commentToDelete.parentId) {
           const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
           batch.update(parentCommentRef, { replyCount: increment(-1) });
         }
   
-        // 5. Decrement the main post's total comment count by the total number of deleted items
         batch.update(parentDocRef, { commentCount: increment(-deletedCount) });
   
         await batch.commit();
@@ -221,6 +220,9 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
                   <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
                     {comment.authorName}
                   </Link>
+                   <span className='text-xs font-normal text-muted-foreground ml-2'>
+                    · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                  </span>
                 </p>
                 {user?.uid === comment.authorId && (
                   <AlertDialog>
@@ -242,48 +244,42 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
                   </AlertDialog>
                 )}
               </div>
+
+               {comment.parentAuthorUsername && (
+                  <p className="text-xs text-muted-foreground">
+                    Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
+                  </p>
+                )}
+
               <p className="text-sm">{comment.text}</p>
             </div>
             <div className="flex items-center gap-2 pl-3">
-              <p className="text-xs text-muted-foreground">
-                {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-              </p>
-              {!comment.parentId && ( // Only show Reply button for top-level comments
-                <>
-                  <span className="text-xs text-muted-foreground">&middot;</span>
-                  <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplyForm(!showReplyForm)}>
-                    <MessageSquareReply className="mr-1 h-3 w-3" />
-                    Reply
-                  </Button>
-                </>
-              )}
+              <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplyForm(!showReplyForm)}>
+                <MessageSquareReply className="mr-1 h-3 w-3" />
+                Reply
+              </Button>
             </div>
           </div>
   
-          {/* Reply Form */}
           {showReplyForm && (
             <div className="pt-2">
-              <CommentForm docId={docId} collectionType={collectionType} parentId={comment.id} onCommentPosted={() => setShowReplyForm(false)} />
+              <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setShowReplyForm(false)} />
             </div>
           )}
   
-          {/* Replies Section */}
-          <Collapsible open={comment.replies && comment.replies.length > 0}>
-            <CollapsibleContent>
-                <div className="pt-4 pl-4 border-l-2 ml-4 space-y-4">
-                    {comment.replies?.map(reply => (
-                        <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} />
-                    ))}
-                </div>
-            </CollapsibleContent>
-             {!comment.parentId && comment.replyCount > 0 && (
-                <CollapsibleTrigger asChild>
-                    <Button variant="link" size="sm" className="pl-3 pt-1 text-xs">
-                        {comment.replyCount} {comment.replyCount === 1 ? "reply" : "replies"}
-                    </Button>
-                </CollapsibleTrigger>
-             )}
-          </Collapsible>
+          {comment.replyCount > 0 && (
+             <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(!showReplies)}>
+                 {showReplies ? 'Hide replies' : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`}
+            </Button>
+          )}
+
+          {showReplies && comment.replies && comment.replies.length > 0 && (
+             <div className="pt-4 space-y-4">
+                {comment.replies.map(reply => (
+                    <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} />
+                ))}
+             </div>
+          )}
 
         </div>
       </div>
@@ -308,7 +304,6 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
       const commentMap = new Map<string, Comment>();
       const topLevelComments: Comment[] = [];
 
-      // First pass: create map and identify top-level comments
       allComments.forEach(comment => {
         comment.replies = [];
         commentMap.set(comment.id, comment);
@@ -317,16 +312,12 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
         }
       });
 
-      // Second pass: nest replies under their parents
       allComments.forEach(comment => {
         if (comment.parentId) {
           const parent = commentMap.get(comment.parentId);
           if (parent) {
             parent.replies?.push(comment);
           } else {
-             // This case can happen if a parent comment is deleted but replies are not.
-             // We can choose to show them as orphaned or hide them.
-             // For now, we'll just log it.
              console.warn("Orphaned reply found:", comment.id);
           }
         }
@@ -345,11 +336,9 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   
 
   return (
-    <div className="space-y-4 border-t px-4 py-4">
-      {/* Post a comment form */}
+    <div className="space-y-4">
       <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => {}} />
 
-      {/* Comments List */}
       <div className="space-y-6 pt-4">
         {loadingComments ? (
           <div className="flex justify-center p-4">
