@@ -585,7 +585,7 @@ export default function WishlistDetailPage() {
       {/* Comments Section */}
        <div className="space-y-4">
          <h2 className="text-2xl font-bold">Comments ({wishlist.commentCount || 0})</h2>
-         <CommentSection docId={id} collectionType="wishlists" />
+         <CommentSection docId={id} collectionType="wishlists" docAuthorId={wishlist.authorId} />
        </div>
 
     </div>
