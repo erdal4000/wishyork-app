@@ -165,7 +165,7 @@ function CommentForm({
     );
 }
 
-function CommentWithReplies({ comment, docId, collectionType, activeReplyId, setActiveReplyId, isReply = false }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists', activeReplyId: string | null, setActiveReplyId: (id: string | null) => void, isReply?: boolean }) {
+function CommentWithReplies({ comment, docId, collectionType, activeReplyId, setActiveReplyId }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists', activeReplyId: string | null, setActiveReplyId: (id: string | null) => void }) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -222,7 +222,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
   
     return (
       <div className="relative flex items-start gap-2 sm:gap-4">
-        {isReply && <div className="absolute left-4 top-0 h-full w-px bg-border -translate-x-1/2"></div>}
+        {comment.parentId && <div className="absolute left-4 top-0 h-full w-px bg-border -translate-x-1/2"></div>}
         <div className="flex-shrink-0 z-10 bg-background">
             <Avatar className="h-9 w-9">
               <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
@@ -305,9 +305,9 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
           )}
 
           {showReplies && comment.replies && comment.replies.length > 0 && (
-             <div className="pt-4 space-y-4">
+             <div className="pt-4 ml-4 sm:ml-6 pl-4 sm:pl-6 border-l space-y-6">
                 {comment.replies.map(reply => (
-                    <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} isReply={true}/>
+                    <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
                 ))}
              </div>
           )}
@@ -375,16 +375,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : comments.length > 0 ? (
           comments.map((comment) => (
-            <div key={comment.id} className="relative">
-                <CommentWithReplies comment={comment} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} isReply={false} />
-                {comment.replies && comment.replies.length > 0 && (
-                    <div className="ml-4 sm:ml-6 pl-4 sm:pl-6 border-l space-y-4 mt-4">
-                        {comment.replies.map(reply => (
-                           <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} isReply={true} />
-                        ))}
-                    </div>
-                )}
-            </div>
+            <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
           ))
         ) : (
           <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to comment!</p>
