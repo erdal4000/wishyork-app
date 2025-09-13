@@ -318,10 +318,10 @@ export default function DashboardLayout({
 
           <main className="flex-1 py-8">
             <div className="grid grid-cols-12 gap-8">
-              <div className="col-span-12 lg:col-span-8 xl:col-span-9">
+              <div className="col-span-12 lg:col-span-8">
                 {children}
               </div>
-              <aside className="col-span-12 lg:col-span-4 xl:col-span-3">
+              <aside className="col-span-12 lg:col-span-4">
                 <div className="sticky top-24 space-y-6">
                   <div className="rounded-xl border bg-card p-4 shadow">
                     <h3 className="font-bold">Trending Wishlists</h3>
