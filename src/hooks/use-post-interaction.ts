@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
 export const usePostInteraction = (postId: string) => {
@@ -12,18 +12,16 @@ export const usePostInteraction = (postId: string) => {
   const { toast } = useToast();
   const [hasLiked, setHasLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
 
   useEffect(() => {
-    if (!postId) return;
+    if (!postId || !user) return;
 
     const postRef = doc(db, 'posts', postId);
     const unsubscribe = onSnapshot(postRef, (docSnap) => {
       if (docSnap.exists()) {
         const postData = docSnap.data();
         const likedBy = postData.likedBy || [];
-        setHasLiked(user ? likedBy.includes(user.uid) : false);
-        setLikeCount(likedBy.length);
+        setHasLiked(likedBy.includes(user.uid));
       }
     });
 
@@ -50,13 +48,13 @@ export const usePostInteraction = (postId: string) => {
         // Unlike
         await updateDoc(postRef, {
           likedBy: arrayRemove(user.uid),
-          likes: likeCount - 1,
+          likes: increment(-1),
         });
       } else {
         // Like
         await updateDoc(postRef, {
           likedBy: arrayUnion(user.uid),
-          likes: likeCount + 1,
+          likes: increment(1),
         });
       }
     } catch (error) {
@@ -73,5 +71,3 @@ export const usePostInteraction = (postId: string) => {
 
   return { hasLiked, isLiking, toggleLike };
 };
-
-    

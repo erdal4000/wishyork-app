@@ -22,6 +22,8 @@ import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { CommentSection } from '@/components/comment-section';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 // --- Data Types ---
 
@@ -38,6 +40,7 @@ interface Post extends DocumentData {
   createdAt: Timestamp;
   likes: number;
   likedBy: string[];
+  commentCount: number;
 }
 
 interface Wishlist extends DocumentData {
@@ -54,6 +57,8 @@ interface Wishlist extends DocumentData {
   progress: number;
   itemCount: number;
   createdAt: Timestamp;
+  likes: number;
+  commentCount: number;
 }
 
 type FeedItem = Post | Wishlist;
@@ -64,6 +69,7 @@ type FeedItem = Post | Wishlist;
 function PostCard({ item }: { item: Post }) {
   const { user } = useAuth();
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
+  const [showComments, setShowComments] = useState(false);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
@@ -73,60 +79,68 @@ function PostCard({ item }: { item: Post }) {
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center gap-4 p-4">
-        <Avatar>
-          <AvatarImage src={authorPhoto} alt={item.authorName} />
-          <AvatarFallback>
-            {getInitials(item.authorName)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <p className="font-bold">{item.authorName}</p>
-          <p className="text-sm text-muted-foreground">
-            <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link>{' '}
-            · {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-          </p>
-        </div>
-        <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-5 w-5" />
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4 px-4 pb-2">
-        <p className="whitespace-pre-wrap">{item.content}</p>
-        {item.imageUrl && (
-          <div className="relative aspect-video w-full overflow-hidden rounded-xl">
-            <Image
-              src={item.imageUrl}
-              alt={`Post by ${item.authorName}`}
-              fill
-              className="object-cover"
-              data-ai-hint={item.aiHint ?? ''}
-              sizes="(max-width: 768px) 100vw, 50vw"
-            />
+    <Collapsible asChild>
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-4 p-4">
+          <Avatar>
+            <AvatarImage src={authorPhoto} alt={item.authorName} />
+            <AvatarFallback>
+              {getInitials(item.authorName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="font-bold">{item.authorName}</p>
+            <p className="text-sm text-muted-foreground">
+              <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link>{' '}
+              · {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+            </p>
           </div>
-        )}
-      </CardContent>
-      <CardFooter className="p-2">
-        <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
-          <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-          <span className="text-sm">{item.likes ?? 0}</span>
-        </Button>
-        <Button variant="ghost" className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
-          <span className="text-sm">0</span>
-        </Button>
-        <Button variant="ghost" className="flex items-center gap-2">
-          <Share2 className="h-5 w-5" />
-          <span className="text-sm">Share</span>
-        </Button>
-      </CardFooter>
-    </Card>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-5 w-5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4 px-4 pb-2">
+          <p className="whitespace-pre-wrap">{item.content}</p>
+          {item.imageUrl && (
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl">
+              <Image
+                src={item.imageUrl}
+                alt={`Post by ${item.authorName}`}
+                fill
+                className="object-cover"
+                data-ai-hint={item.aiHint ?? ''}
+                sizes="(max-width: 768px) 100vw, 50vw"
+              />
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="p-2">
+          <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
+            <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+            <span className="text-sm">{item.likes ?? 0}</span>
+          </Button>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="flex items-center gap-2" onClick={() => setShowComments(prev => !prev)}>
+              <MessageCircle className="h-5 w-5" />
+              <span className="text-sm">{item.commentCount ?? 0}</span>
+            </Button>
+          </CollapsibleTrigger>
+          <Button variant="ghost" className="flex items-center gap-2">
+            <Share2 className="h-5 w-5" />
+            <span className="text-sm">Share</span>
+          </Button>
+        </CardFooter>
+        <CollapsibleContent>
+            {showComments && <CommentSection docId={item.id} collectionType="posts" />}
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
 
 function WishlistCard({ item }: { item: Wishlist }) {
+  const [showComments, setShowComments] = useState(false);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
@@ -136,68 +150,75 @@ function WishlistCard({ item }: { item: Wishlist }) {
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
     return (
-        <Card className="overflow-hidden">
-             <CardHeader className="flex flex-row items-center gap-4 p-4">
-                <Avatar>
-                    <AvatarImage src={authorPhoto} alt={item.authorName} />
-                    <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                    <p>
-                        <Link href={`/dashboard/profile/${item.authorUsername}`} className="font-bold hover:underline">{item.authorName}</Link>
-                        <span className="text-muted-foreground"> created a new wishlist</span>
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                    </p>
-                </div>
-                <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-5 w-5" />
-                </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-                <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
-                    <div className="relative h-48 w-full">
-                        <Image
-                            src={item.imageUrl}
-                            alt={item.title}
-                            data-ai-hint={item.aiHint}
-                            fill
-                            className="object-cover"
-                            sizes="(max-width: 768px) 100vw, 50vw"
-                        />
+        <Collapsible asChild>
+            <Card className="overflow-hidden">
+                <CardHeader className="flex flex-row items-center gap-4 p-4">
+                    <Avatar>
+                        <AvatarImage src={authorPhoto} alt={item.authorName} />
+                        <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                        <p>
+                            <Link href={`/dashboard/profile/${item.authorUsername}`} className="font-bold hover:underline">{item.authorName}</Link>
+                            <span className="text-muted-foreground"> created a new wishlist</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                        </p>
                     </div>
-                    <div className="p-4">
-                        <Badge variant="secondary" className="mb-2">{item.category}</Badge>
-                        <h3 className="font-bold text-lg">{item.title}</h3>
-                        <div className="mt-2 flex items-center text-sm text-muted-foreground">
-                            <Package className="mr-2 h-4 w-4" />
-                            <span>{item.itemCount || 0} items</span>
+                    <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
+                        <div className="relative h-48 w-full">
+                            <Image
+                                src={item.imageUrl}
+                                alt={item.title}
+                                data-ai-hint={item.aiHint}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 768px) 100vw, 50vw"
+                            />
                         </div>
-                        <div className="mt-3">
-                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                <span>{item.progress || 0}% complete</span>
+                        <div className="p-4">
+                            <Badge variant="secondary" className="mb-2">{item.category}</Badge>
+                            <h3 className="font-bold text-lg">{item.title}</h3>
+                            <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                                <Package className="mr-2 h-4 w-4" />
+                                <span>{item.itemCount || 0} items</span>
                             </div>
-                            <Progress value={item.progress || 0} className="h-2" />
+                            <div className="mt-3">
+                                <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                                    <span>{item.progress || 0}% complete</span>
+                                </div>
+                                <Progress value={item.progress || 0} className="h-2" />
+                            </div>
                         </div>
-                    </div>
-                </Link>
-            </CardContent>
-            <CardFooter className="p-2">
-                 <Button variant="ghost" className="flex items-center gap-2">
-                    <Heart className="h-5 w-5" />
-                    <span className="text-sm">{item.likes ?? 0}</span>
-                </Button>
-                <Button variant="ghost" className="flex items-center gap-2">
-                    <MessageCircle className="h-5 w-5" />
-                    <span className="text-sm">{item.comments ?? 0}</span>
-                </Button>
-                <Button variant="ghost" className="flex items-center gap-2">
-                    <Repeat2 className="h-5 w-5" />
-                    <span className="text-sm">Repost</span>
-                </Button>
-            </CardFooter>
-        </Card>
+                    </Link>
+                </CardContent>
+                <CardFooter className="p-2">
+                    <Button variant="ghost" className="flex items-center gap-2">
+                        <Heart className="h-5 w-5" />
+                        <span className="text-sm">{item.likes ?? 0}</span>
+                    </Button>
+                    <CollapsibleTrigger asChild>
+                        <Button variant="ghost" className="flex items-center gap-2" onClick={() => setShowComments(prev => !prev)}>
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="text-sm">{item.commentCount ?? 0}</span>
+                        </Button>
+                    </CollapsibleTrigger>
+                    <Button variant="ghost" className="flex items-center gap-2">
+                        <Repeat2 className="h-5 w-5" />
+                        <span className="text-sm">Repost</span>
+                    </Button>
+                </CardFooter>
+                 <CollapsibleContent>
+                    {showComments && <CommentSection docId={item.id} collectionType="wishlists" />}
+                </CollapsibleContent>
+            </Card>
+        </Collapsible>
     )
 }
 
@@ -295,7 +316,7 @@ export default function DashboardPage() {
         aiHint: null,
         likes: 0,
         likedBy: [],
-        comments: 0,
+        commentCount: 0,
       });
       setPostContent('');
     } catch (error) {
@@ -362,10 +383,10 @@ export default function DashboardPage() {
       ) : (
         feedItems.map((item) => {
             if (item.type === 'post') {
-                return <PostCard key={`post-${item.id}`} item={item} />;
+                return <PostCard key={`post-${item.id}`} item={item as Post} />;
             }
             if (item.type === 'wishlist') {
-                return <WishlistCard key={`wishlist-${item.id}`} item={item} />;
+                return <WishlistCard key={`wishlist-${item.id}`} item={item as Wishlist} />;
             }
             return null;
         })

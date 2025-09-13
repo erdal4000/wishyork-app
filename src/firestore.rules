@@ -28,23 +28,41 @@ service cloud.firestore {
 
     // Post'lar koleksiyonu
     match /posts/{postId} {
-      // DÜZELTME: "resource.data" yerine "request.resource.data" kullanılıyor.
       allow create: if request.auth.uid == request.resource.data.authorId;
-
       allow delete: if request.auth.uid == resource.data.authorId;
 
+      // Kullanıcıların beğeni ve yorum sayısını güncellemesine izin ver.
       allow update: if request.auth != null &&
                        request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['likedBy', 'likes']);
+                         .hasOnly(['likedBy', 'likes', 'commentCount']);
+      
+      // Yorumlar alt koleksiyonu için kurallar
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth.uid == request.resource.data.authorId;
+        allow delete: if request.auth.uid == resource.data.authorId;
+      }
     }
 
     // Wishlist'ler koleksiyonu ve içindeki item'lar
     match /wishlists/{wishlistId} {
-      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
+      allow create, delete: if request.auth.uid == request.resource.data.authorId;
 
+      // Wishlist sahibi veya admin güncelleyebilir, diğerleri sadece sayaçları güncelleyebilir.
+      allow update: if request.auth.uid == resource.data.authorId ||
+                       (request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['likes', 'saves', 'commentCount']));
+      
       match /items/{itemId} {
         allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
         allow update: if request.auth != null;
+      }
+
+      // Yorumlar alt koleksiyonu için kurallar
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth.uid == request.resource.data.authorId;
+        allow delete: if request.auth.uid == resource.data.authorId;
       }
     }
   }
