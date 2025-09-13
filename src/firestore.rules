@@ -1,0 +1,62 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Kullanıcılar koleksiyonu kuralları
+    match /users/{userId} {
+      // Oturum açmış kullanıcılar diğer kullanıcıların profillerini okuyabilir.
+      allow read: if request.auth != null;
+
+      // Kullanıcılar sadece kendi belgelerini güncelleyebilir.
+      // Takip etme/bırakma işlevi için özel bir kural zaten use-follow kancasında
+      // sunucu tarafı mantıkla ele alınabilir, ancak burada temel bir sahiplik kontrolü sağlıyoruz.
+      // Takipçi güncelleme mantığı için daha spesifik kurallar gerekebilir.
+      allow update: if request.auth.uid == userId;
+
+      // Kullanıcılar sadece kendi belgelerini oluşturabilir.
+      allow create: if request.auth.uid == userId;
+    }
+
+    // Kullanıcı adlarının benzersizliğini sağlamak için kullanılan koleksiyon.
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if request.auth != null;
+    }
+
+    // Post'lar koleksiyonu
+    match /posts/{postId} {
+      // Oturum açmış her kullanıcı postları okuyabilir.
+      // Bu, "in" sorgusunun birden fazla yazarın postunu getirmesi için gereklidir.
+      allow read: if request.auth != null;
+
+      // Kullanıcılar sadece kendi post'larını oluşturabilir, silebilir.
+      allow create, delete: if request.auth.uid == resource.data.authorId;
+
+      // Kullanıcılar sadece post'un 'likedBy' ve 'likes' alanlarını güncelleyebilir.
+      allow update: if request.auth != null &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['likedBy', 'likes']);
+    }
+
+    // Wishlist'ler koleksiyonu
+    match /wishlists/{wishlistId} {
+      // Gizlilik kontrolleri istemci tarafında yapılsa da, temel okuma iznini
+      // oturum açmış kullanıcılara veriyoruz.
+      allow read: if request.auth != null;
+
+      // Kullanıcılar sadece kendi wishlist'lerini oluşturabilir, güncelleyebilir, silebilir.
+      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
+
+      // Wishlist içindeki item'lar
+      match /items/{itemId} {
+        allow read: if request.auth != null;
+        // Wishlist sahibi item ekleyebilir/silebilir.
+        allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+
+        // Oturum açmış herhangi bir kullanıcı bir item'ı güncelleyebilir (rezerve etme vb. için).
+        allow update: if request.auth != null;
+      }
+    }
+  }
+}
