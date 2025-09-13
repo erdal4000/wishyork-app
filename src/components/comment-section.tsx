@@ -566,7 +566,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
     setLoadingComments(true);
     const commentsRef = collection(db, collectionType, docId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'desc'));
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
@@ -583,42 +583,27 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   
   const commentThreads = useMemo(() => {
     const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, c]));
-    const rootComments: Comment[] = [];
     const threads: { main: Comment; replies: Comment[] }[] = [];
+    const processedIds = new Set<string>();
 
-    // First, find all root comments (those with no parentId)
     for (const comment of allComments) {
-        if (!comment.parentId) {
-            rootComments.push(comment);
+        if (!comment.parentId && !processedIds.has(comment.id)) {
+            const replies: Comment[] = [];
+            const findReplies = (parentId: string) => {
+                for (const reply of allComments) {
+                    if (reply.parentId === parentId) {
+                        replies.push(reply);
+                        processedIds.add(reply.id);
+                        findReplies(reply.id);
+                    }
+                }
+            };
+            findReplies(comment.id);
+            threads.push({ main: comment, replies });
+            processedIds.add(comment.id);
         }
     }
-
-    // Now, for each root comment, find all its replies recursively
-    const findReplies = (parentId: string): Comment[] => {
-        const replies: Comment[] = [];
-        for (const comment of allComments) {
-            if (comment.parentId === parentId) {
-                replies.push(comment);
-                // Find replies to this reply
-                replies.push(...findReplies(comment.id));
-            }
-        }
-        return replies;
-    };
-    
-    // Sort root comments by creation time
-    rootComments.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
-    // Build the final threads structure
-    for (const root of rootComments) {
-        const replies = findReplies(root.id);
-        // Replies should also be sorted by time
-        replies.sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
-        threads.push({ main: root, replies: replies });
-    }
-
-    return threads;
-
+    return threads.sort((a,b) => (a.main.createdAt?.toMillis() ?? 0) - (b.main.createdAt?.toMillis() ?? 0));
   }, [allComments]);
 
 
@@ -650,7 +635,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
                         onReplyClick={handleReplyClick}
                     />
                     {thread.replies.map(reply => (
-                        <div key={reply.id} className="">
+                        <div key={reply.id} className="pl-4 sm:pl-8">
                              <CommentItem
                                 comment={reply}
                                 docId={docId}
@@ -680,4 +665,5 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   );
 }
 // #endregion
+
 
