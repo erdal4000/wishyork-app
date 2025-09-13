@@ -67,17 +67,17 @@ interface CommentSectionProps {
 }
 
 interface CommentFormProps {
-  docId: string;
-  collectionType: 'posts' | 'wishlists';
   parentComment?: Comment | null;
   onCommentPosted: () => void;
+  docId: string;
+  collectionType: 'posts' | 'wishlists';
 }
 
 function CommentForm({
-  docId,
-  collectionType,
   parentComment,
   onCommentPosted,
+  docId,
+  collectionType,
 }: CommentFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -129,10 +129,10 @@ function CommentForm({
 
       await batch.commit();
       setCommentText('');
-      onCommentPosted();
+      onCommentPosted(); // This will close the form
     } catch (error) {
       console.error("Error adding comment/reply: ", error);
-      toast({ title: "Error", description: "Failed to post.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to post reply.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -171,7 +171,7 @@ function CommentForm({
             )}
             <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {parentComment ? "Reply" : "Reply"}
+              Reply
             </Button>
           </div>
         </div>
@@ -180,7 +180,20 @@ function CommentForm({
   );
 }
 
-function CommentWithReplies({ comment, docId, collectionType, activeReplyId, setActiveReplyId, docAuthorId }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists', activeReplyId: string | null, setActiveReplyId: (id: string | null) => void, docAuthorId: string }) {
+
+interface CommentWithRepliesProps {
+    comment: Comment;
+    docId: string;
+    collectionType: 'posts' | 'wishlists';
+    docAuthorId: string;
+    isTopLevel: boolean;
+    hasReplies: boolean;
+    activeReplyId: string | null;
+    setActiveReplyId: (id: string | null) => void;
+}
+
+
+function CommentWithReplies({ comment, docId, collectionType, docAuthorId, isTopLevel, hasReplies, activeReplyId, setActiveReplyId }: CommentWithRepliesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -229,97 +242,105 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
         setIsDeleting(false);
       }
     };
-  
-    const showLine = comment.parentId && comment.authorId === docAuthorId;
+    
+    // The connecting line from a parent comment to its reply
+    const showParentLine = !isTopLevel;
+    // The connecting line from a comment down to its own replies
+    const showChildLine = hasReplies;
 
     return (
-        <div className="relative">
-            {showLine && (
-                <div className="absolute left-4 -top-2 h-full w-0.5 bg-border -translate-x-1/2"></div>
-            )}
-            <div className="flex w-full items-start gap-2 sm:gap-4 relative">
+        <div className="relative flex w-full items-start gap-2 sm:gap-4">
+            {/* Avatar and Lines Column */}
+            <div className="flex flex-col items-center">
                 <Avatar className="h-9 w-9">
                     <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
                     <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
                 </Avatar>
+                {showChildLine && <div className="mt-2 w-0.5 flex-grow bg-border" />}
+            </div>
 
-                <div className="flex-1 pt-1.5 min-w-0">
-                    <div className="group space-y-2">
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-sm flex-wrap">
-                                    <p className="font-semibold break-words">
-                                        <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
-                                        {comment.authorName}
-                                        </Link>
-                                    </p>
-                                    <p className='text-xs text-muted-foreground whitespace-nowrap'>
-                                        · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                                    </p>
-                                </div>
-                                {user?.uid === comment.authorId && (
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
-                                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                                    </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                                )}
-                            </div>
+            {/* Vertical line connecting to parent */}
+            {showParentLine && <div className="absolute left-4 top-[-1.5rem] h-8 w-0.5 -translate-x-1/2 bg-border" />}
 
-                            {comment.parentAuthorUsername && (
-                                <p className="text-sm text-muted-foreground">
-                                Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
+            {/* Comment Content Column */}
+            <div className="flex-1 pt-1.5 min-w-0">
+                <div className="group space-y-2">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm flex-wrap">
+                                <p className="font-semibold break-words">
+                                    <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
+                                    {comment.authorName}
+                                    </Link>
                                 </p>
+                                <p className='text-xs text-muted-foreground whitespace-nowrap'>
+                                    · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                                </p>
+                            </div>
+                            {user?.uid === comment.authorId && (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                                </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                    <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                             )}
+                        </div>
 
-                            <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
-                                <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                                {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
-                            </Button>
-                            <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
-                                <MessageSquareReply className="h-4 w-4" />
-                                <span className='text-xs'>Reply</span>
-                            </Button>
-                        </div>
+                        {comment.parentAuthorUsername && (
+                            <p className="text-sm text-muted-foreground">
+                            Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
+                            </p>
+                        )}
+
+                        <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
                     </div>
-
-                    {isReplyFormOpen && (
-                        <div>
-                            <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                        </div>
-                    )}
-                    
-                    {comment.replies && comment.replies.length > 0 && (
-                        <div className="space-y-6 pt-4">
-                            {comment.replies.map(reply => (
-                                <CommentWithReplies 
-                                    key={reply.id}
-                                    comment={reply} 
-                                    docId={docId} 
-                                    collectionType={collectionType} 
-                                    activeReplyId={activeReplyId} 
-                                    setActiveReplyId={setActiveReplyId}
-                                    docAuthorId={docAuthorId}
-                                />
-                            ))}
-                        </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
+                            <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                            {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
+                            <MessageSquareReply className="h-4 w-4" />
+                            <span className='text-xs'>Reply</span>
+                        </Button>
+                    </div>
                 </div>
+
+                {isReplyFormOpen && (
+                    <div>
+                        <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+                    </div>
+                )}
+                
+                {comment.replies && comment.replies.length > 0 && (
+                    <div className="space-y-6 pt-4">
+                        {comment.replies.map(reply => (
+                            <CommentWithReplies 
+                                key={reply.id}
+                                comment={reply} 
+                                docId={docId} 
+                                collectionType={collectionType} 
+                                docAuthorId={docAuthorId}
+                                isTopLevel={false}
+                                hasReplies={reply.replies && reply.replies.length > 0}
+                                activeReplyId={activeReplyId}
+                                setActiveReplyId={setActiveReplyId}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -374,7 +395,11 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
   return (
     <div className="space-y-4">
-      <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => { setActiveReplyId(null); }} />
+      <CommentForm 
+        docId={docId} 
+        collectionType={collectionType} 
+        onCommentPosted={() => { setActiveReplyId(null); }} 
+      />
 
       <div className="space-y-6">
         {loadingComments ? (
@@ -383,7 +408,17 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
           </div>
         ) : comments.length > 0 ? (
           comments.map((comment) => (
-            <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} docAuthorId={docAuthorId} />
+            <CommentWithReplies 
+                key={comment.id} 
+                comment={comment} 
+                docId={docId} 
+                collectionType={collectionType}
+                docAuthorId={docAuthorId}
+                isTopLevel={true}
+                hasReplies={comment.replies && comment.replies.length > 0}
+                activeReplyId={activeReplyId} 
+                setActiveReplyId={setActiveReplyId} 
+            />
           ))
         ) : (
           <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
