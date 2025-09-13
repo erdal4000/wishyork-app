@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -21,6 +22,7 @@ import {
   Share2,
   Edit,
   XCircle,
+  Repeat2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +62,7 @@ import { useToast } from '@/hooks/use-toast';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { CommentSection } from '@/components/comment-section';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -398,22 +401,58 @@ export default function WishlistDetailPage() {
             <Progress value={wishlist.progress} className="h-2" />
           </div>
         </CardContent>
-        <CardFooter className="flex items-center justify-between px-6 pb-4">
-          <div className="flex items-center gap-4 text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Heart className="h-5 w-5" /> {wishlist.likes}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <MessageCircle className="h-5 w-5" /> {wishlist.commentCount}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Bookmark className="h-5 w-5" /> {wishlist.saves}
-            </span>
-          </div>
-          <Button variant="ghost" size="icon">
-            <Bookmark />
-            <span className="sr-only">Save</span>
-          </Button>
+        <CardFooter className="flex justify-between p-2">
+            <TooltipProvider>
+            <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                            <MessageCircle className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                </Tooltip>
+                 <span className="text-sm pr-2">{wishlist.commentCount ?? 0}</span>
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                            <Repeat2 className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                            <Heart className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                </Tooltip>
+                <span className="text-sm pr-2">{wishlist.likes ?? 0}</span>
+            </div>
+
+            <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                            <Bookmark className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                            <Share2 className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                </Tooltip>
+            </div>
+            </TooltipProvider>
         </CardFooter>
       </Card>
       

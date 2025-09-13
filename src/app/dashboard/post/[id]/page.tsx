@@ -9,7 +9,7 @@ import { useAuth } from '@/context/auth-context';
 import { formatDistanceToNow } from 'date-fns';
 import { getInitials } from '@/lib/utils';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
-import { ArrowLeft, MoreHorizontal, Heart, MessageCircle, Share2, Loader2 } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, Heart, MessageCircle, Share2, Loader2, Repeat2, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CommentSection } from '@/components/comment-section';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Post extends DocumentData {
   id: string;
@@ -151,19 +152,58 @@ export default function PostDetailPage() {
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-2">
-          <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
-            <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-            <span className="text-sm">{post.likes ?? 0}</span>
-          </Button>
-          <Button variant="ghost" className="flex items-center gap-2" disabled>
-            <MessageCircle className="h-5 w-5" />
-            <span className="text-sm">{post.commentCount ?? 0}</span>
-          </Button>
-          <Button variant="ghost" className="flex items-center gap-2">
-            <Share2 className="h-5 w-5" />
-            <span className="text-sm">Share</span>
-          </Button>
+        <CardFooter className="flex justify-between p-2">
+            <TooltipProvider>
+            <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <MessageCircle className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                </Tooltip>
+                <span className="text-sm pr-2">{post.commentCount ?? 0}</span>
+
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Repeat2 className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
+                        <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                </Tooltip>
+                <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{post.likes ?? 0}</span>
+            </div>
+
+            <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Bookmark className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Share2 className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                </Tooltip>
+            </div>
+            </TooltipProvider>
         </CardFooter>
       </Card>
       

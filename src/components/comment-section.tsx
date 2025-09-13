@@ -25,7 +25,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, Heart, X, MessageCircle } from 'lucide-react';
+import { Loader2, Trash2, Heart, X, MessageCircle, Repeat2, Bookmark, Share2 } from 'lucide-react';
 import { getInitials, cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -189,11 +189,10 @@ interface CommentItemProps {
     docAuthorId: string;
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
-    isReply?: boolean;
 }
 
 
-function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId, isReply }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -244,12 +243,17 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
     };
     
     return (
-      <div className="flex w-full flex-col">
+      <div className="flex flex-col">
         <div className="flex w-full items-start gap-2 sm:gap-4">
-            <Avatar className="h-9 w-9">
-                <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-            </Avatar>
+            <div className="flex flex-col items-center">
+                <Avatar className="h-9 w-9">
+                    <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                    <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+                </Avatar>
+                {comment.parentId && comment.authorId === docAuthorId && (
+                   <div className="mt-2 w-0.5 grow bg-border"></div>
+                )}
+            </div>
 
             <div className="flex-1 pt-1.5 min-w-0">
                 <div className="group space-y-2">
@@ -294,31 +298,59 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
 
                         <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
                     </div>
-                    <TooltipProvider>
-                      <div className="flex items-center gap-1">
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
-                                      <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                                      {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Like</p>
-                              </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
-                                      <MessageCircle className="h-4 w-4" />
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Reply</p>
-                              </TooltipContent>
-                          </Tooltip>
-                      </div>
-                    </TooltipProvider>
+
+                    <div className="flex justify-between -ml-2">
+                        <TooltipProvider>
+                            <div className="flex items-center text-muted-foreground">
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
+                                        <MessageCircle className="h-5 w-5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                                </Tooltip>
+                                
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                                        <Repeat2 className="h-5 w-5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
+                                        <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                                </Tooltip>
+                                {comment.likes > 0 && <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
+                            </div>
+
+                            <div className="flex items-center text-muted-foreground">
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                                        <Bookmark className="h-5 w-5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                                        <Share2 className="h-5 w-5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </TooltipProvider>
+                    </div>
                 </div>
             </div>
         </div>
@@ -358,38 +390,32 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
   }, [docId, collectionType, toast]);
   
   const sortedComments = useMemo(() => {
-    const commentMap = new Map(allComments.map(c => [c.id, {...c, children: [] as Comment[]}]));
-    const rootComments: Comment[] = [];
-
-    // Group children under their parents
+    const commentMap = new Map<string, Comment & { children: Comment[] }>();
     allComments.forEach(comment => {
+      commentMap.set(comment.id, { ...comment, children: [] });
+    });
+
+    const rootComments: (Comment & { children: Comment[] })[] = [];
+    commentMap.forEach(comment => {
       if (comment.parentId && commentMap.has(comment.parentId)) {
-        const parent = commentMap.get(comment.parentId);
-        if(parent) {
-            parent.children.push(comment as never);
-        }
+        commentMap.get(comment.parentId)!.children.push(comment);
       } else {
         rootComments.push(comment);
       }
     });
 
-    // Flatten the list: for each root, add it, then recursively add its children
     const flattened: Comment[] = [];
-    const walk = (comments: Comment[]) => {
+    const walk = (comments: (Comment & { children: Comment[] })[]) => {
       comments.forEach(comment => {
         flattened.push(comment);
-        const children = commentMap.get(comment.id)?.children;
-        if (children && children.length > 0) {
-          // Sort children by creation time before walking
-          const sortedChildren = children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-          walk(sortedChildren);
-        }
+        // Sort children by creation time before walking
+        const sortedChildren = comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+        walk(sortedChildren);
       });
     };
 
     walk(rootComments);
     return flattened;
-
   }, [allComments]);
 
 
