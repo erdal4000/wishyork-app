@@ -140,14 +140,14 @@ function CommentForm({
   const remainingChars = COMMENT_MAX_LENGTH - commentText.length;
 
   return (
-    <form onSubmit={handleAddComment} className="flex items-start gap-2 sm:gap-4">
+    <div className="flex items-start gap-2 sm:gap-4 my-4">
       <Avatar className="hidden h-9 w-9 sm:flex">
         <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
         <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
       </Avatar>
       <div className="flex-1">
         <Textarea
-          placeholder={parentComment ? `Replying to @${parentComment.authorUsername}...` : "Add a comment..."}
+          placeholder={parentComment ? `Replying to @${parentComment.authorUsername}...` : "Post your reply..."}
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
           rows={2}
@@ -166,11 +166,11 @@ function CommentForm({
           )}
           <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {parentComment ? "Reply" : "Post"}
+            {parentComment ? "Reply" : "Reply"}
           </Button>
         </div>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -209,7 +209,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
         });
 
         if (commentToDelete.parentId) {
-          const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
+          const parentCommentRef = doc(commentsCol-colRef, commentToDelete.parentId);
           batch.update(parentCommentRef, { replyCount: increment(-1) });
         }
   
@@ -226,12 +226,17 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
     };
   
     return (
-        <>
+        <div className="relative pt-4">
+            {comment.parentId && (
+                <div className="absolute left-4 -top-1 bottom-0 w-0.5 bg-border -translate-x-1/2"></div>
+            )}
             <div className="flex items-start gap-2 sm:gap-4">
-                <Avatar className="h-9 w-9 flex-shrink-0">
-                    <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                    <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-                </Avatar>
+                <div className="relative z-10">
+                    <Avatar className="h-9 w-9 flex-shrink-0">
+                        <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                        <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+                    </Avatar>
+                </div>
                 <div className="flex-1">
                     <div className="group space-y-2">
                         <div className="rounded-lg bg-muted p-3">
@@ -268,7 +273,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
                             </div>
 
                             {comment.parentAuthorUsername && (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-sm text-muted-foreground">
                                 Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
                                 </p>
                             )}
@@ -281,7 +286,8 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
                                 {comment.likes > 0 ? <span>{comment.likes}</span> : ''}
                             </Button>
                             <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-muted-foreground" onClick={handleToggleReplyForm}>
-                                <MessageSquareReply className="h-4 w-4" />
+                                <MessageSquareReply className="h-4 w-4 mr-1" />
+                                Reply
                             </Button>
                         </div>
                     </div>
@@ -289,38 +295,31 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
             </div>
 
             {isReplyFormOpen && (
-                <div className="pl-8 sm:pl-16">
-                    <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                </div>
+                <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
             )}
     
             {comment.replyCount > 0 && !showReplies && (
-                <div className="pl-8 sm:pl-16">
-                    <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplies(true)}>
-                        View {comment.replyCount} {comment.replyCount === 1 ? 'reply' : 'replies'}
-                    </Button>
-                </div>
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-2" onClick={() => setShowReplies(true)}>
+                    View {comment.replyCount} {comment.replyCount === 1 ? 'reply' : 'replies'}
+                </Button>
             )}
 
             {showReplies && comment.replies && comment.replies.map(reply => (
-                <div key={reply.id} className="pl-8 sm:pl-16">
-                    <CommentWithReplies 
-                        comment={reply} 
-                        docId={docId} 
-                        collectionType={collectionType} 
-                        activeReplyId={activeReplyId} 
-                        setActiveReplyId={setActiveReplyId}
-                    />
-                </div>
+                <CommentWithReplies 
+                    key={reply.id}
+                    comment={reply} 
+                    docId={docId} 
+                    collectionType={collectionType} 
+                    activeReplyId={activeReplyId} 
+                    setActiveReplyId={setActiveReplyId}
+                />
             ))}
              {showReplies && (
-                <div className="pl-8 sm:pl-16">
-                    <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplies(false)}>
-                        Hide replies
-                    </Button>
-                </div>
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-2" onClick={() => setShowReplies(false)}>
+                    Hide replies
+                </Button>
              )}
-        </>
+        </div>
     );
 }
 
@@ -375,7 +374,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     <div className="space-y-4">
       <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => { setActiveReplyId(null); }} />
 
-      <div className="space-y-6 pt-4">
+      <div className="space-y-2">
         {loadingComments ? (
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -385,7 +384,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
             <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
           ))
         ) : (
-          <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to comment!</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
         )}
       </div>
     </div>
