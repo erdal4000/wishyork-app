@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -581,24 +582,42 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   }, [docId, collectionType, toast]);
   
   const commentThreads = useMemo(() => {
-    const threads: { main: Comment; replies: Comment[] }[] = [];
-    const commentMap = new Map(allComments.map(c => [c.id, { ...c, children: [] as Comment[] }]));
-    
+    const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, c]));
     const rootComments: Comment[] = [];
+    const threads: { main: Comment; replies: Comment[] }[] = [];
 
+    // First, find all root comments (those with no parentId)
     for (const comment of allComments) {
-        if (comment.parentId && commentMap.has(comment.parentId)) {
-            const parent = commentMap.get(comment.parentId);
-            parent?.children.push(comment);
-        } else {
+        if (!comment.parentId) {
             rootComments.push(comment);
         }
     }
 
-    return rootComments.map(mainComment => ({
-        main: mainComment,
-        replies: Array.from(commentMap.values()).filter(c => c.parentId === mainComment.id)
-    }));
+    // Now, for each root comment, find all its replies recursively
+    const findReplies = (parentId: string): Comment[] => {
+        const replies: Comment[] = [];
+        for (const comment of allComments) {
+            if (comment.parentId === parentId) {
+                replies.push(comment);
+                // Find replies to this reply
+                replies.push(...findReplies(comment.id));
+            }
+        }
+        return replies;
+    };
+    
+    // Sort root comments by creation time
+    rootComments.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+    // Build the final threads structure
+    for (const root of rootComments) {
+        const replies = findReplies(root.id);
+        // Replies should also be sorted by time
+        replies.sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+        threads.push({ main: root, replies: replies });
+    }
+
+    return threads;
 
   }, [allComments]);
 
@@ -621,7 +640,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : commentThreads.length > 0 ? (
-          <div>
+          <div className="space-y-0">
             {commentThreads.map((thread) => (
                 <div key={thread.main.id} className="border-t first:border-t-0">
                     <CommentItem
@@ -631,7 +650,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
                         onReplyClick={handleReplyClick}
                     />
                     {thread.replies.map(reply => (
-                        <div key={reply.id} className="ml-0">
+                        <div key={reply.id} className="">
                              <CommentItem
                                 comment={reply}
                                 docId={docId}
