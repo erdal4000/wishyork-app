@@ -47,6 +47,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { GlobalSearch } from '@/components/global-search';
 import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
+import { SheetClose } from '@/components/ui/sheet';
 
 interface UserProfile extends DocumentData {
   username?: string;
@@ -210,94 +211,112 @@ export default function DashboardLayout({
             <SidebarContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <Link href="/dashboard">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'}>
-                      <span>
-                        <Home />
-                        Home
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard'}>
+                        <span>
+                          <Home />
+                          Home
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/wishlist">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/wishlist'}>
-                      <span>
-                        <ListTodo />
-                        My Wishlist
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/wishlist">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/wishlist'}>
+                        <span>
+                          <ListTodo />
+                          My Wishlist
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/explore">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/explore'}>
-                      <span>
-                        <Search />
-                        Explore
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/explore">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/explore'}>
+                        <span>
+                          <Search />
+                          Explore
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/notifications">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/notifications'}>
-                      <span>
-                        <Bell />
-                        Notifications
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/notifications">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/notifications'}>
+                        <span>
+                          <Bell />
+                          Notifications
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/bookmarks">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/bookmarks'}>
-                      <span>
-                        <Bookmark />
-                        Bookmarks
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/bookmarks">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/bookmarks'}>
+                        <span>
+                          <Bookmark />
+                          Bookmarks
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/inspiration">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/inspiration'}>
-                      <span>
-                        <Sparkles />
-                        Inspiration Box
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/inspiration">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/inspiration'}>
+                        <span>
+                          <Sparkles />
+                          Inspiration Box
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/messages">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/messages'}>
-                      <span>
-                        <Mail />
-                        Messages
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/messages">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/messages'}>
+                        <span>
+                          <Mail />
+                          Messages
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href={userProfilePath}>
-                    <SidebarMenuButton asChild isActive={pathname.startsWith('/dashboard/profile')}>
-                      <span>
-                        <User />
-                        Profile
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href={userProfilePath}>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/dashboard/profile')}>
+                        <span>
+                          <User />
+                          Profile
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/dashboard/settings">
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'}>
-                      <span>
-                        <Settings />
-                        Settings
-                      </span>
-                    </SidebarMenuButton>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/dashboard/settings">
+                      <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'}>
+                        <span>
+                          <Settings />
+                          Settings
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SheetClose>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
@@ -346,5 +365,3 @@ export default function DashboardLayout({
     </SidebarProvider>
   );
 }
-
-    
