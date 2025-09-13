@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -9,18 +10,24 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Package, Repeat2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+
+// --- Data Types ---
 
 interface Post extends DocumentData {
   id: string;
+  type: 'post';
   authorId: string;
   authorName: string;
   authorUsername: string;
@@ -28,39 +35,57 @@ interface Post extends DocumentData {
   content: string;
   imageUrl: string | null;
   aiHint: string | null;
-  createdAt: any;
+  createdAt: Timestamp;
   likes: number;
   likedBy: string[];
 }
 
-function PostCard({ post }: { post: Post }) {
+interface Wishlist extends DocumentData {
+  id: string;
+  type: 'wishlist';
+  authorId: string;
+  authorName: string;
+  authorUsername: string;
+  authorAvatar: string;
+  title: string;
+  imageUrl: string;
+  aiHint: string;
+  category: string;
+  progress: number;
+  itemCount: number;
+  createdAt: Timestamp;
+}
+
+type FeedItem = Post | Wishlist;
+
+
+// --- Card Components ---
+
+function PostCard({ item }: { item: Post }) {
   const { user } = useAuth();
-  const { hasLiked, isLiking, toggleLike } = usePostInteraction(post.id);
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
+    return name.split(' ').map((n) => n[0]).join('');
   };
   
-  const authorPhoto = post.authorAvatar || `https://picsum.photos/seed/${post.authorId}/200/200`;
+  const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage src={authorPhoto} alt={post.authorName} />
+          <AvatarImage src={authorPhoto} alt={item.authorName} />
           <AvatarFallback>
-            {getInitials(post.authorName)}
+            {getInitials(item.authorName)}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <p className="font-bold">{post.authorName}</p>
+          <p className="font-bold">{item.authorName}</p>
           <p className="text-sm text-muted-foreground">
-            <Link href={`/dashboard/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>{' '}
-            · {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+            <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link>{' '}
+            · {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
           </p>
         </div>
         <Button variant="ghost" size="icon">
@@ -68,15 +93,15 @@ function PostCard({ post }: { post: Post }) {
         </Button>
       </CardHeader>
       <CardContent className="space-y-4 px-4 pb-2">
-        <p className="whitespace-pre-wrap">{post.content}</p>
-        {post.imageUrl && (
+        <p className="whitespace-pre-wrap">{item.content}</p>
+        {item.imageUrl && (
           <div className="relative aspect-video w-full overflow-hidden rounded-xl">
             <Image
-              src={post.imageUrl}
-              alt={`Post by ${post.authorName}`}
+              src={item.imageUrl}
+              alt={`Post by ${item.authorName}`}
               fill
               className="object-cover"
-              data-ai-hint={post.aiHint ?? ''}
+              data-ai-hint={item.aiHint ?? ''}
               sizes="(max-width: 768px) 100vw, 50vw"
             />
           </div>
@@ -85,7 +110,7 @@ function PostCard({ post }: { post: Post }) {
       <CardFooter className="p-2">
         <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
           <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-          <span className="text-sm">{post.likes ?? 0}</span>
+          <span className="text-sm">{item.likes ?? 0}</span>
         </Button>
         <Button variant="ghost" className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5" />
@@ -101,72 +126,152 @@ function PostCard({ post }: { post: Post }) {
 }
 
 
+function WishlistCard({ item }: { item: Wishlist }) {
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
+    return name.split(' ').map((n) => n[0]).join('');
+  };
+  
+  const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
+
+    return (
+        <Card className="overflow-hidden">
+             <CardHeader className="flex flex-row items-center gap-4 p-4">
+                <Avatar>
+                    <AvatarImage src={authorPhoto} alt={item.authorName} />
+                    <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                    <p>
+                        <Link href={`/dashboard/profile/${item.authorUsername}`} className="font-bold hover:underline">{item.authorName}</Link>
+                        <span className="text-muted-foreground"> created a new wishlist</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                    </p>
+                </div>
+                <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-5 w-5" />
+                </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+                <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
+                    <div className="relative h-48 w-full">
+                        <Image
+                            src={item.imageUrl}
+                            alt={item.title}
+                            data-ai-hint={item.aiHint}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                        />
+                    </div>
+                    <div className="p-4">
+                        <Badge variant="secondary" className="mb-2">{item.category}</Badge>
+                        <h3 className="font-bold text-lg">{item.title}</h3>
+                        <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                            <Package className="mr-2 h-4 w-4" />
+                            <span>{item.itemCount || 0} items</span>
+                        </div>
+                        <div className="mt-3">
+                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                                <span>{item.progress || 0}% complete</span>
+                            </div>
+                            <Progress value={item.progress || 0} className="h-2" />
+                        </div>
+                    </div>
+                </Link>
+            </CardContent>
+            <CardFooter className="p-2">
+                 <Button variant="ghost" className="flex items-center gap-2">
+                    <Heart className="h-5 w-5" />
+                    <span className="text-sm">{item.likes ?? 0}</span>
+                </Button>
+                <Button variant="ghost" className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5" />
+                    <span className="text-sm">{item.comments ?? 0}</span>
+                </Button>
+                <Button variant="ghost" className="flex items-center gap-2">
+                    <Repeat2 className="h-5 w-5" />
+                    <span className="text-sm">Repost</span>
+                </Button>
+            </CardFooter>
+        </Card>
+    )
+}
+
+// --- Main Page Component ---
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [postContent, setPostContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
   
   useEffect(() => {
-    // If there is no user, do nothing.
     if (!user) {
-      setLoadingPosts(false);
+      setLoadingFeed(false);
       return;
     }
 
-    setLoadingPosts(true);
+    setLoadingFeed(true);
 
-    // Subscribe to the current user's document to get their `following` list.
     const userDocRef = doc(db, 'users', user.uid);
     const unsubUser = onSnapshot(userDocRef, (userDoc) => {
       const following = userDoc.data()?.following || [];
       const authorsToFetch = [user.uid, ...following];
 
-      // Ensure the authorsToFetch array is not empty before querying,
-      // as Firestore 'in' queries do not support empty arrays.
       if (authorsToFetch.length === 0) {
-        setPosts([]);
-        setLoadingPosts(false);
+        setFeedItems([]);
+        setLoadingFeed(false);
         return;
       }
       
-      // This query requires a composite index on (authorId, createdAt).
-      // If the index is missing, Firestore will log an error in the browser console
-      // with a link to create it.
       const postsQuery = query(
         collection(db, "posts"),
         where("authorId", "in", authorsToFetch),
         orderBy("createdAt", "desc")
       );
 
-      // Subscribe to the posts feed. This inner subscription will be re-created
-      // whenever the user's `following` list changes.
-      const unsubPosts = onSnapshot(postsQuery, (querySnapshot) => {
-        const postsData: Post[] = [];
-        querySnapshot.forEach((doc) => {
-            postsData.push({ id: doc.id, ...doc.data() } as Post);
+      const wishlistsQuery = query(
+        collection(db, "wishlists"),
+        where("authorId", "in", authorsToFetch),
+        orderBy("createdAt", "desc")
+      )
+
+      const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        
+        // When posts update, refetch wishlists and merge
+        const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+            const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+            
+            const combined = [...postsData, ...wishlistsData];
+            combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+            
+            setFeedItems(combined);
+            setLoadingFeed(false);
         });
-        setPosts(postsData);
-        setLoadingPosts(false);
+
+        return () => unsubWishlists();
+
       }, (error) => {
         console.error("Error fetching posts:", error);
-        // This is where you will see the index error in the browser console.
-        setLoadingPosts(false);
+        setLoadingFeed(false);
       });
 
-      // Return a cleanup function for the inner posts subscription.
       return () => unsubPosts();
 
     }, (error) => {
       console.error("Error fetching user's following list:", error);
-      setLoadingPosts(false);
+      setLoadingFeed(false);
     });
 
-    // Return a cleanup function for the outer user subscription.
     return () => unsubUser();
 
-  }, [user]); // This entire effect re-runs only when the `user` object changes.
+  }, [user]);
 
 
   const handleCreatePost = async (e: FormEvent) => {
@@ -243,21 +348,27 @@ export default function DashboardPage() {
         </form>
       </Card>
 
-      {/* Feed Posts */}
-      {loadingPosts ? (
+      {/* Feed Items */}
+      {loadingFeed ? (
         <div className="flex justify-center p-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      ) : posts.length === 0 ? (
+      ) : feedItems.length === 0 ? (
         <Card className="text-center p-8 text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
           <p className="mt-2">Follow some people or create your first post to see content here.</p>
-          <p className="mt-4 text-xs italic">If you still see no posts, please check the browser console (F12) for a Firestore index error and click the link to create it.</p>
+           <p className="mt-4 text-xs italic">If you still see no posts after creating one, please check the browser console (F12) for a Firestore index error and click the link to create it.</p>
         </Card>
       ) : (
-        posts.map((post) => (
-          <PostCard key={post.id} post={post} />
-        ))
+        feedItems.map((item) => {
+            if (item.type === 'post') {
+                return <PostCard key={`post-${item.id}`} item={item} />;
+            }
+            if (item.type === 'wishlist') {
+                return <WishlistCard key={`wishlist-${item.id}`} item={item} />;
+            }
+            return null;
+        })
       )}
     </div>
   );
