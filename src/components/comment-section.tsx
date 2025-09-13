@@ -229,32 +229,20 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
         setIsDeleting(false);
       }
     };
-
-    // Show the vertical line only if it's a reply and the author is the original post's author.
-    const showLine = comment.parentId && comment.authorId === docAuthorId;
   
+    const showLine = comment.parentId && comment.authorId === docAuthorId;
+
     return (
-        <div className="flex flex-col">
+        <div className="relative">
+            {showLine && (
+                <div className="absolute left-4 -top-2 h-full w-0.5 bg-border -translate-x-1/2"></div>
+            )}
             <div className="flex w-full items-start gap-2 sm:gap-4 relative">
-                {/* Left column for avatar and line */}
-                <div className="flex flex-col items-center flex-shrink-0">
-                    <Avatar className="h-9 w-9">
-                        <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                        <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-                    </Avatar>
-                    {/* Vertical line connecting to replies */}
-                    {comment.replies && comment.replies.length > 0 && (
-                        <div className="mt-2 w-0.5 flex-1 bg-border"></div>
-                    )}
-                </div>
+                <Avatar className="h-9 w-9">
+                    <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                    <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+                </Avatar>
 
-                {/* Vertical line connecting to parent */}
-                {showLine && (
-                    <div className="absolute left-4 h-full w-0.5 bg-border -translate-x-1/2 -top-4"></div>
-                )}
-
-
-                {/* Right column for comment content */}
                 <div className="flex-1 pt-1.5 min-w-0">
                     <div className="group space-y-2">
                         <div>
@@ -303,37 +291,36 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
                                 <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
                                 {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
                             </Button>
-                            <Button variant="ghost" size="icon" className="p-1 h-auto text-muted-foreground" onClick={handleToggleReplyForm}>
+                            <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
                                 <MessageSquareReply className="h-4 w-4" />
+                                <span className='text-xs'>Reply</span>
                             </Button>
                         </div>
                     </div>
+
+                    {isReplyFormOpen && (
+                        <div>
+                            <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+                        </div>
+                    )}
+                    
+                    {comment.replies && comment.replies.length > 0 && (
+                        <div className="space-y-6 pt-4">
+                            {comment.replies.map(reply => (
+                                <CommentWithReplies 
+                                    key={reply.id}
+                                    comment={reply} 
+                                    docId={docId} 
+                                    collectionType={collectionType} 
+                                    activeReplyId={activeReplyId} 
+                                    setActiveReplyId={setActiveReplyId}
+                                    docAuthorId={docAuthorId}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
-
-            {/* Reply Form */}
-            {isReplyFormOpen && (
-                <div className="pl-6 sm:pl-10">
-                    <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                </div>
-            )}
-            
-            {/* Child Replies */}
-            {comment.replies && comment.replies.length > 0 && (
-                <div className="pt-4">
-                    {comment.replies.map(reply => (
-                        <CommentWithReplies 
-                            key={reply.id}
-                            comment={reply} 
-                            docId={docId} 
-                            collectionType={collectionType} 
-                            activeReplyId={activeReplyId} 
-                            setActiveReplyId={setActiveReplyId}
-                            docAuthorId={docAuthorId}
-                        />
-                    ))}
-                </div>
-            )}
         </div>
     );
 }
