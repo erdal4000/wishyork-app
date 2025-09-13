@@ -108,62 +108,65 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
 
+  // Effect 1: Get the list of users the current user follows
+  useEffect(() => {
+    if (!user) return;
+    
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (doc) => {
+      const userData = doc.data();
+      setFollowingIds(userData?.following || []);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+  
+  // Effect 2: Fetch posts from the user and the users they follow
   useEffect(() => {
     if (!user) {
+      setPosts([]);
       setLoadingPosts(false);
       return;
     }
-    
+
+    // Create the list of author IDs to fetch posts from.
+    // It includes the current user's ID and all the IDs they follow.
+    const authorsToFetch = [...followingIds, user.uid];
+
+    // Firestore 'in' queries are limited to 30 items.
+    // If you expect users to follow more, this would need pagination.
+    // For now, this is a robust solution.
+    if(authorsToFetch.length === 0) {
+        setPosts([]);
+        setLoadingPosts(false);
+        return;
+    }
+
     setLoadingPosts(true);
 
-    const fetchFollowingAndPosts = async () => {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        const following = userDoc.data()?.following || [];
-        const authorsToFetch = [...following, user.uid];
+    const q = query(
+      collection(db, "posts"),
+      where("authorId", "in", authorsToFetch),
+      orderBy("createdAt", "desc")
+    );
 
-        if (authorsToFetch.length === 0) {
-            setPosts([]);
-            setLoadingPosts(false);
-            return;
-        }
-
-        const q = query(
-            collection(db, "posts"), 
-            where("authorId", "in", authorsToFetch),
-            orderBy("createdAt", "desc")
-        );
-        
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const postsData: Post[] = [];
-            querySnapshot.forEach((doc) => {
-            postsData.push({ id: doc.id, ...doc.data() } as Post);
-            });
-            setPosts(postsData);
-            setLoadingPosts(false);
-        }, (error) => {
-            console.error("Error fetching posts:", error);
-            setLoadingPosts(false);
-        });
-
-        return unsubscribe;
-    };
-
-    let unsubscribe: (() => void) | undefined;
-    
-    fetchFollowingAndPosts().then(unsub => {
-        if (unsub) {
-            unsubscribe = unsub;
-        }
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const postsData: Post[] = [];
+      querySnapshot.forEach((doc) => {
+        postsData.push({ id: doc.id, ...doc.data() } as Post);
+      });
+      setPosts(postsData);
+      setLoadingPosts(false);
+    }, (error) => {
+      console.error("Error fetching posts:", error);
+      setLoadingPosts(false);
     });
 
-    return () => {
-        if (unsubscribe) {
-            unsubscribe();
-        }
-    };
-}, [user]);
+    // Cleanup subscription on component unmount
+    return () => unsubscribe();
+  }, [user, followingIds]); // This effect re-runs if the user or their following list changes
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
@@ -171,7 +174,6 @@ export default function DashboardPage() {
 
     setIsSubmitting(true);
     try {
-      // Get the latest user data to ensure username and photo are up-to-date
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
       const userData = userDoc.data();
