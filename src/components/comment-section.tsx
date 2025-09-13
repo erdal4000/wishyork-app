@@ -26,8 +26,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, Heart, X, MessageCircle, Repeat2, Bookmark, Share2 } from 'lucide-react';
-import { getInitials, cn } from '@/lib/utils';
+import { Loader2, Trash2, Heart, MessageCircle, Repeat2, Bookmark, Share2 } from 'lucide-react';
+import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -182,10 +182,10 @@ interface CommentItemProps {
     collectionType: 'posts' | 'wishlists';
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
-    docAuthorId: string;
+    hasReplies?: boolean;
 }
 
-function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, docAuthorId }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, hasReplies }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -235,11 +235,16 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
     };
     
     return (
-      <div className="flex w-full items-start gap-2 sm:gap-4 border-b py-4">
+      <div className="flex w-full items-start gap-2 sm:gap-4 border-t py-4 relative">
+        {comment.parentId && (
+          <div className="absolute left-[18px] -top-4 bottom-0 w-0.5 bg-border -z-10 h-[calc(100%-1.5rem)]"></div>
+        )}
+        <div className="relative">
             <Avatar className="h-9 w-9">
                 <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
                 <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
             </Avatar>
+        </div>
 
             <div className="flex-1 pt-1.5 min-w-0">
                 <div className="group space-y-2">
@@ -402,24 +407,32 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     commentMap.forEach(comment => {
         comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
     });
-
-    // Flatten the tree into a single array for rendering
-    const flattened: Comment[] = [];
-    const walk = (comments: (Comment & { children: Comment[] })[]) => {
-      comments.forEach(comment => {
-        flattened.push(comment);
-        if (comment.children.length > 0) {
-            walk(comment.children);
-        }
-      });
-    };
     
     // Sort root comments by creation time (descending for newest first)
     rootComments.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
     
-    walk(rootComments);
-    return flattened;
+    return rootComments;
   }, [allComments]);
+
+  const renderComment = (comment: Comment & { children: Comment[] }) => {
+    return (
+      <div key={comment.id} className="w-full">
+        <CommentItem 
+            comment={comment} 
+            docId={docId} 
+            collectionType={collectionType}
+            activeReplyId={activeReplyId} 
+            setActiveReplyId={setActiveReplyId}
+            hasReplies={comment.children.length > 0}
+        />
+        {comment.children.length > 0 && (
+          <div className="pl-5 sm:pl-8"> 
+            {comment.children.map(renderComment)}
+          </div>
+        )}
+      </div>
+    );
+  };
 
 
   return (
@@ -436,17 +449,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : sortedComments.length > 0 ? (
-          sortedComments.map((comment) => (
-            <CommentItem 
-                key={comment.id} 
-                comment={comment} 
-                docId={docId} 
-                collectionType={collectionType}
-                activeReplyId={activeReplyId} 
-                setActiveReplyId={setActiveReplyId}
-                docAuthorId={docAuthorId}
-            />
-          ))
+          sortedComments.map(renderComment)
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
         )}
