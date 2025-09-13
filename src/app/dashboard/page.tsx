@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 
@@ -108,24 +108,39 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
 
-  // Simplified and robust useEffect for fetching posts
   useEffect(() => {
-    // Only run if the user is authenticated
-    if (!user) {
-      setLoadingPosts(false);
-      return;
-    }
+    if (!user) return;
+
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubUser = onSnapshot(userDocRef, (doc) => {
+      setFollowingIds(doc.data()?.following || []);
+    });
+
+    return () => unsubUser();
+  }, [user]);
+  
+  useEffect(() => {
+    if (!user) return;
 
     setLoadingPosts(true);
 
-    // Basic query to get all posts, ordered by creation date
+    const authorsToFetch = [...followingIds, user.uid];
+
+    // Ensure the array is not empty to prevent Firestore errors
+    if (authorsToFetch.length === 0) {
+      setPosts([]);
+      setLoadingPosts(false);
+      return;
+    }
+    
     const postsQuery = query(
         collection(db, "posts"),
+        where("authorId", "in", authorsToFetch),
         orderBy("createdAt", "desc")
     );
 
-    // Set up the real-time listener
     const unsubscribe = onSnapshot(postsQuery, (querySnapshot) => {
         const postsData: Post[] = [];
         querySnapshot.forEach((doc) => {
@@ -135,13 +150,12 @@ export default function DashboardPage() {
         setLoadingPosts(false);
     }, (error) => {
         console.error("Error fetching posts:", error);
+        // This is where you might see an index error in the browser console
         setLoadingPosts(false);
     });
 
-    // Cleanup function to detach the listener when the component unmounts
     return () => unsubscribe();
-
-  }, [user]); // This effect re-runs only when the user object changes (login/logout)
+  }, [user, followingIds]);
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
@@ -225,7 +239,7 @@ export default function DashboardPage() {
       ) : posts.length === 0 ? (
         <Card className="text-center p-8 text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
-          <p className="mt-2">Start by following some people or creating your first post.</p>
+          <p className="mt-2">Follow some people or create your first post to see content here.</p>
         </Card>
       ) : (
         posts.map((post) => (
@@ -235,4 +249,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-    
