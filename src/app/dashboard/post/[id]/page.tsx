@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -6,10 +7,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/auth-context';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { getInitials } from '@/lib/utils';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
-import { ArrowLeft, MoreHorizontal, Heart, MessageCircle, Share2, Loader2, Repeat2, Bookmark } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, Heart, MessageCircle, Share2, Loader2, Repeat2, Bookmark, CalendarIcon, ClockIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -109,6 +110,7 @@ export default function PostDetailPage() {
   }
 
   const authorPhoto = post.authorAvatar || `https://picsum.photos/seed/${post.authorId}/200/200`;
+  const postDate = post.createdAt?.toDate();
 
   return (
     <div className="space-y-6">
@@ -132,12 +134,10 @@ export default function PostDetailPage() {
             <p className="font-bold">{post.authorName}</p>
             <p className="text-sm text-muted-foreground">
               <Link href={`/dashboard/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>
-              {' · '}
-              {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'just now'}
             </p>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 px-4 pb-2">
+        <CardContent className="space-y-4 px-4 pb-4">
           <p className="whitespace-pre-wrap text-base">{post.content}</p>
           {post.imageUrl && (
             <div className="relative aspect-video w-full overflow-hidden rounded-xl">
@@ -151,7 +151,20 @@ export default function PostDetailPage() {
               />
             </div>
           )}
+           {postDate && (
+             <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                    <ClockIcon className="h-4 w-4" />
+                    <span>{format(postDate, 'h:mm a')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span>{format(postDate, 'MMM d, yyyy')}</span>
+                </div>
+             </div>
+           )}
         </CardContent>
+        <Separator />
         <CardFooter className="flex justify-between p-2">
             <TooltipProvider>
             <div className="flex items-center text-muted-foreground">
@@ -211,7 +224,7 @@ export default function PostDetailPage() {
 
       {/* Comments Section */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Comments ({post.commentCount || 0})</h2>
+        <h2 className="text-2xl font-bold">Replies ({post.commentCount || 0})</h2>
         <CommentSection docId={post.id} collectionType="posts" docAuthorId={post.authorId} />
       </div>
     </div>

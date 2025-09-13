@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -623,7 +624,7 @@ export default function WishlistDetailPage() {
 
       {/* Comments Section */}
        <div className="space-y-4">
-         <h2 className="text-2xl font-bold">Comments ({wishlist.commentCount || 0})</h2>
+         <h2 className="text-2xl font-bold">Replies ({wishlist.commentCount || 0})</h2>
          <CommentSection docId={id} collectionType="wishlists" docAuthorId={wishlist.authorId} />
        </div>
 

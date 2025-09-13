@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -122,6 +123,7 @@ function PostCard({ item }: { item: Post }) {
               </TooltipTrigger>
               <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
             </Tooltip>
+            <span className="text-sm pr-2">{item.commentCount ?? 0}</span>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -232,6 +234,7 @@ function WishlistCard({ item }: { item: Wishlist }) {
                         </TooltipTrigger>
                         <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
                         </Tooltip>
+                        <span className="text-sm pr-2">{item.commentCount ?? 0}</span>
 
                         <Tooltip>
                         <TooltipTrigger asChild>

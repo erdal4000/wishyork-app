@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -179,13 +180,12 @@ interface CommentItemProps {
     comment: Comment;
     docId: string;
     collectionType: 'posts' | 'wishlists';
-    docAuthorId: string;
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
-    isReply: boolean;
+    docAuthorId: string;
 }
 
-function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId, isReply }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, docAuthorId }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -195,7 +195,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
     const handleToggleReplyForm = () => {
         setActiveReplyId(isReplyFormOpen ? null : comment.id);
     }
-  
+
     const handleDeleteComment = async (commentToDelete: Comment) => {
       if (!user || isDeleting) return;
   
@@ -235,11 +235,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
     };
     
     return (
-      <div className="relative">
-        {isReply && (
-            <div className="absolute left-4 top-0 h-full -translate-x-1/2 w-0.5 bg-border -z-10"></div>
-        )}
-        <div className="flex w-full items-start gap-2 sm:gap-4">
+      <div className="flex w-full items-start gap-2 sm:gap-4 border-b py-4">
             <Avatar className="h-9 w-9">
                 <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
                 <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
@@ -293,12 +289,12 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
                         <TooltipProvider>
                             <div className="flex items-center text-muted-foreground">
                                 <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
-                                        <MessageCircle className="h-5 w-5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
+                                            <MessageCircle className="h-5 w-5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
                                 </Tooltip>
                                 
                                 <Tooltip>
@@ -348,9 +344,14 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
                     </div>
                 )}
             </div>
-        </div>
       </div>
     );
+}
+
+interface CommentSectionProps {
+  docId: string;
+  collectionType: 'posts' | 'wishlists';
+  docAuthorId: string;
 }
 
 export function CommentSection({ docId, collectionType, docAuthorId }: CommentSectionProps) {
@@ -383,10 +384,12 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     const commentMap = new Map<string, Comment & { children: Comment[] }>();
     const rootComments: (Comment & { children: Comment[] })[] = [];
 
+    // First pass: create a map of all comments and initialize children array
     allComments.forEach(comment => {
       commentMap.set(comment.id, { ...comment, children: [] });
     });
 
+    // Second pass: build the tree
     allComments.forEach(comment => {
       if (comment.parentId && commentMap.has(comment.parentId)) {
         commentMap.get(comment.parentId)!.children.push(commentMap.get(comment.id)!);
@@ -395,22 +398,26 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
       }
     });
 
-    // Sort children by creation time before flattening
+    // Sort children by creation time (ascending to keep replies in order)
     commentMap.forEach(comment => {
         comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
     });
 
-    const flattened: {comment: Comment, isReply: boolean}[] = [];
-    const walk = (comments: (Comment & { children: Comment[] })[], isReply: boolean) => {
+    // Flatten the tree into a single array for rendering
+    const flattened: Comment[] = [];
+    const walk = (comments: (Comment & { children: Comment[] })[]) => {
       comments.forEach(comment => {
-        flattened.push({ comment, isReply });
+        flattened.push(comment);
         if (comment.children.length > 0) {
-            walk(comment.children, true);
+            walk(comment.children);
         }
       });
     };
     
-    walk(rootComments, false);
+    // Sort root comments by creation time (descending for newest first)
+    rootComments.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+    
+    walk(rootComments);
     return flattened;
   }, [allComments]);
 
@@ -423,26 +430,25 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
         onCommentPosted={() => { setActiveReplyId(null); }} 
       />
 
-      <div className="space-y-6">
+      <div className="flex flex-col">
         {loadingComments ? (
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : sortedComments.length > 0 ? (
-          sortedComments.map(({ comment, isReply }) => (
+          sortedComments.map((comment) => (
             <CommentItem 
                 key={comment.id} 
                 comment={comment} 
                 docId={docId} 
                 collectionType={collectionType}
-                docAuthorId={docAuthorId}
                 activeReplyId={activeReplyId} 
-                setActiveReplyId={setActiveReplyId} 
-                isReply={isReply}
+                setActiveReplyId={setActiveReplyId}
+                docAuthorId={docAuthorId}
             />
           ))
         ) : (
-          <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
         )}
       </div>
     </div>
