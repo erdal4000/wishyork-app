@@ -3,59 +3,59 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Kullanıcılar herkese açık profilleri okuyabilir.
+    // Kullanıcılar koleksiyonu kuralları
     match /users/{userId} {
-      allow read: if true;
+      // Oturum açmış kullanıcılar, başka kullanıcıların profilini okuyabilir.
+      allow read: if request.auth != null;
 
-      // Bir kullanıcı sadece kendi belgesini güncelleyebilir (bio, name vb. için).
-      allow update: if request.auth != null && request.auth.uid == userId;
+      // Kullanıcılar sadece kendi belgelerini güncelleyebilir.
+      // Ancak, başkalarının kendi takipçi listesini (followers) güncellemesine
+      // izin veren özel bir durum ekliyoruz.
+      allow update: if request.auth.uid == userId ||
+                       (request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['followers', 'followersCount']));
 
-      // Takip Etme/Bırakma Mantığı:
-      // Bir kullanıcı, başka bir kullanıcının 'followers' veya 'followersCount'
-      // alanlarını ancak ve ancak kendi UID'sini ekleyip/çıkarıyorsa güncelleyebilir.
-      // Bu, takip etme ve takipten çıkma işlemlerinin güvenli bir şekilde çalışmasını sağlar.
-      allow update: if request.auth != null &&
-                      (request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['followers', 'followersCount'])) &&
-                      (request.resource.data.followers == resource.data.followers.concat([request.auth.uid]) ||
-                       request.resource.data.followers == resource.data.followers.removed(request.auth.uid));
+      // Kullanıcılar sadece kendi belgelerini oluşturabilir.
+      allow create: if request.auth.uid == userId;
     }
 
-    // Kullanıcı adlarının benzersizliğini kontrol etmek için herkesin okumasına izin ver.
+    // Kullanıcı adlarının benzersizliğini sağlamak için kullanılan koleksiyon.
     match /usernames/{username} {
-      allow read, create: if true;
-    }
-
-    // Herkesin gönderileri okumasına izin ver.
-    // Bir kullanıcı sadece kendi gönderisini oluşturabilir/silebilir/güncelleyebilir.
-    match /posts/{postId} {
       allow read: if true;
-      allow create, update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+      allow create: if request.auth != null;
     }
 
-    // Wishlistler için kurallar
-    match /wishlists/{wishlistId} {
-      // Herkes herkese açık wishlistleri okuyabilir.
-      // Kullanıcılar kendi özel veya arkadaş listelerini okuyabilir.
-      allow read: if resource.data.privacy == 'public' || 
-                     (request.auth != null && request.auth.uid == resource.data.authorId);
-      
-      // Kullanıcılar sadece kendi wishlistlerini oluşturabilir, güncelleyebilir, silebilir.
-      allow create, update, delete: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+    // Post'lar koleksiyonu
+    match /posts/{postId} {
+      // Oturum açmış her kullanıcı post'ları okuyabilir. Bu, 'in' sorgularının çalışması için gereklidir.
+      allow read: if request.auth != null;
 
-      // Wishlist içindeki item'lar için kurallar
+      // Kullanıcılar sadece kendi post'larını oluşturabilir, silebilir.
+      allow create, delete: if request.auth.uid == resource.data.authorId;
+
+      // Kullanıcılar sadece post'un 'likedBy' ve 'likes' alanlarını güncelleyebilir.
+      allow update: if request.auth != null &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['likedBy', 'likes']);
+    }
+
+    // Wishlist'ler koleksiyonu
+    match /wishlists/{wishlistId} {
+      // Oturum açmış kullanıcılar wishlist'leri okuyabilir (Gizlilik, istemci tarafında yönetilir).
+      allow read: if request.auth != null;
+
+      // Kullanıcılar sadece kendi wishlist'lerini oluşturabilir, güncelleyebilir, silebilir.
+      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
+
+      // Wishlist içindeki item'lar
       match /items/{itemId} {
-        // Wishlist'i okuma izni olan herkes item'ları da okuyabilir.
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' ||
-                     (request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-        
-        // Wishlist sahibi item ekleyebilir/silebilir/güncelleyebilir.
-        allow create, delete: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
-        
-        // Oturum açmış herhangi bir kullanıcı bir item'ı rezerve edebilir, satın alındı olarak işaretleyebilir veya rezervasyonunu iptal edebilir.
+        allow read: if request.auth != null;
+        // Wishlist sahibi item ekleyebilir/silebilir.
+        allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+
+        // Oturum açmış herhangi bir kullanıcı bir item'ı güncelleyebilir (reserve, fulfill vb. için).
         allow update: if request.auth != null;
       }
     }
-
   }
 }
