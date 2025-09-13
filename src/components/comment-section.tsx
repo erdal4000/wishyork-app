@@ -286,12 +286,12 @@ interface CommentItemProps {
   comment: Comment;
   docId: string;
   collectionType: 'posts' | 'wishlists';
-  isLastReply: boolean;
-  hasReplies: boolean;
   onReplyClick: (comment: Comment) => void;
+  isReply: boolean;
+  hasNextReply: boolean;
 }
 
-function CommentItem({ comment, docId, collectionType, isLastReply, hasReplies, onReplyClick }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, onReplyClick, isReply, hasNextReply }: CommentItemProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -343,20 +343,19 @@ function CommentItem({ comment, docId, collectionType, isLastReply, hasReplies, 
     }
   };
 
-  const isReply = !!comment.parentId;
-
   return (
     <div className="relative flex w-full items-start gap-2 py-4 sm:gap-4">
         {isReply && (
-            <>
+          <>
             {/* Vertical line connecting to parent */}
-            <div className={`absolute bottom-0 left-[18px] top-5 w-0.5 -translate-x-1/2 bg-border ${isLastReply ? 'h-[calc(1.125rem-1.25rem)]' : ''}`} />
-
+            <div className="absolute -top-1/2 bottom-1/2 left-[18px] w-0.5 -translate-x-1/2 bg-border" />
             {/* Horizontal line arm */}
             <div className="absolute left-[18px] top-[34px] h-0.5 w-4 -translate-y-1/2 bg-border" />
-            </>
+          </>
         )}
-
+        {hasNextReply && (
+           <div className="absolute bottom-0 top-[34px] left-[18px] w-0.5 -translate-x-1/2 bg-border" />
+        )}
       <Avatar className="z-10 h-9 w-9 flex-shrink-0 bg-background">
         <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
         <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
@@ -483,7 +482,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
     setLoadingComments(true);
     const commentsRef = collection(db, collectionType, docId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+    const q = query(commentsRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
@@ -498,7 +497,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
   
-  const flattenedThreads = useMemo(() => {
+  const commentThreads = useMemo(() => {
     const commentMap = new Map<string, Comment[]>();
     const rootComments: Comment[] = [];
 
@@ -513,22 +512,24 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
       }
     });
 
-    rootComments.sort((a,b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-
-    const result: Comment[] = [];
-    const buildThreads = (comments: Comment[]) => {
-      for (const comment of comments) {
-        result.push(comment);
-        const replies = commentMap.get(comment.id) || [];
-        if (replies.length > 0) {
-          replies.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-          buildThreads(replies);
-        }
-      }
-    };
+    for (const children of commentMap.values()) {
+        children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+    }
     
-    buildThreads(rootComments);
-    return result;
+    const finalThreads: Comment[] = [];
+    rootComments.forEach(root => {
+      const thread: Comment[] = [root];
+      const buildThread = (parentId: string) => {
+        const children = commentMap.get(parentId);
+        if (children) {
+          thread.push(...children);
+        }
+      };
+      buildThread(root.id);
+      finalThreads.push(...thread);
+    });
+    
+    return finalThreads;
   }, [allComments]);
 
 
@@ -536,71 +537,6 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     setReplyingTo(comment);
   };
   
-  const commentThreads = useMemo(() => {
-    const threadMap: { [key: string]: Comment[] } = {};
-    const rootComments: Comment[] = [];
-    
-    // Group comments by their root parent
-    allComments.forEach(comment => {
-      let current = comment;
-      let rootId = current.parentId;
-      
-      if (!rootId) {
-        rootComments.push(comment);
-        return;
-      }
-      
-      while (rootId) {
-        const parent = allComments.find(c => c.id === rootId);
-        if (parent && parent.parentId) {
-          rootId = parent.parentId;
-        } else {
-          break;
-        }
-      }
-      
-      if(rootId){
-          if (!threadMap[rootId]) {
-              threadMap[rootId] = [];
-          }
-          threadMap[rootId].push(comment);
-      }
-    });
-    
-    // Sort root comments by newest first
-    rootComments.sort((a,b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-    
-    const finalThreads: Comment[][] = [];
-    rootComments.forEach(root => {
-        const thread = [root];
-        const replies = (threadMap[root.id] || []).sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-        
-        const sortedReplies: Comment[] = [];
-        const replyMap = new Map<string, Comment[]>();
-        replies.forEach(r => {
-            const parentId = r.parentId!;
-            if (!replyMap.has(parentId)) {
-                replyMap.set(parentId, []);
-            }
-            replyMap.get(parentId)!.push(r);
-        });
-
-        const buildReplyTree = (parentId: string) => {
-            const children = replyMap.get(parentId) || [];
-            children.forEach(child => {
-                sortedReplies.push(child);
-                buildReplyTree(child.id);
-            });
-        }
-        buildReplyTree(root.id);
-
-        finalThreads.push(thread.concat(sortedReplies));
-    });
-
-    return finalThreads;
-  }, [allComments]);
-
-
   return (
     <div className="space-y-4">
       <CommentForm 
@@ -614,24 +550,25 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : commentThreads.length > 0 ? (
-          commentThreads.map((thread) => (
-            <div key={thread[0].id} className="border-t">
-              {thread.map((comment, commentIndex) => {
-                return (
-                  <CommentItem
-                    key={comment.id}
-                    comment={comment}
-                    docId={docId}
-                    collectionType={collectionType}
-                    isLastReply={commentIndex === thread.length - 1}
-                    hasReplies={comment.replyCount > 0}
-                    onReplyClick={handleReplyClick}
-                  />
-                )
+        ) : allComments.length > 0 ? (
+          <div className="border-t">
+              {allComments.map((comment, index) => {
+                  const replies = allComments.filter(c => c.parentId === comment.id);
+                  const isLastReplyOfParent = allComments.filter(c => c.parentId === comment.parentId).slice(-1)[0]?.id === comment.id;
+                  
+                  return (
+                    <CommentItem
+                      key={comment.id}
+                      comment={comment}
+                      docId={docId}
+                      collectionType={collectionType}
+                      onReplyClick={handleReplyClick}
+                      isReply={!!comment.parentId}
+                      hasNextReply={replies.length > 0 || (!!comment.parentId && !isLastReplyOfParent)}
+                    />
+                  )
               })}
-            </div>
-          ))
+          </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
         )}
