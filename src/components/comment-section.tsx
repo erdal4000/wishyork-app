@@ -25,7 +25,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, MessageSquareReply, Heart, X } from 'lucide-react';
+import { Loader2, Trash2, Heart, X, MessageCircle } from 'lucide-react';
 import { getInitials, cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -41,6 +41,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useCommentInteraction } from '@/hooks/use-comment-interaction';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Comment extends DocumentData {
   id: string;
@@ -192,7 +193,7 @@ interface CommentItemProps {
 }
 
 
-function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId, isReply }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -226,7 +227,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
         });
 
         if (commentToDelete.parentId) {
-          const parentCommentRef = doc(commentsCol-colRef, commentToDelete.parentId);
+          const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
           batch.update(parentCommentRef, { replyCount: increment(-1) });
         }
   
@@ -241,7 +242,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
         setIsDeleting(false);
       }
     };
-
+    
     return (
       <div className="flex w-full flex-col">
         <div className="flex w-full items-start gap-2 sm:gap-4">
@@ -293,21 +294,36 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
 
                         <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
                     </div>
-                    <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
-                            <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                            {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
-                        </Button>
-                        <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
-                            <MessageSquareReply className="h-4 w-4" />
-                            <span className='text-xs'>Reply</span>
-                        </Button>
-                    </div>
+                    <TooltipProvider>
+                      <div className="flex items-center gap-1">
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
+                                      <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                                      {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
+                                  </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Like</p>
+                              </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
+                                      <MessageCircle className="h-4 w-4" />
+                                  </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Reply</p>
+                              </TooltipContent>
+                          </Tooltip>
+                      </div>
+                    </TooltipProvider>
                 </div>
             </div>
         </div>
         {isReplyFormOpen && (
-            <div className="w-full pl-0">
+            <div className="w-full">
                 <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
             </div>
         )}
@@ -345,21 +361,28 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     const commentMap = new Map(allComments.map(c => [c.id, {...c, children: [] as Comment[]}]));
     const rootComments: Comment[] = [];
 
+    // Group children under their parents
     allComments.forEach(comment => {
       if (comment.parentId && commentMap.has(comment.parentId)) {
-        commentMap.get(comment.parentId)?.children.push(comment as never);
+        const parent = commentMap.get(comment.parentId);
+        if(parent) {
+            parent.children.push(comment as never);
+        }
       } else {
         rootComments.push(comment);
       }
     });
 
+    // Flatten the list: for each root, add it, then recursively add its children
     const flattened: Comment[] = [];
     const walk = (comments: Comment[]) => {
       comments.forEach(comment => {
         flattened.push(comment);
         const children = commentMap.get(comment.id)?.children;
-        if (children) {
-          walk(children.sort((a,b) => a.createdAt.toMillis() - b.createdAt.toMillis()));
+        if (children && children.length > 0) {
+          // Sort children by creation time before walking
+          const sortedChildren = children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+          walk(sortedChildren);
         }
       });
     };
