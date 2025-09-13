@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -15,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, where, doc, getDoc } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 
@@ -109,22 +110,60 @@ export default function DashboardPage() {
   const [loadingPosts, setLoadingPosts] = useState(true);
 
   useEffect(() => {
-    setLoadingPosts(true);
-    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const postsData: Post[] = [];
-      querySnapshot.forEach((doc) => {
-        postsData.push({ id: doc.id, ...doc.data() } as Post);
-      });
-      setPosts(postsData);
+    if (!user) {
       setLoadingPosts(false);
-    }, (error) => {
-        console.error("Error fetching posts:", error);
-        setLoadingPosts(false);
+      return;
+    }
+    
+    setLoadingPosts(true);
+
+    const fetchFollowingAndPosts = async () => {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const following = userDoc.data()?.following || [];
+        const authorsToFetch = [...following, user.uid];
+
+        if (authorsToFetch.length === 0) {
+            setPosts([]);
+            setLoadingPosts(false);
+            return;
+        }
+
+        const q = query(
+            collection(db, "posts"), 
+            where("authorId", "in", authorsToFetch),
+            orderBy("createdAt", "desc")
+        );
+        
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const postsData: Post[] = [];
+            querySnapshot.forEach((doc) => {
+            postsData.push({ id: doc.id, ...doc.data() } as Post);
+            });
+            setPosts(postsData);
+            setLoadingPosts(false);
+        }, (error) => {
+            console.error("Error fetching posts:", error);
+            setLoadingPosts(false);
+        });
+
+        return unsubscribe;
+    };
+
+    let unsubscribe: (() => void) | undefined;
+    
+    fetchFollowingAndPosts().then(unsub => {
+        if (unsub) {
+            unsubscribe = unsub;
+        }
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+        if (unsubscribe) {
+            unsubscribe();
+        }
+    };
+}, [user]);
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
@@ -132,12 +171,17 @@ export default function DashboardPage() {
 
     setIsSubmitting(true);
     try {
+      // Get the latest user data to ensure username and photo are up-to-date
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+
       await addDoc(collection(db, "posts"), {
         content: postContent,
         authorId: user.uid,
-        authorName: user.displayName,
-        authorUsername: user.email?.split('@')[0],
-        authorAvatar: user.photoURL, // Directly use the photoURL from auth user
+        authorName: userData?.name || user.displayName,
+        authorUsername: userData?.username || user.email?.split('@')[0],
+        authorAvatar: userData?.photoURL || user.photoURL,
         createdAt: serverTimestamp(),
         imageUrl: null,
         aiHint: null,
@@ -183,12 +227,12 @@ export default function DashboardPage() {
               rows={3}
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !user}
             />
           </div>
         </CardHeader>
         <CardFooter className="flex justify-end p-4 pt-0">
-          <Button type="submit" disabled={isSubmitting || !postContent.trim()}>
+          <Button type="submit" disabled={isSubmitting || !postContent.trim() || !user}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Post
           </Button>
@@ -203,7 +247,8 @@ export default function DashboardPage() {
         </div>
       ) : posts.length === 0 ? (
         <Card className="text-center p-8 text-muted-foreground">
-          <p>No posts yet. Be the first to share something!</p>
+          <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
+          <p className="mt-2">Start by following some people or creating your first post.</p>
         </Card>
       ) : (
         posts.map((post) => (
