@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -582,28 +581,20 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   }, [docId, collectionType, toast]);
   
   const commentThreads = useMemo(() => {
-    const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, c]));
-    const threads: { main: Comment; replies: Comment[] }[] = [];
-    const processedIds = new Set<string>();
+    const commentMap = new Map(allComments.map(c => [c.id, { ...c, replies: [] as Comment[] }]));
+    const threads: Comment[] = [];
 
     for (const comment of allComments) {
-        if (!comment.parentId && !processedIds.has(comment.id)) {
-            const replies: Comment[] = [];
-            const findReplies = (parentId: string) => {
-                for (const reply of allComments) {
-                    if (reply.parentId === parentId) {
-                        replies.push(reply);
-                        processedIds.add(reply.id);
-                        findReplies(reply.id);
-                    }
-                }
-            };
-            findReplies(comment.id);
-            threads.push({ main: comment, replies });
-            processedIds.add(comment.id);
+      if (comment.parentId) {
+        const parent = commentMap.get(comment.parentId);
+        if (parent) {
+          parent.replies.push(comment);
         }
+      } else {
+        threads.push(commentMap.get(comment.id)!);
+      }
     }
-    return threads.sort((a,b) => (a.main.createdAt?.toMillis() ?? 0) - (b.main.createdAt?.toMillis() ?? 0));
+    return threads;
   }, [allComments]);
 
 
@@ -627,15 +618,15 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
         ) : commentThreads.length > 0 ? (
           <div className="space-y-0">
             {commentThreads.map((thread) => (
-                <div key={thread.main.id} className="border-t first:border-t-0">
+                <div key={thread.id} className="border-t first:border-t-0">
                     <CommentItem
-                        comment={thread.main}
+                        comment={thread}
                         docId={docId}
                         collectionType={collectionType}
                         onReplyClick={handleReplyClick}
                     />
-                    {thread.replies.map(reply => (
-                        <div key={reply.id} className="pl-4 sm:pl-8">
+                    {(commentMap.get(thread.id)?.replies || []).map(reply => (
+                        <div key={reply.id} className="pl-0">
                              <CommentItem
                                 comment={reply}
                                 docId={docId}
@@ -666,4 +657,4 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 }
 // #endregion
 
-
+    
