@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, where, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 
@@ -109,60 +109,39 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
 
+  // Simplified and robust useEffect for fetching posts
   useEffect(() => {
+    // Only run if the user is authenticated
     if (!user) {
       setLoadingPosts(false);
-      setPosts([]);
       return;
     }
 
     setLoadingPosts(true);
 
-    const userDocRef = doc(db, 'users', user.uid);
+    // Basic query to get all posts, ordered by creation date
+    const postsQuery = query(
+        collection(db, "posts"),
+        orderBy("createdAt", "desc")
+    );
 
-    // First, listen for changes in the current user's document (to get following list)
-    const unsubscribeUser = onSnapshot(userDocRef, (userSnap) => {
-        const userData = userSnap.data();
-        const followingIds = userData?.following || [];
-
-        // Always include the current user in the feed
-        const authorsToFetch = [...new Set([user.uid, ...followingIds])];
-        
-        // This check is crucial. The 'in' query in Firestore
-        // throws an error if the array is empty.
-        if (authorsToFetch.length === 0) {
-            setPosts([]);
-            setLoadingPosts(false);
-            return; // Exit if there's no one to fetch posts from
-        }
-
-        const postsQuery = query(
-            collection(db, "posts"),
-            where("authorId", "in", authorsToFetch),
-            orderBy("createdAt", "desc")
-        );
-
-        // Now, set up the listener for the posts
-        const unsubscribePosts = onSnapshot(postsQuery, (querySnapshot) => {
-            const postsData: Post[] = [];
-            querySnapshot.forEach((doc) => {
-                postsData.push({ id: doc.id, ...doc.data() } as Post);
-            });
-            setPosts(postsData);
-            setLoadingPosts(false);
-        }, (error) => {
-            console.error("Error fetching posts:", error);
-            setLoadingPosts(false);
+    // Set up the real-time listener
+    const unsubscribe = onSnapshot(postsQuery, (querySnapshot) => {
+        const postsData: Post[] = [];
+        querySnapshot.forEach((doc) => {
+            postsData.push({ id: doc.id, ...doc.data() } as Post);
         });
-
-        // Return a cleanup function for the nested posts listener
-        return () => unsubscribePosts();
+        setPosts(postsData);
+        setLoadingPosts(false);
+    }, (error) => {
+        console.error("Error fetching posts:", error);
+        setLoadingPosts(false);
     });
 
-    // Return a cleanup function for the top-level user listener
-    return () => unsubscribeUser();
+    // Cleanup function to detach the listener when the component unmounts
+    return () => unsubscribe();
 
-  }, [user]);
+  }, [user]); // This effect re-runs only when the user object changes (login/logout)
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
