@@ -25,7 +25,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, MessageSquareReply, Heart } from 'lucide-react';
+import { Loader2, Trash2, MessageSquareReply, Heart, X } from 'lucide-react';
 import { getInitials, cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -42,7 +42,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useCommentInteraction } from '@/hooks/use-comment-interaction';
 
-
 interface Comment extends DocumentData {
   id: string;
   authorId: string;
@@ -54,7 +53,6 @@ interface Comment extends DocumentData {
   parentId: string | null;
   parentAuthorUsername?: string;
   replyCount: number;
-  replies?: Comment[];
   likes: number;
 }
 
@@ -129,7 +127,7 @@ function CommentForm({
 
       await batch.commit();
       setCommentText('');
-      onCommentPosted(); // This will close the form
+      onCommentPosted();
     } catch (error) {
       console.error("Error adding comment/reply: ", error);
       toast({ title: "Error", description: "Failed to post reply.", variant: "destructive" });
@@ -160,19 +158,21 @@ function CommentForm({
             className="bg-secondary/50"
             disabled={isSubmitting}
           />
-          <div className="mt-2 flex items-center justify-end gap-4">
+          <div className="mt-2 flex items-center justify-between gap-4">
             <span className={`text-xs ${remainingChars < 20 ? (remainingChars < 0 ? 'text-destructive' : 'text-yellow-500') : 'text-muted-foreground'}`}>
               {remainingChars}
             </span>
-            {parentComment && (
-              <Button type="button" variant="ghost" onClick={onCommentPosted} disabled={isSubmitting}>
-                Cancel
+            <div className="flex items-center gap-2">
+              {parentComment && (
+                <Button type="button" variant="ghost" size="sm" onClick={onCommentPosted} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+              )}
+              <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Reply
               </Button>
-            )}
-            <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reply
-            </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -181,7 +181,7 @@ function CommentForm({
 }
 
 
-interface CommentWithRepliesProps {
+interface CommentItemProps {
     comment: Comment;
     docId: string;
     collectionType: 'posts' | 'wishlists';
@@ -191,7 +191,7 @@ interface CommentWithRepliesProps {
 }
 
 
-function CommentWithReplies({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentWithRepliesProps) {
+function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -243,12 +243,10 @@ function CommentWithReplies({ comment, docId, collectionType, docAuthorId, activ
 
     return (
         <div className="flex w-full items-start gap-2 sm:gap-4">
-            <div className="flex flex-col items-center">
-                <Avatar className="h-9 w-9">
-                    <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                    <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-                </Avatar>
-            </div>
+            <Avatar className="h-9 w-9">
+                <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+            </Avatar>
 
             <div className="flex-1 pt-1.5 min-w-0">
                 <div className="group space-y-2">
@@ -306,25 +304,7 @@ function CommentWithReplies({ comment, docId, collectionType, docAuthorId, activ
                 </div>
 
                 {isReplyFormOpen && (
-                    <div>
-                        <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                    </div>
-                )}
-                
-                {comment.replies && comment.replies.length > 0 && (
-                    <div className="space-y-6 pt-4">
-                        {comment.replies.map(reply => (
-                            <CommentWithReplies 
-                                key={reply.id}
-                                comment={reply} 
-                                docId={docId} 
-                                collectionType={collectionType} 
-                                docAuthorId={docAuthorId}
-                                activeReplyId={activeReplyId}
-                                setActiveReplyId={setActiveReplyId}
-                            />
-                        ))}
-                    </div>
+                    <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
                 )}
             </div>
         </div>
@@ -346,27 +326,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-      
-      const commentMap = new Map<string, Comment>();
-      const topLevelComments: Comment[] = [];
-
-      allComments.forEach(comment => {
-        comment.replies = [];
-        commentMap.set(comment.id, comment);
-      });
-      
-      allComments.forEach(comment => {
-        if (comment.parentId) {
-          const parent = commentMap.get(comment.parentId);
-          if (parent) {
-            parent.replies?.push(comment);
-          }
-        } else {
-          topLevelComments.push(comment);
-        }
-      });
-
-      setComments(topLevelComments);
+      setComments(allComments);
       setLoadingComments(false);
     }, (error) => {
       console.error("Error fetching comments: ", error);
@@ -377,6 +337,17 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
   
+  const commentTree = (commentList: Comment[], parentId: string | null = null): Comment[] => {
+      const result: Comment[] = [];
+      commentList.filter(c => c.parentId === parentId).forEach(comment => {
+          result.push(comment);
+          const replies = commentTree(commentList, comment.id);
+          result.push(...replies);
+      });
+      return result;
+  }
+  
+  const sortedComments = commentTree(comments);
 
   return (
     <div className="space-y-4">
@@ -391,9 +362,9 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : comments.length > 0 ? (
-          comments.map((comment) => (
-            <CommentWithReplies 
+        ) : sortedComments.length > 0 ? (
+          sortedComments.map((comment) => (
+            <CommentItem 
                 key={comment.id} 
                 comment={comment} 
                 docId={docId} 
@@ -410,3 +381,5 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     </div>
   );
 }
+
+    
