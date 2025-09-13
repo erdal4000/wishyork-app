@@ -402,7 +402,6 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                 <p className="whitespace-nowrap text-xs text-muted-foreground">
                   · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
                 </p>
-                {comment.edited && <p className="text-xs text-muted-foreground">(edited)</p>}
               </div>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -526,7 +525,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
     setLoadingComments(true);
     const commentsRef = collection(db, collectionType, docId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+    const q = query(commentsRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
@@ -545,14 +544,19 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     const commentMap = new Map(allComments.map(c => [c.id, { ...c, replies: [] as CommentWithReplies[] }]));
     const threads: CommentWithReplies[] = [];
 
-    for (const comment of allComments) {
+    // Use a reversed array for processing to build the tree from children to parents
+    // because the query is now 'desc'
+    const reversedComments = [...allComments].reverse();
+
+    for (const comment of reversedComments) {
       if (comment.parentId) {
         const parent = commentMap.get(comment.parentId);
         if (parent) {
-            parent.replies.push(commentMap.get(comment.id)!);
+            // Add reply to the beginning to maintain reverse chronological order
+            parent.replies.unshift(commentMap.get(comment.id)!);
         }
       } else {
-        threads.push(commentMap.get(comment.id)!);
+        threads.unshift(commentMap.get(comment.id)!);
       }
     }
     return threads;
@@ -562,17 +566,17 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     setReplyingTo(comment);
   };
   
-  const renderCommentThread = (commentThread: CommentWithReplies) => {
+  const renderCommentThread = (commentThread: CommentWithReplies, isMainThread: boolean) => {
     return (
-        <div key={commentThread.id} className="border-t">
+        <div key={commentThread.id} className={isMainThread ? "border-t" : ""}>
              <CommentItem
                 comment={commentThread}
                 docId={docId}
                 collectionType={collectionType}
                 onReplyClick={handleReplyClick}
             />
-            <div className="ml-0">
-                {commentThread.replies.map(renderCommentThread)}
+            <div className="pl-0">
+                {commentThread.replies.map(reply => renderCommentThread(reply, false))}
             </div>
         </div>
     );
@@ -593,7 +597,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : commentThreads.length > 0 ? (
           <div className="space-y-0">
-            {commentThreads.map(renderCommentThread)}
+            {commentThreads.map(thread => renderCommentThread(thread, true))}
           </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
@@ -613,4 +617,3 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   );
 }
 // #endregion
-
