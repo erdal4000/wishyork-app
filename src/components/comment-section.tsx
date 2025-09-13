@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import {
@@ -18,12 +18,14 @@ import {
   DocumentData,
   Timestamp,
   getDoc,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, MessageSquareReply, CornerDownRight } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +40,8 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+
 
 interface Comment extends DocumentData {
   id: string;
@@ -47,6 +51,9 @@ interface Comment extends DocumentData {
   authorAvatar: string;
   text: string;
   createdAt: Timestamp;
+  parentId: string | null;
+  replyCount: number;
+  replies?: Comment[];
 }
 
 interface CommentSectionProps {
@@ -54,13 +61,230 @@ interface CommentSectionProps {
   collectionType: 'posts' | 'wishlists';
 }
 
+function CommentForm({
+    docId,
+    collectionType,
+    parentId = null,
+    onCommentPosted,
+  }: {
+    docId: string;
+    collectionType: 'posts' | 'wishlists';
+    parentId?: string | null;
+    onCommentPosted: () => void;
+  }) {
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [commentText, setCommentText] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+  
+    const handleAddComment = async (e: FormEvent) => {
+      e.preventDefault();
+      if (!user || !commentText.trim()) return;
+  
+      setIsSubmitting(true);
+  
+      try {
+        const parentDocRef = doc(db, collectionType, docId);
+        const commentsColRef = collection(parentDocRef, 'comments');
+        
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+  
+        const batch = writeBatch(db);
+  
+        const newCommentData = {
+          text: commentText,
+          authorId: user.uid,
+          authorName: userData?.name || user.displayName,
+          authorUsername: userData?.username || 'user',
+          authorAvatar: userData?.photoURL || user.photoURL,
+          createdAt: serverTimestamp(),
+          parentId: parentId,
+          replyCount: 0,
+        };
+  
+        batch.set(doc(commentsColRef), newCommentData);
+  
+        if (parentId) {
+          // It's a reply, increment replyCount on the parent comment
+          const parentCommentRef = doc(commentsColRef, parentId);
+          batch.update(parentCommentRef, { replyCount: increment(1) });
+        } else {
+          // It's a top-level comment, increment commentCount on the post/wishlist
+          batch.update(parentDocRef, { commentCount: increment(1) });
+        }
+  
+        await batch.commit();
+        setCommentText('');
+        onCommentPosted();
+      } catch (error) {
+        console.error("Error adding comment/reply: ", error);
+        toast({ title: "Error", description: "Failed to post.", variant: "destructive" });
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+  
+    if (!user) return null;
+  
+    return (
+      <form onSubmit={handleAddComment} className="flex items-start gap-2 sm:gap-4">
+        <Avatar className="hidden h-9 w-9 sm:flex">
+          <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
+          <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <Textarea
+            placeholder={parentId ? "Write a reply..." : "Add a comment..."}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            rows={parentId ? 2 : 2}
+            className="bg-secondary/50"
+            disabled={isSubmitting}
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            {parentId && (
+              <Button type="button" variant="ghost" onClick={onCommentPosted} disabled={isSubmitting}>
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" size={parentId ? "sm" : "default"} disabled={isSubmitting || !commentText.trim()}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {parentId ? "Reply" : "Post"}
+            </Button>
+          </div>
+        </div>
+      </form>
+    );
+}
+
+function CommentWithReplies({ comment, docId, collectionType }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists' }) {
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [showReplyForm, setShowReplyForm] = useState(false);
+  
+    const handleDeleteComment = async (commentToDelete: Comment) => {
+      if (!user) return;
+  
+      try {
+        const batch = writeBatch(db);
+        const parentDocRef = doc(db, collectionType, docId);
+        const commentsColRef = collection(parentDocRef, 'comments');
+  
+        // 1. Delete the main comment
+        const mainCommentRef = doc(commentsColRef, commentToDelete.id);
+        batch.delete(mainCommentRef);
+  
+        // 2. If it's a top-level comment, find and delete all its replies
+        if (!commentToDelete.parentId) {
+          const repliesQuery = query(commentsColRef, where("parentId", "==", commentToDelete.id));
+          const repliesSnapshot = await getDocs(repliesQuery);
+          let deletedRepliesCount = 0;
+          repliesSnapshot.forEach(replyDoc => {
+            batch.delete(replyDoc.ref);
+            deletedRepliesCount++;
+          });
+          // Decrement post's commentCount by 1 (for the main comment) + number of replies
+          batch.update(parentDocRef, { commentCount: increment(-(1 + deletedRepliesCount)) });
+        } else {
+          // 3. If it's a reply, decrement the replyCount of its parent comment
+          const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
+          batch.update(parentCommentRef, { replyCount: increment(-1) });
+          // And decrement the post's total commentCount by 1
+          batch.update(parentDocRef, { commentCount: increment(-1) });
+        }
+  
+        await batch.commit();
+        toast({ title: "Success", description: "Comment deleted." });
+      } catch(error) {
+        console.error("Error deleting comment and its replies: ", error);
+        toast({ title: "Error", description: "Could not delete comment.", variant: "destructive" });
+      }
+    };
+  
+    return (
+      <div className="flex items-start gap-2 sm:gap-4">
+        <Avatar className="h-9 w-9">
+          <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+          <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <div className="group space-y-2">
+            <div className="rounded-lg bg-muted p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">
+                  <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
+                    {comment.authorName}
+                  </Link>
+                </p>
+                {user?.uid === comment.authorId && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and its replies" : ""}.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
+              <p className="text-sm">{comment.text}</p>
+            </div>
+            <div className="flex items-center gap-2 pl-3">
+              <p className="text-xs text-muted-foreground">
+                {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+              </p>
+              {!comment.parentId && ( // Only show Reply button for top-level comments
+                <>
+                  <span className="text-xs text-muted-foreground">&middot;</span>
+                  <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplyForm(!showReplyForm)}>
+                    <MessageSquareReply className="mr-1 h-3 w-3" />
+                    Reply
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+  
+          {/* Reply Form */}
+          {showReplyForm && (
+            <div className="pt-2">
+              <CommentForm docId={docId} collectionType={collectionType} parentId={comment.id} onCommentPosted={() => setShowReplyForm(false)} />
+            </div>
+          )}
+  
+          {/* Replies Section */}
+          {comment.replies && comment.replies.length > 0 && (
+             <div className="pt-4 pl-4 border-l-2 ml-4">
+                {comment.replies.map(reply => (
+                  <div key={reply.id} className="mt-4">
+                     <CommentWithReplies comment={reply} docId={docId} collectionType={collectionType} />
+                  </div>
+                ))}
+            </div>
+          )}
+           {!comment.parentId && comment.replyCount > 0 && (!comment.replies || comment.replies.length === 0) && (
+              <p className="pl-3 pt-2 text-xs text-muted-foreground">This comment has replies but they are not loaded.</p>
+           )}
+        </div>
+      </div>
+    );
+}
+
 export function CommentSection({ docId, collectionType }: CommentSectionProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!docId) return;
@@ -70,8 +294,31 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-      setComments(fetchedComments);
+      const allComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+      
+      const commentMap = new Map<string, Comment>();
+      const topLevelComments: Comment[] = [];
+
+      // First pass: create map and identify top-level comments
+      allComments.forEach(comment => {
+        comment.replies = [];
+        commentMap.set(comment.id, comment);
+        if (!comment.parentId) {
+          topLevelComments.push(comment);
+        }
+      });
+
+      // Second pass: nest replies under their parents
+      allComments.forEach(comment => {
+        if (comment.parentId) {
+          const parent = commentMap.get(comment.parentId);
+          if (parent) {
+            parent.replies?.push(comment);
+          }
+        }
+      });
+
+      setComments(topLevelComments);
       setLoadingComments(false);
     }, (error) => {
       console.error("Error fetching comments: ", error);
@@ -81,94 +328,12 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
-
-  const handleAddComment = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!user || !newComment.trim()) return;
-
-    setIsSubmitting(true);
-
-    try {
-        const parentDocRef = doc(db, collectionType, docId);
-        const commentsColRef = collection(parentDocRef, 'comments');
-
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        const userData = userDoc.data();
-
-        const batch = writeBatch(db);
-
-        batch.set(doc(commentsColRef), {
-          text: newComment,
-          authorId: user.uid,
-          authorName: userData?.name || user.displayName,
-          authorUsername: userData?.username || 'user',
-          authorAvatar: userData?.photoURL || user.photoURL,
-          createdAt: serverTimestamp(),
-        });
-
-        batch.update(parentDocRef, {
-          commentCount: increment(1),
-        });
-        
-        await batch.commit();
-        setNewComment('');
-
-    } catch (error) {
-      console.error("Error adding comment: ", error);
-      toast({ title: "Error", description: "Failed to post comment.", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
   
-  const handleDeleteComment = async (commentId: string) => {
-    if (!user) return;
-
-    try {
-        const parentDocRef = doc(db, collectionType, docId);
-        const commentRef = doc(parentDocRef, 'comments', commentId);
-
-        const batch = writeBatch(db);
-        batch.delete(commentRef);
-        batch.update(parentDocRef, { commentCount: increment(-1) });
-        
-        await batch.commit();
-        toast({ title: "Success", description: "Comment deleted." });
-    } catch(error) {
-        console.error("Error deleting comment: ", error);
-        toast({ title: "Error", description: "Could not delete comment.", variant: "destructive" });
-    }
-  };
-
 
   return (
     <div className="space-y-4 border-t px-4 py-4">
       {/* Post a comment form */}
-      {user && (
-        <form onSubmit={handleAddComment} className="flex items-start gap-4">
-          <Avatar className="h-9 w-9">
-            <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
-            <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <Textarea
-              placeholder="Add a comment..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              rows={2}
-              className="bg-secondary/50"
-              disabled={isSubmitting}
-            />
-            <div className="mt-2 flex justify-end">
-              <Button type="submit" disabled={isSubmitting || !newComment.trim()}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Post
-              </Button>
-            </div>
-          </div>
-        </form>
-      )}
+      <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => {}} />
 
       {/* Comments List */}
       <div className="space-y-6">
@@ -178,50 +343,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : comments.length > 0 ? (
           comments.map((comment) => (
-            <div key={comment.id} className="flex items-start gap-4">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 group">
-                <div className="rounded-lg bg-muted p-3">
-                  <div className="flex items-center justify-between">
-                     <p className="text-sm font-semibold">
-                       <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
-                         {comment.authorName}
-                       </Link>
-                     </p>
-                     {user?.uid === comment.authorId && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete your comment.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteComment(comment.id)} className="bg-destructive hover:bg-destructive/90">
-                                        Delete
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                     )}
-                  </div>
-                  <p className="text-sm">{comment.text}</p>
-                </div>
-                <p className="mt-1.5 pl-3 text-xs text-muted-foreground">
-                  {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                </p>
-              </div>
-            </div>
+            <CommentWithReplies key={comment.id} comment={comment} docId={docId} collectionType={collectionType} />
           ))
         ) : (
           <p className="py-4 text-center text-sm text-muted-foreground">No comments yet. Be the first to comment!</p>
@@ -230,3 +352,4 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     </div>
   );
 }
+
