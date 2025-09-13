@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import {
@@ -188,6 +188,7 @@ interface CommentItemProps {
     docAuthorId: string;
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
+    isReply?: boolean;
 }
 
 
@@ -225,7 +226,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
         });
 
         if (commentToDelete.parentId) {
-          const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
+          const parentCommentRef = doc(commentsCol-colRef, commentToDelete.parentId);
           batch.update(parentCommentRef, { replyCount: increment(-1) });
         }
   
@@ -242,6 +243,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
     };
 
     return (
+      <div className="flex w-full flex-col">
         <div className="flex w-full items-start gap-2 sm:gap-4">
             <Avatar className="h-9 w-9">
                 <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
@@ -302,17 +304,19 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
                         </Button>
                     </div>
                 </div>
-
-                {isReplyFormOpen && (
-                    <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                )}
             </div>
         </div>
+        {isReplyFormOpen && (
+            <div className="w-full pl-0">
+                <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+            </div>
+        )}
+      </div>
     );
 }
 
 export function CommentSection({ docId, collectionType, docAuthorId }: CommentSectionProps) {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [allComments, setAllComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -325,8 +329,8 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-      setComments(allComments);
+      const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+      setAllComments(commentsData);
       setLoadingComments(false);
     }, (error) => {
       console.error("Error fetching comments: ", error);
@@ -337,17 +341,34 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
   
-  const commentTree = (commentList: Comment[], parentId: string | null = null): Comment[] => {
-      const result: Comment[] = [];
-      commentList.filter(c => c.parentId === parentId).forEach(comment => {
-          result.push(comment);
-          const replies = commentTree(commentList, comment.id);
-          result.push(...replies);
+  const sortedComments = useMemo(() => {
+    const commentMap = new Map(allComments.map(c => [c.id, {...c, children: [] as Comment[]}]));
+    const rootComments: Comment[] = [];
+
+    allComments.forEach(comment => {
+      if (comment.parentId && commentMap.has(comment.parentId)) {
+        commentMap.get(comment.parentId)?.children.push(comment as never);
+      } else {
+        rootComments.push(comment);
+      }
+    });
+
+    const flattened: Comment[] = [];
+    const walk = (comments: Comment[]) => {
+      comments.forEach(comment => {
+        flattened.push(comment);
+        const children = commentMap.get(comment.id)?.children;
+        if (children) {
+          walk(children.sort((a,b) => a.createdAt.toMillis() - b.createdAt.toMillis()));
+        }
       });
-      return result;
-  }
-  
-  const sortedComments = commentTree(comments);
+    };
+
+    walk(rootComments);
+    return flattened;
+
+  }, [allComments]);
+
 
   return (
     <div className="space-y-4">
@@ -381,5 +402,3 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     </div>
   );
 }
-
-    
