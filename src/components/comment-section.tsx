@@ -186,14 +186,12 @@ interface CommentWithRepliesProps {
     docId: string;
     collectionType: 'posts' | 'wishlists';
     docAuthorId: string;
-    isTopLevel: boolean;
-    hasReplies: boolean;
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
 }
 
 
-function CommentWithReplies({ comment, docId, collectionType, docAuthorId, isTopLevel, hasReplies, activeReplyId, setActiveReplyId }: CommentWithRepliesProps) {
+function CommentWithReplies({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentWithRepliesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
@@ -242,27 +240,16 @@ function CommentWithReplies({ comment, docId, collectionType, docAuthorId, isTop
         setIsDeleting(false);
       }
     };
-    
-    // The connecting line from a parent comment to its reply
-    const showParentLine = !isTopLevel;
-    // The connecting line from a comment down to its own replies
-    const showChildLine = hasReplies;
 
     return (
-        <div className="relative flex w-full items-start gap-2 sm:gap-4">
-            {/* Avatar and Lines Column */}
+        <div className="flex w-full items-start gap-2 sm:gap-4">
             <div className="flex flex-col items-center">
                 <Avatar className="h-9 w-9">
                     <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
                     <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
                 </Avatar>
-                {showChildLine && <div className="mt-2 w-0.5 flex-grow bg-border" />}
             </div>
 
-            {/* Vertical line connecting to parent */}
-            {showParentLine && <div className="absolute left-4 top-[-1.5rem] h-8 w-0.5 -translate-x-1/2 bg-border" />}
-
-            {/* Comment Content Column */}
             <div className="flex-1 pt-1.5 min-w-0">
                 <div className="group space-y-2">
                     <div>
@@ -333,8 +320,6 @@ function CommentWithReplies({ comment, docId, collectionType, docAuthorId, isTop
                                 docId={docId} 
                                 collectionType={collectionType} 
                                 docAuthorId={docAuthorId}
-                                isTopLevel={false}
-                                hasReplies={reply.replies && reply.replies.length > 0}
                                 activeReplyId={activeReplyId}
                                 setActiveReplyId={setActiveReplyId}
                             />
@@ -414,8 +399,6 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
                 docId={docId} 
                 collectionType={collectionType}
                 docAuthorId={docAuthorId}
-                isTopLevel={true}
-                hasReplies={comment.replies && comment.replies.length > 0}
                 activeReplyId={activeReplyId} 
                 setActiveReplyId={setActiveReplyId} 
             />
