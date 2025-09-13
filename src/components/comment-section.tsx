@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, FormEvent, useMemo } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import {
@@ -24,7 +24,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, MessageSquareReply, CornerDownRight } from 'lucide-react';
+import { Loader2, Trash2, MessageSquareReply, Heart } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -39,7 +39,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { useCommentInteraction } from '@/hooks/use-comment-interaction';
 
 
 interface Comment extends DocumentData {
@@ -54,6 +54,7 @@ interface Comment extends DocumentData {
   parentAuthorUsername?: string;
   replyCount: number;
   replies?: Comment[];
+  likes: number;
 }
 
 interface CommentSectionProps {
@@ -102,6 +103,8 @@ function CommentForm({
           createdAt: serverTimestamp(),
           parentId: parentComment?.id || null,
           replyCount: 0,
+          likes: 0,
+          likedBy: [],
         };
 
         if (parentComment) {
@@ -167,6 +170,7 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
     const [showReplyForm, setShowReplyForm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showReplies, setShowReplies] = useState(false);
+    const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
   
     const handleDeleteComment = async (commentToDelete: Comment) => {
       if (!user || isDeleting) return;
@@ -254,6 +258,10 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
               <p className="text-sm">{comment.text}</p>
             </div>
             <div className="flex items-center gap-2 pl-3">
+               <Button variant="link" size="sm" className="p-0 h-auto text-xs text-muted-foreground" onClick={toggleLike} disabled={isLiking || !user}>
+                <Heart className={`mr-1 h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                {comment.likes > 0 ? comment.likes : ''}
+              </Button>
               <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setShowReplyForm(!showReplyForm)}>
                 <MessageSquareReply className="mr-1 h-3 w-3" />
                 Reply
