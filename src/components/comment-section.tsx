@@ -20,12 +20,13 @@ import {
   getDoc,
   where,
   getDocs,
+  updateDoc,
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, Heart, MessageCircle, Repeat2, Bookmark, Share2 } from 'lucide-react';
+import { Loader2, Trash2, Heart, MessageCircle, Repeat2, Bookmark, Share2, MoreHorizontal, Edit, AlertTriangle } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +48,13 @@ import {
   DialogTitle,
   DialogFooter
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCommentInteraction } from '@/hooks/use-comment-interaction';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -62,6 +70,7 @@ interface Comment extends DocumentData {
   parentAuthorUsername?: string;
   replyCount: number;
   likes: number;
+  edited?: boolean;
 }
 
 const COMMENT_MAX_LENGTH = 300;
@@ -109,6 +118,7 @@ function ReplyDialog({ parentComment, docId, collectionType, open, onOpenChange 
         replyCount: 0,
         likes: 0,
         likedBy: [],
+        edited: false,
       };
 
       const newCommentRef = doc(commentsColRef);
@@ -225,6 +235,7 @@ function CommentForm({
         replyCount: 0,
         likes: 0,
         likedBy: [],
+        edited: false,
       };
 
       const newCommentRef = doc(commentsColRef);
@@ -293,7 +304,47 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
   const { user } = useAuth();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.text);
   const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
+
+  const handleUpdateComment = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editText.trim()) return;
+
+    try {
+        const commentRef = doc(db, collectionType, docId, 'comments', comment.id);
+        await updateDoc(commentRef, {
+            text: editText,
+            edited: true,
+        });
+        setIsEditing(false);
+        toast({ title: "Success", description: "Your comment has been updated." });
+    } catch (error) {
+        console.error("Error updating comment:", error);
+        toast({ title: "Error", description: "Failed to update comment.", variant: "destructive" });
+    }
+  };
+
+  const handleReportComment = async () => {
+    if (!user) return;
+    try {
+        await addDoc(collection(db, 'reports'), {
+            type: 'comment',
+            contentId: comment.id,
+            parentContentId: docId,
+            parentCollectionType: collectionType,
+            reportedByUid: user.uid,
+            reportedAt: serverTimestamp(),
+            reason: 'User reported from menu.',
+            status: 'new',
+        });
+        toast({ title: "Comment Reported", description: "Thank you for your feedback. Our moderation team will review this comment." });
+    } catch (error) {
+        console.error("Error reporting comment:", error);
+        toast({ title: "Error", description: "Could not report comment.", variant: "destructive" });
+    }
+  };
 
   const handleDeleteComment = async (commentToDelete: Comment) => {
     if (!user || isDeleting) return;
@@ -326,7 +377,10 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
 
       if (commentToDelete.parentId) {
         const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
-        batch.update(parentCommentRef, { replyCount: increment(-1) });
+        const parentSnap = await getDoc(parentCommentRef);
+        if (parentSnap.exists()) {
+             batch.update(parentCommentRef, { replyCount: increment(-1) });
+        }
       }
 
       batch.update(parentDocRef, { commentCount: increment(-totalDeleted) });
@@ -340,6 +394,8 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
       setIsDeleting(false);
     }
   };
+  
+  const isOwnComment = user?.uid === comment.authorId;
 
   return (
     <div className="flex w-full items-start gap-2 py-4 sm:gap-4">
@@ -361,26 +417,48 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                 <p className="whitespace-nowrap text-xs text-muted-foreground">
                   · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
                 </p>
+                {comment.edited && <p className="text-xs text-muted-foreground">(edited)</p>}
               </div>
-              {user?.uid === comment.authorId && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100" disabled={isDeleting}>
-                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                      <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100" disabled={isDeleting}>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {isOwnComment ? (
+                            <>
+                            <DropdownMenuItem onSelect={() => setIsEditing(true)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                <span>Edit</span>
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        <span>Delete</span>
+                                    </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                            </>
+                        ) : (
+                            <DropdownMenuItem onSelect={handleReportComment}>
+                                <AlertTriangle className="mr-2 h-4 w-4" />
+                                <span>Report comment</span>
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             {comment.parentAuthorUsername && (
@@ -389,61 +467,79 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
               </p>
             )}
 
-            <p className="whitespace-pre-wrap text-sm">{comment.text}</p>
+            {isEditing ? (
+                <form onSubmit={handleUpdateComment} className="mt-2">
+                    <Textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        className="text-sm"
+                        autoFocus
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
+                        <Button type="submit" size="sm">Save</Button>
+                    </div>
+                </form>
+            ) : (
+                 <p className="whitespace-pre-wrap text-sm">{comment.text}</p>
+            )}
+
           </div>
 
-          <div className="-ml-2 flex justify-between">
-            <TooltipProvider>
-              <div className="flex items-center text-muted-foreground">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onReplyClick(comment)}>
-                      <MessageCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
-                </Tooltip>
+          {!isEditing && (
+            <div className="-ml-2 flex justify-between">
+                <TooltipProvider>
+                <div className="flex items-center text-muted-foreground">
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onReplyClick(comment)}>
+                        <MessageCircle className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                    </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Repeat2 className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
-                </Tooltip>
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Repeat2 className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                    </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
-                      <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
-                </Tooltip>
-                {comment.likes > 0 && <span className={`pr-2 text-sm ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
-              </div>
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
+                        <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                    </Tooltip>
+                    {comment.likes > 0 && <span className={`pr-2 text-sm ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
+                </div>
 
-              <div className="flex items-center text-muted-foreground">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Bookmark className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Share2 className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
-                </Tooltip>
-              </div>
-            </TooltipProvider>
-          </div>
+                <div className="flex items-center text-muted-foreground">
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Bookmark className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Share2 className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                    </Tooltip>
+                </div>
+                </TooltipProvider>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -486,33 +582,24 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   
   const commentThreads = useMemo(() => {
     const threads: { main: Comment; replies: Comment[] }[] = [];
-    const commentMap = new Map(allComments.map(c => [c.id, c]));
-    const handledIds = new Set<string>();
+    const commentMap = new Map(allComments.map(c => [c.id, { ...c, children: [] as Comment[] }]));
+    
+    const rootComments: Comment[] = [];
 
     for (const comment of allComments) {
-      if (handledIds.has(comment.id)) continue;
-      if (!comment.parentId) {
-        const main = comment;
-        const replies: Comment[] = [];
-        
-        const findReplies = (parentId: string) => {
-          allComments.forEach(reply => {
-            if (reply.parentId === parentId) {
-              replies.push(reply);
-              handledIds.add(reply.id);
-              findReplies(reply.id);
-            }
-          });
-        };
-        
-        findReplies(main.id);
-        replies.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-        threads.push({ main, replies });
-        handledIds.add(main.id);
-      }
+        if (comment.parentId && commentMap.has(comment.parentId)) {
+            const parent = commentMap.get(comment.parentId);
+            parent?.children.push(comment);
+        } else {
+            rootComments.push(comment);
+        }
     }
-    
-    return threads;
+
+    return rootComments.map(mainComment => ({
+        main: mainComment,
+        replies: Array.from(commentMap.values()).filter(c => c.parentId === mainComment.id)
+    }));
+
   }, [allComments]);
 
 
@@ -535,27 +622,26 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : commentThreads.length > 0 ? (
           <div>
-              {commentThreads.map((thread, index) => (
-                  <div key={thread.main.id} className="border-t">
-                      {/* Render main comment */}
-                      <CommentItem
-                          comment={thread.main}
-                          docId={docId}
-                          collectionType={collectionType}
-                          onReplyClick={handleReplyClick}
-                      />
-                      {/* Render replies */}
-                      {thread.replies.map(reply => (
-                          <CommentItem
-                              key={reply.id}
-                              comment={reply}
-                              docId={docId}
-                              collectionType={collectionType}
-                              onReplyClick={handleReplyClick}
-                          />
-                      ))}
-                  </div>
-              ))}
+            {commentThreads.map((thread) => (
+                <div key={thread.main.id} className="border-t first:border-t-0">
+                    <CommentItem
+                        comment={thread.main}
+                        docId={docId}
+                        collectionType={collectionType}
+                        onReplyClick={handleReplyClick}
+                    />
+                    {thread.replies.map(reply => (
+                        <div key={reply.id} className="ml-0">
+                             <CommentItem
+                                comment={reply}
+                                docId={docId}
+                                collectionType={collectionType}
+                                onReplyClick={handleReplyClick}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ))}
           </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
