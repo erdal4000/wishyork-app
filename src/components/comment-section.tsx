@@ -26,7 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Loader2, Trash2, MessageSquareReply, Heart } from 'lucide-react';
-import { getInitials } from '@/lib/utils';
+import { getInitials, cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -230,100 +230,111 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
       }
     };
 
+    // Show the vertical line only if it's a reply and the author is the original post's author.
     const showLine = comment.parentId && comment.authorId === docAuthorId;
   
     return (
-      <div className="flex w-full flex-col">
-        <div className="relative flex w-full items-start gap-2 sm:gap-4">
-           {showLine && (
-              <div className="absolute bottom-full left-4 h-4 w-0.5 bg-border -translate-x-1/2"></div>
-           )}
-          <div className="relative flex flex-col items-center">
-              <Avatar className="h-9 w-9 flex-shrink-0">
-                  <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                  <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-              </Avatar>
-              {(comment.replies && comment.replies.length > 0) && (
-                <div className="mt-2 w-0.5 flex-1 bg-border"></div>
-              )}
-          </div>
-          <div className="flex-1 pt-1.5">
-              <div className="group space-y-2">
-                  <div className="rounded-lg">
-                      <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm">
-                          <p className="font-semibold">
-                              <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
-                              {comment.authorName}
-                              </Link>
-                          </p>
-                          <p className='text-xs text-muted-foreground'>
-                              · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                          </p>
-                          </div>
-                          {user?.uid === comment.authorId && (
-                          <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
-                                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                              </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                              <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                  <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                              </AlertDialogContent>
-                          </AlertDialog>
-                          )}
-                      </div>
+        <div className="flex flex-col">
+            <div className="flex w-full items-start gap-2 sm:gap-4 relative">
+                {/* Left column for avatar and line */}
+                <div className="flex flex-col items-center flex-shrink-0">
+                    <Avatar className="h-9 w-9">
+                        <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                        <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+                    </Avatar>
+                    {/* Vertical line connecting to replies */}
+                    {comment.replies && comment.replies.length > 0 && (
+                        <div className="mt-2 w-0.5 flex-1 bg-border"></div>
+                    )}
+                </div>
 
-                      {comment.parentAuthorUsername && (
-                          <p className="text-sm text-muted-foreground">
-                          Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
-                          </p>
-                      )}
+                {/* Vertical line connecting to parent */}
+                {showLine && (
+                    <div className="absolute left-4 h-full w-0.5 bg-border -translate-x-1/2 -top-4"></div>
+                )}
 
-                      <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                      <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
-                          <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                          {comment.likes > 0 ? <span>{comment.likes}</span> : ''}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-muted-foreground flex items-center gap-1" onClick={handleToggleReplyForm}>
-                          <MessageSquareReply className="h-4 w-4" />
-                          Reply
-                      </Button>
-                  </div>
-              </div>
-          </div>
-        </div>
 
-        {isReplyFormOpen && (
-            <div className="pl-6 sm:pl-10">
-                 <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+                {/* Right column for comment content */}
+                <div className="flex-1 pt-1.5 min-w-0">
+                    <div className="group space-y-2">
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm flex-wrap">
+                                    <p className="font-semibold break-words">
+                                        <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
+                                        {comment.authorName}
+                                        </Link>
+                                    </p>
+                                    <p className='text-xs text-muted-foreground whitespace-nowrap'>
+                                        · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                                    </p>
+                                </div>
+                                {user?.uid === comment.authorId && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
+                                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                                    </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                                )}
+                            </div>
+
+                            {comment.parentAuthorUsername && (
+                                <p className="text-sm text-muted-foreground">
+                                Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
+                                </p>
+                            )}
+
+                            <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="sm" className="p-1 h-auto text-muted-foreground flex items-center gap-1" onClick={toggleLike} disabled={isLiking || !user}>
+                                <Heart className={`h-4 w-4 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                                {comment.likes > 0 && <span className="text-xs">{comment.likes}</span>}
+                            </Button>
+                            <Button variant="ghost" size="icon" className="p-1 h-auto text-muted-foreground" onClick={handleToggleReplyForm}>
+                                <MessageSquareReply className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        )}
 
-        {comment.replies && comment.replies.map(reply => (
-             <div key={reply.id} className="relative pl-6 sm:pl-10 pt-4">
-                  <div className="absolute left-4 top-0 h-full w-0.5 bg-border -translate-x-1/2"></div>
-                   <CommentWithReplies 
-                      comment={reply} 
-                      docId={docId} 
-                      collectionType={collectionType} 
-                      activeReplyId={activeReplyId} 
-                      setActiveReplyId={setActiveReplyId}
-                      docAuthorId={docAuthorId}
-                  />
-             </div>
-        ))}
-      </div>
+            {/* Reply Form */}
+            {isReplyFormOpen && (
+                <div className="pl-6 sm:pl-10">
+                    <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+                </div>
+            )}
+            
+            {/* Child Replies */}
+            {comment.replies && comment.replies.length > 0 && (
+                <div className="pt-4">
+                    {comment.replies.map(reply => (
+                        <CommentWithReplies 
+                            key={reply.id}
+                            comment={reply} 
+                            docId={docId} 
+                            collectionType={collectionType} 
+                            activeReplyId={activeReplyId} 
+                            setActiveReplyId={setActiveReplyId}
+                            docAuthorId={docAuthorId}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -376,7 +387,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
   return (
     <div className="space-y-4">
-      <CommentForm docId={docId} collectionType={collectionType} docAuthorId={docAuthorId} onCommentPosted={() => { setActiveReplyId(null); }} />
+      <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => { setActiveReplyId(null); }} />
 
       <div className="space-y-6">
         {loadingComments ? (
