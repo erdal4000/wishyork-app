@@ -73,6 +73,11 @@ interface Comment extends DocumentData {
   edited?: boolean;
 }
 
+interface CommentWithReplies extends Comment {
+    replies: CommentWithReplies[];
+}
+
+
 const COMMENT_MAX_LENGTH = 300;
 
 // #region Reply Dialog
@@ -580,15 +585,16 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
   
-  const commentThreads = useMemo(() => {
-    const commentMap = new Map(allComments.map(c => [c.id, { ...c, replies: [] as Comment[] }]));
-    const threads: Comment[] = [];
+  const commentThreads: CommentWithReplies[] = useMemo(() => {
+    const commentMap = new Map(allComments.map(c => [c.id, { ...c, replies: [] as CommentWithReplies[] }]));
+    const threads: CommentWithReplies[] = [];
 
     for (const comment of allComments) {
       if (comment.parentId) {
         const parent = commentMap.get(comment.parentId);
         if (parent) {
-          parent.replies.push(comment);
+            // Ensure replies are also of type CommentWithReplies
+            parent.replies.push(commentMap.get(comment.id)!);
         }
       } else {
         threads.push(commentMap.get(comment.id)!);
@@ -597,6 +603,19 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     return threads;
   }, [allComments]);
 
+  const renderReplies = (replies: CommentWithReplies[]) => {
+    return replies.map(reply => (
+        <div key={reply.id} className="pl-0">
+             <CommentItem
+                comment={reply}
+                docId={docId}
+                collectionType={collectionType}
+                onReplyClick={handleReplyClick}
+            />
+            {reply.replies && reply.replies.length > 0 && renderReplies(reply.replies)}
+        </div>
+    ));
+  };
 
   const handleReplyClick = (comment: Comment) => {
     setReplyingTo(comment);
@@ -625,16 +644,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
                         collectionType={collectionType}
                         onReplyClick={handleReplyClick}
                     />
-                    {(commentMap.get(thread.id)?.replies || []).map(reply => (
-                        <div key={reply.id} className="pl-0">
-                             <CommentItem
-                                comment={reply}
-                                docId={docId}
-                                collectionType={collectionType}
-                                onReplyClick={handleReplyClick}
-                            />
-                        </div>
-                    ))}
+                    {thread.replies && thread.replies.length > 0 && renderReplies(thread.replies)}
                 </div>
             ))}
           </div>
