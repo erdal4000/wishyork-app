@@ -26,7 +26,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, Heart, MessageCircle, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { Loader2, Trash2, Heart, MessageCircle, MoreHorizontal, AlertTriangle, Repeat2, Bookmark, Share2 } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -449,8 +449,8 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
             <p className="whitespace-pre-wrap text-sm">{comment.text}</p>
           </div>
 
-          <div className="-ml-2 flex items-center text-muted-foreground">
-              <TooltipProvider>
+          <div className="-ml-2 flex justify-between items-center text-muted-foreground">
+            <TooltipProvider>
               <div className="flex items-center">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -459,6 +459,16 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                  </Tooltip>
+                  {comment.replyCount > 0 && <span className="pr-2 text-sm">{comment.replyCount}</span>}
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Repeat2 className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
                   </Tooltip>
 
                   <Tooltip>
@@ -471,7 +481,25 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                   </Tooltip>
                   {comment.likes > 0 && <span className={`pr-2 text-sm ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
               </div>
-              </TooltipProvider>
+              <div className="flex items-center">
+                 <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Bookmark className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                  </Tooltip>
+                   <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9">
+                        <Share2 className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                  </Tooltip>
+              </div>
+            </TooltipProvider>
           </div>
         </div>
       </div>
@@ -534,25 +562,24 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     setReplyingTo(comment);
   };
   
-  const renderCommentAndReplies = (commentThread: CommentWithReplies, isMainComment: boolean) => {
+  const renderCommentThread = (commentThread: CommentWithReplies) => {
     return (
-      <div key={commentThread.id} className={`${isMainComment ? 'border-t' : ''}`}>
-        <CommentItem
-          comment={commentThread}
-          docId={docId}
-          collectionType={collectionType}
-          onReplyClick={handleReplyClick}
-        />
-        {/* Replies */}
-        <div className="pl-0">
-          {commentThread.replies.map(reply => renderCommentAndReplies(reply, false))}
+        <div key={commentThread.id} className="border-t">
+             <CommentItem
+                comment={commentThread}
+                docId={docId}
+                collectionType={collectionType}
+                onReplyClick={handleReplyClick}
+            />
+            <div className="ml-0">
+                {commentThread.replies.map(renderCommentThread)}
+            </div>
         </div>
-      </div>
     );
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-0">
       <CommentForm 
         docId={docId} 
         collectionType={collectionType} 
@@ -566,7 +593,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : commentThreads.length > 0 ? (
           <div className="space-y-0">
-            {commentThreads.map(thread => renderCommentAndReplies(thread, true))}
+            {commentThreads.map(renderCommentThread)}
           </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
@@ -586,3 +613,4 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   );
 }
 // #endregion
+
