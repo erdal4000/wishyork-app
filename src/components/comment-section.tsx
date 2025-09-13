@@ -40,6 +40,15 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useCommentInteraction } from '@/hooks/use-comment-interaction';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -59,16 +68,129 @@ interface Comment extends DocumentData {
 
 const COMMENT_MAX_LENGTH = 300;
 
+// #region Reply Dialog
+interface ReplyDialogProps {
+  parentComment: Comment;
+  docId: string;
+  collectionType: 'posts' | 'wishlists';
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function ReplyDialog({ parentComment, docId, collectionType, open, onOpenChange }: ReplyDialogProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [commentText, setCommentText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAddReply = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!user || !commentText.trim() || commentText.length > COMMENT_MAX_LENGTH) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const parentDocRef = doc(db, collectionType, docId);
+      const commentsColRef = collection(parentDocRef, 'comments');
+      
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+
+      const batch = writeBatch(db);
+
+      const newCommentData: any = {
+        text: commentText,
+        authorId: user.uid,
+        authorName: userData?.name || user.displayName,
+        authorUsername: userData?.username || 'user',
+        authorAvatar: userData?.photoURL || user.photoURL,
+        createdAt: serverTimestamp(),
+        parentId: parentComment.id,
+        parentAuthorUsername: parentComment.authorUsername,
+        replyCount: 0,
+        likes: 0,
+        likedBy: [],
+      };
+
+      const newCommentRef = doc(commentsColRef);
+      batch.set(newCommentRef, newCommentData);
+
+      const parentCommentRef = doc(commentsColRef, parentComment.id);
+      batch.update(parentCommentRef, { replyCount: increment(1) });
+      batch.update(parentDocRef, { commentCount: increment(1) });
+
+      await batch.commit();
+      setCommentText('');
+      onOpenChange(false); // Close dialog on success
+    } catch (error) {
+      console.error("Error adding reply: ", error);
+      toast({ title: "Error", description: "Failed to post reply.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!user) return null;
+
+  const remainingChars = COMMENT_MAX_LENGTH - commentText.length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Replying to @{parentComment.authorUsername}</DialogTitle>
+        </DialogHeader>
+        <div className="pt-4">
+          <form onSubmit={handleAddReply}>
+            <div className="flex items-start gap-2 sm:gap-4">
+              <Avatar className="hidden h-9 w-9 sm:flex">
+                <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
+                <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <Textarea
+                  placeholder={`Post your reply...`}
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  rows={4}
+                  maxLength={COMMENT_MAX_LENGTH}
+                  className="bg-background"
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+                <div className="mt-2 flex items-center justify-between gap-4">
+                  <span className={`text-xs ${remainingChars < 20 ? (remainingChars < 0 ? 'text-destructive' : 'text-yellow-500') : 'text-muted-foreground'}`}>
+                    {remainingChars}
+                  </span>
+                  <DialogFooter className="sm:justify-end">
+                    <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
+                      {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Reply
+                    </Button>
+                  </DialogFooter>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+// #endregion
+
 // #region Comment Form
 interface CommentFormProps {
-  parentComment?: Comment | null;
   onCommentPosted: () => void;
   docId: string;
   collectionType: 'posts' | 'wishlists';
 }
 
 function CommentForm({
-  parentComment,
   onCommentPosted,
   docId,
   collectionType,
@@ -101,32 +223,22 @@ function CommentForm({
         authorUsername: userData?.username || 'user',
         authorAvatar: userData?.photoURL || user.photoURL,
         createdAt: serverTimestamp(),
-        parentId: parentComment?.id || null,
+        parentId: null,
         replyCount: 0,
         likes: 0,
         likedBy: [],
       };
 
-      if (parentComment) {
-        newCommentData.parentAuthorUsername = parentComment.authorUsername;
-      }
-
       const newCommentRef = doc(commentsColRef);
       batch.set(newCommentRef, newCommentData);
-
-      if (parentComment) {
-        const parentCommentRef = doc(commentsColRef, parentComment.id);
-        batch.update(parentCommentRef, { replyCount: increment(1) });
-      }
-
       batch.update(parentDocRef, { commentCount: increment(1) });
-
       await batch.commit();
+
       setCommentText('');
       onCommentPosted();
     } catch (error) {
-      console.error("Error adding comment/reply: ", error);
-      toast({ title: "Error", description: "Failed to post reply.", variant: "destructive" });
+      console.error("Error adding comment: ", error);
+      toast({ title: "Error", description: "Failed to post comment.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -135,7 +247,6 @@ function CommentForm({
   if (!user) return null;
 
   const remainingChars = COMMENT_MAX_LENGTH - commentText.length;
-  const placeholderText = parentComment ? `Replying to @${parentComment.authorUsername}...` : "Post your reply...";
 
   return (
     <form onSubmit={handleAddComment}>
@@ -146,7 +257,7 @@ function CommentForm({
         </Avatar>
         <div className="flex-1">
           <Textarea
-            placeholder={placeholderText}
+            placeholder="Post your reply..."
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             rows={2}
@@ -159,12 +270,7 @@ function CommentForm({
               {remainingChars}
             </span>
             <div className="flex items-center gap-2">
-              {parentComment && (
-                <Button type="button" variant="ghost" size="sm" onClick={onCommentPosted} disabled={isSubmitting}>
-                  Cancel
-                </Button>
-              )}
-              <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
+              <Button type="submit" disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Reply
               </Button>
@@ -177,29 +283,21 @@ function CommentForm({
 }
 // #endregion
 
-
 // #region Comment Item
-
 interface CommentItemProps {
   comment: Comment;
   docId: string;
   collectionType: 'posts' | 'wishlists';
-  docAuthorId: string;
-  activeReplyId: string | null;
-  setActiveReplyId: (id: string | null) => void;
-  isReply: boolean;
+  isLastReply: boolean;
+  hasReplies: boolean;
+  onReplyClick: (comment: Comment) => void;
 }
 
-function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, docAuthorId, isReply }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, isLastReply, hasReplies, onReplyClick }: CommentItemProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
-  const isReplyFormOpen = activeReplyId === comment.id;
-
-  const handleToggleReplyForm = () => {
-    setActiveReplyId(isReplyFormOpen ? null : comment.id);
-  };
 
   const handleDeleteComment = async (commentToDelete: Comment) => {
     if (!user || isDeleting) return;
@@ -210,7 +308,6 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
       const parentDocRef = doc(db, collectionType, docId);
       const commentsColRef = collection(parentDocRef, 'comments');
 
-      // Recursively find all replies to delete
       const repliesToDelete: string[] = [];
       const findReplies = async (parentId: string) => {
         const repliesQuery = query(commentsColRef, where("parentId", "==", parentId));
@@ -223,7 +320,6 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
 
       await findReplies(commentToDelete.id);
 
-      // Delete the main comment and all its replies
       const mainCommentRef = doc(commentsColRef, commentToDelete.id);
       batch.delete(mainCommentRef);
       repliesToDelete.forEach(replyId => {
@@ -232,13 +328,11 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
       
       const totalDeleted = 1 + repliesToDelete.length;
 
-      // Update reply count on parent if it's a reply
       if (commentToDelete.parentId) {
         const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
         batch.update(parentCommentRef, { replyCount: increment(-1) });
       }
 
-      // Update total comment count on the main post/wishlist
       batch.update(parentDocRef, { commentCount: increment(-totalDeleted) });
 
       await batch.commit();
@@ -250,39 +344,43 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
       setIsDeleting(false);
     }
   };
-  
-  const hasLine = isReply;
-  const isPostOwnerReply = isReply && comment.authorId === docAuthorId;
+
+  const isReply = !!comment.parentId;
 
   return (
-    <div className="flex w-full items-start gap-2 sm:gap-4 relative pt-4">
-        {hasLine && (
-            <div className="absolute bottom-0 left-[18px] top-0 w-0.5 bg-border -translate-x-1/2"></div>
-        )}
+    <div className="relative flex w-full items-start gap-2 py-4 sm:gap-4">
+      {isReply && (
+        <>
+          {/* Vertical line connecting to parent */}
+          <div className={`absolute bottom-0 left-[18px] w-0.5 -translate-x-1/2 bg-border ${isLastReply ? 'top-0 h-[18px]' : 'top-0'}`} />
+          {/* Horizontal line arm */}
+          <div className="absolute left-[18px] top-[18px] h-0.5 w-4 -translate-x-1/2 bg-border" />
+        </>
+      )}
 
-      <Avatar className="h-9 w-9 z-10">
+      <Avatar className="z-10 h-9 w-9 flex-shrink-0 bg-background">
         <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
         <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
       </Avatar>
 
-      <div className="flex-1 pt-1.5 min-w-0">
+      <div className="min-w-0 flex-1 pt-1.5">
         <div className="group space-y-2">
           <div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm flex-wrap">
-                <p className="font-semibold break-words">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <p className="break-words font-semibold">
                   <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
                     {comment.authorName}
                   </Link>
                 </p>
-                <p className='text-xs text-muted-foreground whitespace-nowrap'>
+                <p className="whitespace-nowrap text-xs text-muted-foreground">
                   · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
                 </p>
               </div>
               {user?.uid === comment.authorId && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100" disabled={isDeleting}>
                       {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
                     </Button>
                   </AlertDialogTrigger>
@@ -306,15 +404,15 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
               </p>
             )}
 
-            <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
+            <p className="whitespace-pre-wrap text-sm">{comment.text}</p>
           </div>
 
-          <div className="flex justify-between -ml-2">
+          <div className="-ml-2 flex justify-between">
             <TooltipProvider>
               <div className="flex items-center text-muted-foreground">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onReplyClick(comment)}>
                       <MessageCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
@@ -338,7 +436,7 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
                   </TooltipTrigger>
                   <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
                 </Tooltip>
-                {comment.likes > 0 && <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
+                {comment.likes > 0 && <span className={`pr-2 text-sm ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
               </div>
 
               <div className="flex items-center text-muted-foreground">
@@ -363,17 +461,10 @@ function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveR
           </div>
         </div>
       </div>
-      {isReplyFormOpen && (
-        <div className="pl-11">
-          <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-        </div>
-      )}
     </div>
   );
 }
-
 // #endregion
-
 
 // #region Main Component
 interface CommentSectionProps {
@@ -385,7 +476,7 @@ interface CommentSectionProps {
 export function CommentSection({ docId, collectionType, docAuthorId }: CommentSectionProps) {
   const [allComments, setAllComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
-  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -393,7 +484,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
     setLoadingComments(true);
     const commentsRef = collection(db, collectionType, docId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'desc'));
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
@@ -409,43 +500,109 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
   }, [docId, collectionType, toast]);
   
   const commentThreads = useMemo(() => {
-    const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, c]));
+    const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, { ...c, replies: [] as Comment[] }]));
     const rootComments: Comment[] = [];
-    const threads: Comment[][] = [];
 
-    // First, identify root comments
     for (const comment of allComments) {
-        if (!comment.parentId) {
-            rootComments.push(comment);
-        }
+      if (comment.parentId && commentMap.has(comment.parentId)) {
+        commentMap.get(comment.parentId)!.replies.push(comment);
+      } else {
+        rootComments.push(comment);
+      }
     }
     
-    // Sort root comments by newest first
-    rootComments.sort((a,b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+    // Reverse root comments to show newest first
+    return rootComments.sort((a,b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+  }, [allComments]);
 
-    const buildThread = (commentId: string): Comment[] => {
-        const replies: Comment[] = [];
-        for (const comment of allComments) {
-            if (comment.parentId === commentId) {
-                replies.push(comment);
-            }
+  const handleReplyClick = (comment: Comment) => {
+    setReplyingTo(comment);
+  };
+  
+  const renderThread = (thread: Comment[], level = 0): JSX.Element[] => {
+    const commentMap = new Map<string, Comment[]>();
+    thread.forEach(c => {
+        const parentId = c.parentId || 'root';
+        if (!commentMap.has(parentId)) {
+            commentMap.set(parentId, []);
         }
-        replies.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-        
+        commentMap.get(parentId)!.push(c);
+    });
+
+    const buildTree = (parentId: string): JSX.Element[] => {
+        const children = commentMap.get(parentId) || [];
+        return children.flatMap((comment, index) => {
+            const replies = buildTree(comment.id);
+            const isLastReply = index === children.length - 1;
+            const hasReplies = replies.length > 0;
+            return [
+                <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    docId={docId}
+                    collectionType={collectionType}
+                    isLastReply={isLastReply}
+                    hasReplies={hasReplies}
+                    onReplyClick={handleReplyClick}
+                />,
+                ...replies,
+            ];
+        });
+    };
+
+    return buildTree('root');
+  };
+
+  const flattenedThreads = useMemo(() => {
+    const threads: Comment[][] = [];
+    const commentMap = new Map(allComments.map(c => [c.id, c]));
+
+    const rootComments = allComments
+        .filter(c => !c.parentId)
+        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+
+    const buildThread = (startNode: Comment): Comment[] => {
         const thread: Comment[] = [];
-        for (const reply of replies) {
-            thread.push(reply, ...buildThread(reply.id));
+        const queue: Comment[] = [startNode];
+        const visited = new Set<string>();
+        visited.add(startNode.id);
+        
+        while(queue.length > 0){
+            const current = queue.shift()!;
+            thread.push(current);
+
+            const replies = allComments
+                .filter(c => c.parentId === current.id)
+                .sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+
+            for (const reply of replies) {
+                if(!visited.has(reply.id)){
+                    visited.add(reply.id);
+                    queue.push(reply);
+                }
+            }
         }
         return thread;
     };
     
     for (const root of rootComments) {
-        const thread = [root, ...buildThread(root.id)];
-        threads.push(thread);
+        const allRepliesOfRoot: Comment[] = [];
+        const findRepliesRecursively = (parentId: string) => {
+            const replies = allComments
+                .filter(c => c.parentId === parentId)
+                .sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+            
+            for (const reply of replies) {
+                allRepliesOfRoot.push(reply);
+                findRepliesRecursively(reply.id);
+            }
+        };
+        findRepliesRecursively(root.id);
+        threads.push([root, ...allRepliesOfRoot]);
     }
     
     return threads;
-  }, [allComments]);
+}, [allComments]);
 
 
   return (
@@ -453,7 +610,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
       <CommentForm 
         docId={docId} 
         collectionType={collectionType} 
-        onCommentPosted={() => { setActiveReplyId(null); }} 
+        onCommentPosted={() => { /* maybe scroll to top */ }} 
       />
 
       <div className="flex flex-col">
@@ -461,30 +618,43 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : commentThreads.length > 0 ? (
-          commentThreads.map((thread, index) => (
+        ) : flattenedThreads.length > 0 ? (
+          flattenedThreads.map((thread, index) => (
             <div key={thread[0].id} className="border-t">
-                {thread.map(comment => (
-                    <CommentItem
-                        key={comment.id}
-                        comment={comment}
-                        docId={docId}
-                        collectionType={collectionType}
-                        docAuthorId={docAuthorId}
-                        activeReplyId={activeReplyId}
-                        setActiveReplyId={setActiveReplyId}
-                        isReply={!!comment.parentId}
-                    />
-                ))}
+              {thread.map((comment, commentIndex) => {
+                 const repliesToThisComment = thread.filter(c => c.parentId === comment.id);
+                 const lastReplyId = repliesToThisComment.length > 0 ? repliesToThisComment[repliesToThisComment.length - 1].id : null;
+                 const isLastInSubthread = comment.id === lastReplyId || (comment.parentId && thread.filter(c => c.parentId === comment.parentId).pop()?.id === comment.id)
+                
+                return (
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    docId={docId}
+                    collectionType={collectionType}
+                    isLastReply={commentIndex === thread.length - 1}
+                    hasReplies={comment.replyCount > 0}
+                    onReplyClick={handleReplyClick}
+                  />
+                )
+              })}
             </div>
           ))
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
         )}
       </div>
+
+      {replyingTo && (
+        <ReplyDialog
+          docId={docId}
+          collectionType={collectionType}
+          parentComment={replyingTo}
+          open={!!replyingTo}
+          onOpenChange={(open) => !open && setReplyingTo(null)}
+        />
+      )}
     </div>
   );
 }
 // #endregion
-
-    
