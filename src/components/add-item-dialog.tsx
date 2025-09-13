@@ -46,8 +46,8 @@ import { addDoc, collection, doc, serverTimestamp, Timestamp } from 'firebase/fi
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { ScrollArea } from './ui/scroll-area';
-import { Separator } from './ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 const formSchema = z.object({
   fetchUrl: z.string().url().optional().or(z.literal('')),
@@ -368,6 +368,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
 
 
 

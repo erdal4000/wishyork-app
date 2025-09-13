@@ -38,7 +38,7 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, getDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from './ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -264,4 +264,5 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
 
