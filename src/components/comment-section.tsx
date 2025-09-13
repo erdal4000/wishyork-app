@@ -57,112 +57,117 @@ interface Comment extends DocumentData {
   likes: number;
 }
 
-interface CommentSectionProps {
+const COMMENT_MAX_LENGTH = 300;
+
+interface CommentFormProps {
   docId: string;
   collectionType: 'posts' | 'wishlists';
+  parentComment?: Comment | null;
+  onCommentPosted: () => void;
 }
 
 function CommentForm({
-    docId,
-    collectionType,
-    parentComment,
-    onCommentPosted,
-  }: {
-    docId: string;
-    collectionType: 'posts' | 'wishlists';
-    parentComment?: Comment | null;
-    onCommentPosted: () => void;
-  }) {
-    const { user } = useAuth();
-    const { toast } = useToast();
-    const [commentText, setCommentText] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-  
-    const handleAddComment = async (e: FormEvent) => {
-      e.preventDefault();
-      if (!user || !commentText.trim()) return;
-  
-      setIsSubmitting(true);
-  
-      try {
-        const parentDocRef = doc(db, collectionType, docId);
-        const commentsColRef = collection(parentDocRef, 'comments');
-        
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        const userData = userDoc.data();
-  
-        const batch = writeBatch(db);
-  
-        const newCommentData: any = {
-          text: commentText,
-          authorId: user.uid,
-          authorName: userData?.name || user.displayName,
-          authorUsername: userData?.username || 'user',
-          authorAvatar: userData?.photoURL || user.photoURL,
-          createdAt: serverTimestamp(),
-          parentId: parentComment?.id || null,
-          replyCount: 0,
-          likes: 0,
-          likedBy: [],
-        };
+  docId,
+  collectionType,
+  parentComment,
+  onCommentPosted,
+}: CommentFormProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [commentText, setCommentText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-        if (parentComment) {
-          newCommentData.parentAuthorUsername = parentComment.authorUsername;
-        }
-  
-        const newCommentRef = doc(commentsColRef);
-        batch.set(newCommentRef, newCommentData);
-  
-        if (parentComment) {
-          const parentCommentRef = doc(commentsColRef, parentComment.id);
-          batch.update(parentCommentRef, { replyCount: increment(1) });
-        }
-  
-        batch.update(parentDocRef, { commentCount: increment(1) });
-  
-        await batch.commit();
-        setCommentText('');
-        onCommentPosted();
-      } catch (error) {
-        console.error("Error adding comment/reply: ", error);
-        toast({ title: "Error", description: "Failed to post.", variant: "destructive" });
-      } finally {
-        setIsSubmitting(false);
+  const handleAddComment = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!user || !commentText.trim() || commentText.length > COMMENT_MAX_LENGTH) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const parentDocRef = doc(db, collectionType, docId);
+      const commentsColRef = collection(parentDocRef, 'comments');
+      
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+
+      const batch = writeBatch(db);
+
+      const newCommentData: any = {
+        text: commentText,
+        authorId: user.uid,
+        authorName: userData?.name || user.displayName,
+        authorUsername: userData?.username || 'user',
+        authorAvatar: userData?.photoURL || user.photoURL,
+        createdAt: serverTimestamp(),
+        parentId: parentComment?.id || null,
+        replyCount: 0,
+        likes: 0,
+        likedBy: [],
+      };
+
+      if (parentComment) {
+        newCommentData.parentAuthorUsername = parentComment.authorUsername;
       }
-    };
-  
-    if (!user) return null;
-  
-    return (
-      <form onSubmit={handleAddComment} className="flex items-start gap-2 sm:gap-4">
-        <Avatar className="hidden h-9 w-9 sm:flex">
-          <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
-          <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <Textarea
-            placeholder={parentComment ? `Replying to @${parentComment.authorUsername}...` : "Add a comment..."}
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            rows={2}
-            className="bg-secondary/50"
-            disabled={isSubmitting}
-          />
-          <div className="mt-2 flex justify-end gap-2">
-            {parentComment && (
-              <Button type="button" variant="ghost" onClick={onCommentPosted} disabled={isSubmitting}>
-                Cancel
-              </Button>
-            )}
-            <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim()}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {parentComment ? "Reply" : "Post"}
+
+      const newCommentRef = doc(commentsColRef);
+      batch.set(newCommentRef, newCommentData);
+
+      if (parentComment) {
+        const parentCommentRef = doc(commentsColRef, parentComment.id);
+        batch.update(parentCommentRef, { replyCount: increment(1) });
+      }
+
+      batch.update(parentDocRef, { commentCount: increment(1) });
+
+      await batch.commit();
+      setCommentText('');
+      onCommentPosted();
+    } catch (error) {
+      console.error("Error adding comment/reply: ", error);
+      toast({ title: "Error", description: "Failed to post.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!user) return null;
+
+  const remainingChars = COMMENT_MAX_LENGTH - commentText.length;
+
+  return (
+    <form onSubmit={handleAddComment} className="flex items-start gap-2 sm:gap-4">
+      <Avatar className="hidden h-9 w-9 sm:flex">
+        <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
+        <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+      </Avatar>
+      <div className="flex-1">
+        <Textarea
+          placeholder={parentComment ? `Replying to @${parentComment.authorUsername}...` : "Add a comment..."}
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          rows={2}
+          maxLength={COMMENT_MAX_LENGTH}
+          className="bg-secondary/50"
+          disabled={isSubmitting}
+        />
+        <div className="mt-2 flex items-center justify-end gap-4">
+           <span className={`text-xs ${remainingChars < 20 ? (remainingChars < 0 ? 'text-destructive' : 'text-yellow-500') : 'text-muted-foreground'}`}>
+            {remainingChars}
+          </span>
+          {parentComment && (
+            <Button type="button" variant="ghost" onClick={onCommentPosted} disabled={isSubmitting}>
+              Cancel
             </Button>
-          </div>
+          )}
+          <Button type="submit" size={parentComment ? "sm" : "default"} disabled={isSubmitting || !commentText.trim() || remainingChars < 0}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {parentComment ? "Reply" : "Post"}
+          </Button>
         </div>
-      </form>
-    );
+      </div>
+    </form>
+  );
 }
 
 function CommentWithReplies({ comment, docId, collectionType, activeReplyId, setActiveReplyId }: { comment: Comment; docId: string; collectionType: 'posts' | 'wishlists', activeReplyId: string | null, setActiveReplyId: (id: string | null) => void }) {
@@ -175,11 +180,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
     const isReplyFormOpen = activeReplyId === comment.id;
 
     const handleToggleReplyForm = () => {
-        if(isReplyFormOpen) {
-            setActiveReplyId(null);
-        } else {
-            setActiveReplyId(comment.id);
-        }
+        setActiveReplyId(isReplyFormOpen ? null : comment.id);
     }
   
     const handleDeleteComment = async (commentToDelete: Comment) => {
@@ -221,8 +222,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
     };
   
     return (
-      <div className="relative flex items-start gap-2 sm:gap-4">
-        {comment.parentId && <div className="absolute left-4 top-0 h-full w-px bg-border -translate-x-1/2"></div>}
+      <div className="flex items-start gap-2 sm:gap-4">
         <div className="flex-shrink-0 z-10 bg-background">
             <Avatar className="h-9 w-9">
               <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
@@ -270,7 +270,7 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
                   </p>
                 )}
 
-              <p className="text-sm">{comment.text}</p>
+              <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
             </div>
             <div className="flex items-center gap-2 pl-3">
                <Button variant="link" size="sm" className="p-0 h-auto text-xs text-muted-foreground" onClick={toggleLike} disabled={isLiking || !user}>
@@ -296,22 +296,16 @@ function CommentWithReplies({ comment, docId, collectionType, activeReplyId, set
             </Button>
           )}
 
-          {showReplies && (
-            <div className='pt-4'>
-                <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(false)}>
-                    Hide replies
-                </Button>
-            </div>
-          )}
-
           {showReplies && comment.replies && comment.replies.length > 0 && (
-             <div className="pt-4 ml-4 sm:ml-6 pl-4 sm:pl-6 border-l space-y-6">
+             <div className="pt-4 space-y-6">
                 {comment.replies.map(reply => (
                     <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} activeReplyId={activeReplyId} setActiveReplyId={setActiveReplyId} />
                 ))}
+                <Button variant="link" size="sm" className="pl-3 pt-1 text-xs" onClick={() => setShowReplies(false)}>
+                    Hide replies
+                </Button>
              </div>
           )}
-
         </div>
       </div>
     );
@@ -366,7 +360,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
   return (
     <div className="space-y-4">
-      <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => {}} />
+      <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => { setActiveReplyId(null); }} />
 
       <div className="space-y-6 pt-4">
         {loadingComments ? (
