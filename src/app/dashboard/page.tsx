@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -122,10 +121,19 @@ export default function DashboardPage() {
     const userDocRef = doc(db, 'users', user.uid);
     const unsubUser = onSnapshot(userDocRef, (userDoc) => {
       const following = userDoc.data()?.following || [];
-      const authorsToFetch = [user.uid, ...following]; // Always include the user themselves.
+      const authorsToFetch = [user.uid, ...following];
 
-      // Define the query for the posts feed.
+      // Ensure the authorsToFetch array is not empty before querying,
+      // as Firestore 'in' queries do not support empty arrays.
+      if (authorsToFetch.length === 0) {
+        setPosts([]);
+        setLoadingPosts(false);
+        return;
+      }
+      
       // This query requires a composite index on (authorId, createdAt).
+      // If the index is missing, Firestore will log an error in the browser console
+      // with a link to create it.
       const postsQuery = query(
         collection(db, "posts"),
         where("authorId", "in", authorsToFetch),
@@ -144,7 +152,6 @@ export default function DashboardPage() {
       }, (error) => {
         console.error("Error fetching posts:", error);
         // This is where you will see the index error in the browser console.
-        // The error message will contain a link to create the required index.
         setLoadingPosts(false);
       });
 
@@ -245,7 +252,7 @@ export default function DashboardPage() {
         <Card className="text-center p-8 text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
           <p className="mt-2">Follow some people or create your first post to see content here.</p>
-          <p className="mt-4 text-xs italic">If you see an error in the console about an index, please click the link in the error to create it.</p>
+          <p className="mt-4 text-xs italic">If you still see no posts, please check the browser console (F12) for a Firestore index error and click the link to create it.</p>
         </Card>
       ) : (
         posts.map((post) => (
