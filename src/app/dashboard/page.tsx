@@ -108,54 +108,59 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
-  const [followingIds, setFollowingIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const userDocRef = doc(db, 'users', user.uid);
-    const unsubUser = onSnapshot(userDocRef, (doc) => {
-      setFollowingIds(doc.data()?.following || []);
-    });
-
-    return () => unsubUser();
-  }, [user]);
   
   useEffect(() => {
-    if (!user) return;
-
-    setLoadingPosts(true);
-
-    const authorsToFetch = [...followingIds, user.uid];
-
-    // Ensure the array is not empty to prevent Firestore errors
-    if (authorsToFetch.length === 0) {
-      setPosts([]);
+    // If there is no user, do nothing.
+    if (!user) {
       setLoadingPosts(false);
       return;
     }
-    
-    const postsQuery = query(
+
+    setLoadingPosts(true);
+
+    // Subscribe to the current user's document to get their `following` list.
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubUser = onSnapshot(userDocRef, (userDoc) => {
+      const following = userDoc.data()?.following || [];
+      const authorsToFetch = [user.uid, ...following]; // Always include the user themselves.
+
+      // Define the query for the posts feed.
+      // This query requires a composite index on (authorId, createdAt).
+      const postsQuery = query(
         collection(db, "posts"),
         where("authorId", "in", authorsToFetch),
         orderBy("createdAt", "desc")
-    );
+      );
 
-    const unsubscribe = onSnapshot(postsQuery, (querySnapshot) => {
+      // Subscribe to the posts feed. This inner subscription will be re-created
+      // whenever the user's `following` list changes.
+      const unsubPosts = onSnapshot(postsQuery, (querySnapshot) => {
         const postsData: Post[] = [];
         querySnapshot.forEach((doc) => {
             postsData.push({ id: doc.id, ...doc.data() } as Post);
         });
         setPosts(postsData);
         setLoadingPosts(false);
-    }, (error) => {
+      }, (error) => {
         console.error("Error fetching posts:", error);
-        // This is where you might see an index error in the browser console
+        // This is where you will see the index error in the browser console.
+        // The error message will contain a link to create the required index.
         setLoadingPosts(false);
+      });
+
+      // Return a cleanup function for the inner posts subscription.
+      return () => unsubPosts();
+
+    }, (error) => {
+      console.error("Error fetching user's following list:", error);
+      setLoadingPosts(false);
     });
 
-    return () => unsubscribe();
-  }, [user, followingIds]);
+    // Return a cleanup function for the outer user subscription.
+    return () => unsubUser();
+
+  }, [user]); // This entire effect re-runs only when the `user` object changes.
+
 
   const handleCreatePost = async (e: FormEvent) => {
     e.preventDefault();
@@ -240,6 +245,7 @@ export default function DashboardPage() {
         <Card className="text-center p-8 text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
           <p className="mt-2">Follow some people or create your first post to see content here.</p>
+          <p className="mt-4 text-xs italic">If you see an error in the console about an index, please click the link in the error to create it.</p>
         </Card>
       ) : (
         posts.map((post) => (
