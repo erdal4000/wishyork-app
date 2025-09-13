@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -110,10 +109,10 @@ function CommentForm({
           // It's a reply, increment replyCount on the parent comment
           const parentCommentRef = doc(commentsColRef, parentId);
           batch.update(parentCommentRef, { replyCount: increment(1) });
-        } else {
-          // It's a top-level comment, increment commentCount on the post/wishlist
-          batch.update(parentDocRef, { commentCount: increment(1) });
         }
+  
+        // Always increment the main post's comment count for both comments and replies
+        batch.update(parentDocRef, { commentCount: increment(1) });
   
         await batch.commit();
         setCommentText('');
@@ -163,43 +162,48 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
     const { user } = useAuth();
     const { toast } = useToast();
     const [showReplyForm, setShowReplyForm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
   
     const handleDeleteComment = async (commentToDelete: Comment) => {
-      if (!user) return;
+      if (!user || isDeleting) return;
   
+      setIsDeleting(true);
       try {
         const batch = writeBatch(db);
         const parentDocRef = doc(db, collectionType, docId);
         const commentsColRef = collection(parentDocRef, 'comments');
   
-        // 1. Delete the main comment
+        // 1. Find all replies to be deleted (even if not loaded)
+        const repliesQuery = query(commentsColRef, where("parentId", "==", commentToDelete.id));
+        const repliesSnapshot = await getDocs(repliesQuery);
+        let deletedCount = 1; // Start with the main comment itself
+
+        // 2. Delete the main comment
         const mainCommentRef = doc(commentsColRef, commentToDelete.id);
         batch.delete(mainCommentRef);
   
-        // 2. If it's a top-level comment, find and delete all its replies
-        if (!commentToDelete.parentId) {
-          const repliesQuery = query(commentsColRef, where("parentId", "==", commentToDelete.id));
-          const repliesSnapshot = await getDocs(repliesQuery);
-          let deletedRepliesCount = 0;
-          repliesSnapshot.forEach(replyDoc => {
-            batch.delete(replyDoc.ref);
-            deletedRepliesCount++;
-          });
-          // Decrement post's commentCount by 1 (for the main comment) + number of replies
-          batch.update(parentDocRef, { commentCount: increment(-(1 + deletedRepliesCount)) });
-        } else {
-          // 3. If it's a reply, decrement the replyCount of its parent comment
+        // 3. Delete all its replies
+        repliesSnapshot.forEach(replyDoc => {
+          batch.delete(replyDoc.ref);
+          deletedCount++;
+        });
+
+        // 4. If it's a reply, decrement the replyCount of its parent comment
+        if (commentToDelete.parentId) {
           const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
           batch.update(parentCommentRef, { replyCount: increment(-1) });
-          // And decrement the post's total commentCount by 1
-          batch.update(parentDocRef, { commentCount: increment(-1) });
         }
   
+        // 5. Decrement the main post's total comment count by the total number of deleted items
+        batch.update(parentDocRef, { commentCount: increment(-deletedCount) });
+  
         await batch.commit();
-        toast({ title: "Success", description: "Comment deleted." });
+        toast({ title: "Success", description: "Comment and replies deleted." });
       } catch(error) {
         console.error("Error deleting comment and its replies: ", error);
         toast({ title: "Error", description: "Could not delete comment.", variant: "destructive" });
+      } finally {
+        setIsDeleting(false);
       }
     };
   
@@ -221,14 +225,14 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
                 {user?.uid === comment.authorId && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
+                         {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and its replies" : ""}.</AlertDialogDescription>
+                        <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -264,18 +268,23 @@ function CommentWithReplies({ comment, docId, collectionType }: { comment: Comme
           )}
   
           {/* Replies Section */}
-          {comment.replies && comment.replies.length > 0 && (
-             <div className="pt-4 pl-4 border-l-2 ml-4">
-                {comment.replies.map(reply => (
-                  <div key={reply.id} className="mt-4">
-                     <CommentWithReplies comment={reply} docId={docId} collectionType={collectionType} />
-                  </div>
-                ))}
-            </div>
-          )}
-           {!comment.parentId && comment.replyCount > 0 && (!comment.replies || comment.replies.length === 0) && (
-              <p className="pl-3 pt-2 text-xs text-muted-foreground">This comment has replies but they are not loaded.</p>
-           )}
+          <Collapsible open={comment.replies && comment.replies.length > 0}>
+            <CollapsibleContent>
+                <div className="pt-4 pl-4 border-l-2 ml-4 space-y-4">
+                    {comment.replies?.map(reply => (
+                        <CommentWithReplies key={reply.id} comment={reply} docId={docId} collectionType={collectionType} />
+                    ))}
+                </div>
+            </CollapsibleContent>
+             {!comment.parentId && comment.replyCount > 0 && (
+                <CollapsibleTrigger asChild>
+                    <Button variant="link" size="sm" className="pl-3 pt-1 text-xs">
+                        {comment.replyCount} {comment.replyCount === 1 ? "reply" : "replies"}
+                    </Button>
+                </CollapsibleTrigger>
+             )}
+          </Collapsible>
+
         </div>
       </div>
     );
@@ -314,6 +323,11 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           const parent = commentMap.get(comment.parentId);
           if (parent) {
             parent.replies?.push(comment);
+          } else {
+             // This case can happen if a parent comment is deleted but replies are not.
+             // We can choose to show them as orphaned or hide them.
+             // For now, we'll just log it.
+             console.warn("Orphaned reply found:", comment.id);
           }
         }
       });
@@ -336,7 +350,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
       <CommentForm docId={docId} collectionType={collectionType} onCommentPosted={() => {}} />
 
       {/* Comments List */}
-      <div className="space-y-6">
+      <div className="space-y-6 pt-4">
         {loadingComments ? (
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -352,4 +366,3 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     </div>
   );
 }
-
