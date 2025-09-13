@@ -59,12 +59,6 @@ interface Comment extends DocumentData {
 
 const COMMENT_MAX_LENGTH = 300;
 
-interface CommentSectionProps {
-  docId: string;
-  collectionType: 'posts' | 'wishlists';
-  docAuthorId: string;
-}
-
 interface CommentFormProps {
   parentComment?: Comment | null;
   onCommentPosted: () => void;
@@ -181,7 +175,6 @@ function CommentForm({
   );
 }
 
-
 interface CommentItemProps {
     comment: Comment;
     docId: string;
@@ -189,15 +182,14 @@ interface CommentItemProps {
     docAuthorId: string;
     activeReplyId: string | null;
     setActiveReplyId: (id: string | null) => void;
+    isReply: boolean;
 }
 
-
-function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId }: CommentItemProps) {
+function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyId, setActiveReplyId, isReply }: CommentItemProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isDeleting, setIsDeleting] = useState(false);
     const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
-
     const isReplyFormOpen = activeReplyId === comment.id;
 
     const handleToggleReplyForm = () => {
@@ -243,17 +235,15 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
     };
     
     return (
-      <div className="flex flex-col">
+      <div className="relative">
+        {isReply && (
+            <div className="absolute left-4 top-0 h-full -translate-x-1/2 w-0.5 bg-border -z-10"></div>
+        )}
         <div className="flex w-full items-start gap-2 sm:gap-4">
-            <div className="flex flex-col items-center">
-                <Avatar className="h-9 w-9">
-                    <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                    <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-                </Avatar>
-                {comment.parentId && comment.authorId === docAuthorId && (
-                   <div className="mt-2 w-0.5 grow bg-border"></div>
-                )}
-            </div>
+            <Avatar className="h-9 w-9">
+                <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+            </Avatar>
 
             <div className="flex-1 pt-1.5 min-w-0">
                 <div className="group space-y-2">
@@ -299,7 +289,7 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
                         <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
                     </div>
 
-                    <div className="flex justify-between -ml-2">
+                     <div className="flex justify-between -ml-2">
                         <TooltipProvider>
                             <div className="flex items-center text-muted-foreground">
                                 <Tooltip>
@@ -352,13 +342,13 @@ function CommentItem({ comment, docId, collectionType, docAuthorId, activeReplyI
                         </TooltipProvider>
                     </div>
                 </div>
+                {isReplyFormOpen && (
+                    <div className="w-full">
+                        <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+                    </div>
+                )}
             </div>
         </div>
-        {isReplyFormOpen && (
-            <div className="w-full">
-                <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-            </div>
-        )}
       </div>
     );
 }
@@ -374,7 +364,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
 
     setLoadingComments(true);
     const commentsRef = collection(db, collectionType, docId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+    const q = query(commentsRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
@@ -391,30 +381,36 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
   
   const sortedComments = useMemo(() => {
     const commentMap = new Map<string, Comment & { children: Comment[] }>();
+    const rootComments: (Comment & { children: Comment[] })[] = [];
+
     allComments.forEach(comment => {
       commentMap.set(comment.id, { ...comment, children: [] });
     });
 
-    const rootComments: (Comment & { children: Comment[] })[] = [];
-    commentMap.forEach(comment => {
+    allComments.forEach(comment => {
       if (comment.parentId && commentMap.has(comment.parentId)) {
-        commentMap.get(comment.parentId)!.children.push(comment);
+        commentMap.get(comment.parentId)!.children.push(commentMap.get(comment.id)!);
       } else {
-        rootComments.push(comment);
+        rootComments.push(commentMap.get(comment.id)!);
       }
     });
 
-    const flattened: Comment[] = [];
-    const walk = (comments: (Comment & { children: Comment[] })[]) => {
+    // Sort children by creation time before flattening
+    commentMap.forEach(comment => {
+        comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+    });
+
+    const flattened: {comment: Comment, isReply: boolean}[] = [];
+    const walk = (comments: (Comment & { children: Comment[] })[], isReply: boolean) => {
       comments.forEach(comment => {
-        flattened.push(comment);
-        // Sort children by creation time before walking
-        const sortedChildren = comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-        walk(sortedChildren);
+        flattened.push({ comment, isReply });
+        if (comment.children.length > 0) {
+            walk(comment.children, true);
+        }
       });
     };
-
-    walk(rootComments);
+    
+    walk(rootComments, false);
     return flattened;
   }, [allComments]);
 
@@ -433,7 +429,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : sortedComments.length > 0 ? (
-          sortedComments.map((comment) => (
+          sortedComments.map(({ comment, isReply }) => (
             <CommentItem 
                 key={comment.id} 
                 comment={comment} 
@@ -442,6 +438,7 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
                 docAuthorId={docAuthorId}
                 activeReplyId={activeReplyId} 
                 setActiveReplyId={setActiveReplyId} 
+                isReply={isReply}
             />
           ))
         ) : (
