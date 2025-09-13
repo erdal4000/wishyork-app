@@ -14,12 +14,10 @@ service cloud.firestore {
       // Bir kullanıcının profilini güncelleme kuralları:
       // 1. Kullanıcı sadece kendi belgesini güncelleyebilir.
       // 2. VEYA başka bir kullanıcı, o belgenin SADECE 'followers' ve 'followersCount' alanlarını güncelleyebilir.
-      //    Bu, takip et/bırak işlevinin güvenli bir şekilde çalışmasını sağlar.
       allow update: if request.auth.uid == userId ||
                        (request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['followers', 'followersCount']));
       
-      // Kullanıcılar sadece kendi belgelerini oluşturabilir.
       allow create: if request.auth.uid == userId;
     }
 
@@ -30,15 +28,11 @@ service cloud.firestore {
 
     // Post'lar koleksiyonu
     match /posts/{postId} {
-      // Kullanıcılar sadece kendi post'larını oluşturabilir.
-      // Düzeltme: `resource.data` yerine `request.resource.data` kullanıldı.
+      // DÜZELTME: "resource.data" yerine "request.resource.data" kullanılıyor.
       allow create: if request.auth.uid == request.resource.data.authorId;
-      
-      // Kullanıcılar sadece kendi post'larını silebilir.
+
       allow delete: if request.auth.uid == resource.data.authorId;
 
-      // Kullanıcılar sadece post'un 'likedBy' ve 'likes' alanlarını güncelleyebilir.
-      // Bu, beğeni işlevinin çalışmasını sağlar.
       allow update: if request.auth != null &&
                        request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['likedBy', 'likes']);
@@ -46,13 +40,10 @@ service cloud.firestore {
 
     // Wishlist'ler koleksiyonu ve içindeki item'lar
     match /wishlists/{wishlistId} {
-      // Kullanıcılar sadece kendi wishlist'lerini oluşturabilir, güncelleyebilir, silebilir.
       allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
 
       match /items/{itemId} {
-        // Wishlist sahibi item ekleyebilir/silebilir.
         allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
-        // Oturum açmış herhangi bir kullanıcı bir item'ı güncelleyebilir (rezerve etme, satın alma vb. için).
         allow update: if request.auth != null;
       }
     }
