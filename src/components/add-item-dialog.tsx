@@ -25,7 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from './ui/textarea';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -368,5 +368,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
 // Re-export Label to avoid conflicts with FormLabel
 import { Label } from "@/components/ui/label";
+
 
 
