@@ -59,6 +59,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
+import { CommentSection } from '@/components/comment-section';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -75,7 +76,7 @@ interface Wishlist extends DocumentData {
     unitsFulfilled: number;
     totalUnits: number;
     likes: number;
-    comments: number;
+    commentCount: number;
     saves: number;
     progress: number;
     itemCount: number;
@@ -403,7 +404,7 @@ export default function WishlistDetailPage() {
               <Heart className="h-5 w-5" /> {wishlist.likes}
             </span>
             <span className="flex items-center gap-1.5">
-              <MessageCircle className="h-5 w-5" /> {wishlist.comments}
+              <MessageCircle className="h-5 w-5" /> {wishlist.commentCount}
             </span>
             <span className="flex items-center gap-1.5">
               <Bookmark className="h-5 w-5" /> {wishlist.saves}
@@ -578,6 +579,15 @@ export default function WishlistDetailPage() {
           </div>
         )}
       </div>
+
+      <Separator />
+
+      {/* Comments Section */}
+       <div className="space-y-4">
+         <h2 className="text-2xl font-bold">Comments ({wishlist.commentCount || 0})</h2>
+         <CommentSection docId={id} collectionType="wishlists" />
+       </div>
+
     </div>
   );
 }

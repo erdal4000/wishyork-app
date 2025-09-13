@@ -21,8 +21,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { CommentSection } from '@/components/comment-section';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { getInitials } from '@/lib/utils';
 
 // --- Data Types ---
@@ -69,31 +67,30 @@ type FeedItem = Post | Wishlist;
 function PostCard({ item }: { item: Post }) {
   const { user } = useAuth();
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
-  const [showComments, setShowComments] = useState(false);
   
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
   return (
-    <Collapsible asChild>
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-4 p-4">
-          <Avatar>
-            <AvatarImage src={authorPhoto} alt={item.authorName} />
-            <AvatarFallback>
-              {getInitials(item.authorName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <p className="font-bold">{item.authorName}</p>
-            <p className="text-sm text-muted-foreground">
-              <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link>{' '}
-              · {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-            </p>
-          </div>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-5 w-5" />
-          </Button>
-        </CardHeader>
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-4 p-4">
+        <Avatar>
+          <AvatarImage src={authorPhoto} alt={item.authorName} />
+          <AvatarFallback>
+            {getInitials(item.authorName)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <p className="font-bold">{item.authorName}</p>
+          <p className="text-sm text-muted-foreground">
+            <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link>{' '}
+            · {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+          </p>
+        </div>
+        <Button variant="ghost" size="icon">
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </CardHeader>
+      <Link href={`/dashboard/post/${item.id}`} className="block hover:bg-muted/20 transition-colors">
         <CardContent className="space-y-4 px-4 pb-2">
           <p className="whitespace-pre-wrap">{item.content}</p>
           {item.imageUrl && (
@@ -109,106 +106,96 @@ function PostCard({ item }: { item: Post }) {
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-2">
-          <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
-            <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-            <span className="text-sm">{item.likes ?? 0}</span>
-          </Button>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2" onClick={() => setShowComments(prev => !prev)}>
-              <MessageCircle className="h-5 w-5" />
-              <span className="text-sm">{item.commentCount ?? 0}</span>
-            </Button>
-          </CollapsibleTrigger>
-          <Button variant="ghost" className="flex items-center gap-2">
-            <Share2 className="h-5 w-5" />
-            <span className="text-sm">Share</span>
-          </Button>
-        </CardFooter>
-        <CollapsibleContent>
-            {showComments && <CommentSection docId={item.id} collectionType="posts" />}
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
+      </Link>
+      <CardFooter className="p-2">
+        <Button variant="ghost" className="flex items-center gap-2" onClick={toggleLike} disabled={isLiking || !user}>
+          <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+          <span className="text-sm">{item.likes ?? 0}</span>
+        </Button>
+        <Button variant="ghost" className="flex items-center gap-2" asChild>
+          <Link href={`/dashboard/post/${item.id}`}>
+            <MessageCircle className="h-5 w-5" />
+            <span className="text-sm">{item.commentCount ?? 0}</span>
+          </Link>
+        </Button>
+        <Button variant="ghost" className="flex items-center gap-2">
+          <Share2 className="h-5 w-5" />
+          <span className="text-sm">Share</span>
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
 
 
 function WishlistCard({ item }: { item: Wishlist }) {
-  const [showComments, setShowComments] = useState(false);
-  
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
     return (
-        <Collapsible asChild>
-            <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center gap-4 p-4">
-                    <Avatar>
-                        <AvatarImage src={authorPhoto} alt={item.authorName} />
-                        <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                        <p>
-                            <Link href={`/dashboard/profile/${item.authorUsername}`} className="font-bold hover:underline">{item.authorName}</Link>
-                            <span className="text-muted-foreground"> created a new wishlist</span>
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                        </p>
+        <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center gap-4 p-4">
+                <Avatar>
+                    <AvatarImage src={authorPhoto} alt={item.authorName} />
+                    <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                    <p>
+                        <Link href={`/dashboard/profile/${item.authorUsername}`} className="font-bold hover:underline">{item.authorName}</Link>
+                        <span className="text-muted-foreground"> created a new wishlist</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        {item.createdAt ? formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                    </p>
+                </div>
+                <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-5 w-5" />
+                </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+                <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
+                    <div className="relative h-48 w-full">
+                        <Image
+                            src={item.imageUrl}
+                            alt={item.title}
+                            data-ai-hint={item.aiHint}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                        />
                     </div>
-                    <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-5 w-5" />
-                    </Button>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
-                        <div className="relative h-48 w-full">
-                            <Image
-                                src={item.imageUrl}
-                                alt={item.title}
-                                data-ai-hint={item.aiHint}
-                                fill
-                                className="object-cover"
-                                sizes="(max-width: 768px) 100vw, 50vw"
-                            />
+                    <div className="p-4">
+                        <Badge variant="secondary" className="mb-2">{item.category}</Badge>
+                        <h3 className="font-bold text-lg">{item.title}</h3>
+                        <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                            <Package className="mr-2 h-4 w-4" />
+                            <span>{item.itemCount || 0} items</span>
                         </div>
-                        <div className="p-4">
-                            <Badge variant="secondary" className="mb-2">{item.category}</Badge>
-                            <h3 className="font-bold text-lg">{item.title}</h3>
-                            <div className="mt-2 flex items-center text-sm text-muted-foreground">
-                                <Package className="mr-2 h-4 w-4" />
-                                <span>{item.itemCount || 0} items</span>
+                        <div className="mt-3">
+                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                                <span>{item.progress || 0}% complete</span>
                             </div>
-                            <div className="mt-3">
-                                <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                    <span>{item.progress || 0}% complete</span>
-                                </div>
-                                <Progress value={item.progress || 0} className="h-2" />
-                            </div>
+                            <Progress value={item.progress || 0} className="h-2" />
                         </div>
+                    </div>
+                </Link>
+            </CardContent>
+            <CardFooter className="p-2">
+                <Button variant="ghost" className="flex items-center gap-2">
+                    <Heart className="h-5 w-5" />
+                    <span className="text-sm">{item.likes ?? 0}</span>
+                </Button>
+                <Button variant="ghost" className="flex items-center gap-2" asChild>
+                    <Link href={`/dashboard/wishlist/${item.id}`}>
+                        <MessageCircle className="h-5 w-5" />
+                        <span className="text-sm">{item.commentCount ?? 0}</span>
                     </Link>
-                </CardContent>
-                <CardFooter className="p-2">
-                    <Button variant="ghost" className="flex items-center gap-2">
-                        <Heart className="h-5 w-5" />
-                        <span className="text-sm">{item.likes ?? 0}</span>
-                    </Button>
-                    <CollapsibleTrigger asChild>
-                        <Button variant="ghost" className="flex items-center gap-2" onClick={() => setShowComments(prev => !prev)}>
-                            <MessageCircle className="h-5 w-5" />
-                            <span className="text-sm">{item.commentCount ?? 0}</span>
-                        </Button>
-                    </CollapsibleTrigger>
-                    <Button variant="ghost" className="flex items-center gap-2">
-                        <Repeat2 className="h-5 w-5" />
-                        <span className="text-sm">Repost</span>
-                    </Button>
-                </CardFooter>
-                 <CollapsibleContent>
-                    {showComments && <CommentSection docId={item.id} collectionType="wishlists" />}
-                </CollapsibleContent>
-            </Card>
-        </Collapsible>
+                </Button>
+                <Button variant="ghost" className="flex items-center gap-2">
+                    <Repeat2 className="h-5 w-5" />
+                    <span className="text-sm">Repost</span>
+                </Button>
+            </CardFooter>
+        </Card>
     )
 }
 
