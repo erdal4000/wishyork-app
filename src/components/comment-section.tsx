@@ -17,6 +17,7 @@ import {
   increment,
   DocumentData,
   Timestamp,
+  getDoc,
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -87,34 +88,35 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
     setIsSubmitting(true);
 
-    const parentDocRef = doc(db, collectionType, docId);
-    const commentsColRef = collection(parentDocRef, 'comments');
-
-    const batch = writeBatch(db);
-
-    const userDocRef = doc(db, 'users', user.uid);
-    // Note: In a real app, you'd fetch this securely or have it in context
-    const authorUsername = user.email?.split('@')[0] || 'user';
-    
-    batch.set(doc(commentsColRef), {
-      text: newComment,
-      authorId: user.uid,
-      authorName: user.displayName,
-      authorUsername: authorUsername,
-      authorAvatar: user.photoURL,
-      createdAt: serverTimestamp(),
-    });
-
-    batch.update(parentDocRef, {
-      commentCount: increment(1),
-    });
-
     try {
-      await batch.commit();
-      setNewComment('');
+        const parentDocRef = doc(db, collectionType, docId);
+        const commentsColRef = collection(parentDocRef, 'comments');
+
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+
+        const batch = writeBatch(db);
+
+        batch.set(doc(commentsColRef), {
+          text: newComment,
+          authorId: user.uid,
+          authorName: userData?.name || user.displayName,
+          authorUsername: userData?.username || 'user',
+          authorAvatar: userData?.photoURL || user.photoURL,
+          createdAt: serverTimestamp(),
+        });
+
+        batch.update(parentDocRef, {
+          commentCount: increment(1),
+        });
+        
+        await batch.commit();
+        setNewComment('');
+
     } catch (error) {
       console.error("Error adding comment: ", error);
-      toast({ title: "Error", description: "Failed to post comment. Check permissions.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to post comment.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -123,14 +125,14 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
   const handleDeleteComment = async (commentId: string) => {
     if (!user) return;
 
-    const parentDocRef = doc(db, collectionType, docId);
-    const commentRef = doc(parentDocRef, 'comments', commentId);
-
-    const batch = writeBatch(db);
-    batch.delete(commentRef);
-    batch.update(parentDocRef, { commentCount: increment(-1) });
-    
     try {
+        const parentDocRef = doc(db, collectionType, docId);
+        const commentRef = doc(parentDocRef, 'comments', commentId);
+
+        const batch = writeBatch(db);
+        batch.delete(commentRef);
+        batch.update(parentDocRef, { commentCount: increment(-1) });
+        
         await batch.commit();
         toast({ title: "Success", description: "Comment deleted." });
     } catch(error) {
@@ -141,7 +143,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
 
 
   return (
-    <div className="space-y-4 px-4 pb-4">
+    <div className="space-y-4 border-t px-4 py-4">
       {/* Post a comment form */}
       {user && (
         <form onSubmit={handleAddComment} className="flex items-start gap-4">

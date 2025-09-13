@@ -21,9 +21,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { CommentSection } from '@/components/comment-section';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { getInitials } from '@/lib/utils';
 
 // --- Data Types ---
 
@@ -70,11 +70,6 @@ function PostCard({ item }: { item: Post }) {
   const { user } = useAuth();
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
   const [showComments, setShowComments] = useState(false);
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name.split(' ').map((n) => n[0]).join('');
-  };
   
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
@@ -141,11 +136,6 @@ function PostCard({ item }: { item: Post }) {
 
 function WishlistCard({ item }: { item: Wishlist }) {
   const [showComments, setShowComments] = useState(false);
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name.split(' ').map((n) => n[0]).join('');
-  };
   
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
 
@@ -317,6 +307,7 @@ export default function DashboardPage() {
         likes: 0,
         likedBy: [],
         commentCount: 0,
+        type: 'post'
       });
       setPostContent('');
     } catch (error) {
@@ -326,14 +317,6 @@ export default function DashboardPage() {
     }
   };
   
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
   const currentUserPhoto = user?.photoURL || (user ? `https://picsum.photos/seed/${user.uid}/200/200` : '');
 
   return (
