@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -60,6 +59,7 @@ interface Comment extends DocumentData {
 
 const COMMENT_MAX_LENGTH = 300;
 
+// #region Comment Form
 interface CommentFormProps {
   parentComment?: Comment | null;
   onCommentPosted: () => void;
@@ -175,184 +175,207 @@ function CommentForm({
     </form>
   );
 }
+// #endregion
+
+
+// #region Comment Item
 
 interface CommentItemProps {
-    comment: Comment;
-    docId: string;
-    collectionType: 'posts' | 'wishlists';
-    activeReplyId: string | null;
-    setActiveReplyId: (id: string | null) => void;
-    hasReplies?: boolean;
+  comment: Comment;
+  docId: string;
+  collectionType: 'posts' | 'wishlists';
+  docAuthorId: string;
+  activeReplyId: string | null;
+  setActiveReplyId: (id: string | null) => void;
+  isReply: boolean;
 }
 
-function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, hasReplies }: CommentItemProps) {
-    const { user } = useAuth();
-    const { toast } = useToast();
-    const [isDeleting, setIsDeleting] = useState(false);
-    const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
-    const isReplyFormOpen = activeReplyId === comment.id;
+function CommentItem({ comment, docId, collectionType, activeReplyId, setActiveReplyId, docAuthorId, isReply }: CommentItemProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { hasLiked, isLiking, toggleLike } = useCommentInteraction(docId, collectionType, comment.id);
+  const isReplyFormOpen = activeReplyId === comment.id;
 
-    const handleToggleReplyForm = () => {
-        setActiveReplyId(isReplyFormOpen ? null : comment.id);
-    }
+  const handleToggleReplyForm = () => {
+    setActiveReplyId(isReplyFormOpen ? null : comment.id);
+  };
 
-    const handleDeleteComment = async (commentToDelete: Comment) => {
-      if (!user || isDeleting) return;
-  
-      setIsDeleting(true);
-      try {
-        const batch = writeBatch(db);
-        const parentDocRef = doc(db, collectionType, docId);
-        const commentsColRef = collection(parentDocRef, 'comments');
-  
-        const repliesQuery = query(commentsColRef, where("parentId", "==", commentToDelete.id));
+  const handleDeleteComment = async (commentToDelete: Comment) => {
+    if (!user || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      const parentDocRef = doc(db, collectionType, docId);
+      const commentsColRef = collection(parentDocRef, 'comments');
+
+      // Recursively find all replies to delete
+      const repliesToDelete: string[] = [];
+      const findReplies = async (parentId: string) => {
+        const repliesQuery = query(commentsColRef, where("parentId", "==", parentId));
         const repliesSnapshot = await getDocs(repliesQuery);
-        let deletedCount = 1;
-
-        const mainCommentRef = doc(commentsColRef, commentToDelete.id);
-        batch.delete(mainCommentRef);
-  
-        repliesSnapshot.forEach(replyDoc => {
-          batch.delete(replyDoc.ref);
-          deletedCount++;
-        });
-
-        if (commentToDelete.parentId) {
-          const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
-          batch.update(parentCommentRef, { replyCount: increment(-1) });
+        for (const replyDoc of repliesSnapshot.docs) {
+          repliesToDelete.push(replyDoc.id);
+          await findReplies(replyDoc.id);
         }
-  
-        batch.update(parentDocRef, { commentCount: increment(-deletedCount) });
-  
-        await batch.commit();
-        toast({ title: "Success", description: "Comment and replies deleted." });
-      } catch(error) {
-        console.error("Error deleting comment and its replies: ", error);
-        toast({ title: "Error", description: "Could not delete comment.", variant: "destructive" });
-      } finally {
-        setIsDeleting(false);
+      };
+
+      await findReplies(commentToDelete.id);
+
+      // Delete the main comment and all its replies
+      const mainCommentRef = doc(commentsColRef, commentToDelete.id);
+      batch.delete(mainCommentRef);
+      repliesToDelete.forEach(replyId => {
+        batch.delete(doc(commentsColRef, replyId));
+      });
+      
+      const totalDeleted = 1 + repliesToDelete.length;
+
+      // Update reply count on parent if it's a reply
+      if (commentToDelete.parentId) {
+        const parentCommentRef = doc(commentsColRef, commentToDelete.parentId);
+        batch.update(parentCommentRef, { replyCount: increment(-1) });
       }
-    };
-    
-    return (
-      <div className="flex w-full items-start gap-2 sm:gap-4 border-t py-4 relative">
-        {comment.parentId && (
-          <div className="absolute left-[18px] -top-4 bottom-0 w-0.5 bg-border -z-10 h-[calc(100%-1.5rem)]"></div>
+
+      // Update total comment count on the main post/wishlist
+      batch.update(parentDocRef, { commentCount: increment(-totalDeleted) });
+
+      await batch.commit();
+      toast({ title: "Success", description: "Comment and replies deleted." });
+    } catch (error) {
+      console.error("Error deleting comment and its replies: ", error);
+      toast({ title: "Error", description: "Could not delete comment.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const hasLine = isReply;
+  const isPostOwnerReply = isReply && comment.authorId === docAuthorId;
+
+  return (
+    <div className="flex w-full items-start gap-2 sm:gap-4 relative pt-4">
+        {hasLine && (
+            <div className="absolute bottom-0 left-[18px] top-0 w-0.5 bg-border -translate-x-1/2"></div>
         )}
-        <div className="relative">
-            <Avatar className="h-9 w-9">
-                <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
-                <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
-            </Avatar>
-        </div>
 
-            <div className="flex-1 pt-1.5 min-w-0">
-                <div className="group space-y-2">
-                    <div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm flex-wrap">
-                                <p className="font-semibold break-words">
-                                    <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
-                                    {comment.authorName}
-                                    </Link>
-                                </p>
-                                <p className='text-xs text-muted-foreground whitespace-nowrap'>
-                                    · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                                </p>
-                            </div>
-                            {user?.uid === comment.authorId && (
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
-                                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                                </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                    <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                            )}
-                        </div>
+      <Avatar className="h-9 w-9 z-10">
+        <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />
+        <AvatarFallback>{getInitials(comment.authorName)}</AvatarFallback>
+      </Avatar>
 
-                        {comment.parentAuthorUsername && (
-                            <p className="text-sm text-muted-foreground">
-                            Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
-                            </p>
-                        )}
-
-                        <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
-                    </div>
-
-                     <div className="flex justify-between -ml-2">
-                        <TooltipProvider>
-                            <div className="flex items-center text-muted-foreground">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
-                                            <MessageCircle className="h-5 w-5" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
-                                </Tooltip>
-                                
-                                <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                                        <Repeat2 className="h-5 w-5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
-                                </Tooltip>
-
-                                <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
-                                        <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
-                                </Tooltip>
-                                {comment.likes > 0 && <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
-                            </div>
-
-                            <div className="flex items-center text-muted-foreground">
-                                <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                                        <Bookmark className="h-5 w-5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                                        <Share2 className="h-5 w-5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
-                                </Tooltip>
-                            </div>
-                        </TooltipProvider>
-                    </div>
-                </div>
-                {isReplyFormOpen && (
-                    <div className="w-full">
-                        <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
-                    </div>
-                )}
+      <div className="flex-1 pt-1.5 min-w-0">
+        <div className="group space-y-2">
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                <p className="font-semibold break-words">
+                  <Link href={`/dashboard/profile/${comment.authorUsername}`} className="hover:underline">
+                    {comment.authorName}
+                  </Link>
+                </p>
+                <p className='text-xs text-muted-foreground whitespace-nowrap'>
+                  · {comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                </p>
+              </div>
+              {user?.uid === comment.authorId && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting}>
+                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                      <AlertDialogDescription>This action cannot be undone. This will permanently delete your comment{comment.replyCount > 0 ? " and all of its replies" : ""}.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteComment(comment)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
+
+            {comment.parentAuthorUsername && (
+              <p className="text-sm text-muted-foreground">
+                Replying to <Link href={`/dashboard/profile/${comment.parentAuthorUsername}`} className="text-primary hover:underline">@{comment.parentAuthorUsername}</Link>
+              </p>
+            )}
+
+            <p className="text-sm whitespace-pre-wrap">{comment.text}</p>
+          </div>
+
+          <div className="flex justify-between -ml-2">
+            <TooltipProvider>
+              <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleToggleReplyForm}>
+                      <MessageCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <Repeat2 className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
+                      <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                </Tooltip>
+                {comment.likes > 0 && <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
+              </div>
+
+              <div className="flex items-center text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <Bookmark className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <Share2 className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
+          </div>
+        </div>
       </div>
-    );
+      {isReplyFormOpen && (
+        <div className="pl-11">
+          <CommentForm docId={docId} collectionType={collectionType} parentComment={comment} onCommentPosted={() => setActiveReplyId(null)} />
+        </div>
+      )}
+    </div>
+  );
 }
 
+// #endregion
+
+
+// #region Main Component
 interface CommentSectionProps {
   docId: string;
   collectionType: 'posts' | 'wishlists';
@@ -385,54 +408,44 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
     return () => unsubscribe();
   }, [docId, collectionType, toast]);
   
-  const sortedComments = useMemo(() => {
-    const commentMap = new Map<string, Comment & { children: Comment[] }>();
-    const rootComments: (Comment & { children: Comment[] })[] = [];
+  const commentThreads = useMemo(() => {
+    const commentMap = new Map<string, Comment>(allComments.map(c => [c.id, c]));
+    const rootComments: Comment[] = [];
+    const threads: Comment[][] = [];
 
-    // First pass: create a map of all comments and initialize children array
-    allComments.forEach(comment => {
-      commentMap.set(comment.id, { ...comment, children: [] });
-    });
-
-    // Second pass: build the tree
-    allComments.forEach(comment => {
-      if (comment.parentId && commentMap.has(comment.parentId)) {
-        commentMap.get(comment.parentId)!.children.push(commentMap.get(comment.id)!);
-      } else {
-        rootComments.push(commentMap.get(comment.id)!);
-      }
-    });
-
-    // Sort children by creation time (ascending to keep replies in order)
-    commentMap.forEach(comment => {
-        comment.children.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-    });
+    // First, identify root comments
+    for (const comment of allComments) {
+        if (!comment.parentId) {
+            rootComments.push(comment);
+        }
+    }
     
-    // Sort root comments by creation time (descending for newest first)
-    rootComments.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+    // Sort root comments by newest first
+    rootComments.sort((a,b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+
+    const buildThread = (commentId: string): Comment[] => {
+        const replies: Comment[] = [];
+        for (const comment of allComments) {
+            if (comment.parentId === commentId) {
+                replies.push(comment);
+            }
+        }
+        replies.sort((a,b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+        
+        const thread: Comment[] = [];
+        for (const reply of replies) {
+            thread.push(reply, ...buildThread(reply.id));
+        }
+        return thread;
+    };
     
-    return rootComments;
+    for (const root of rootComments) {
+        const thread = [root, ...buildThread(root.id)];
+        threads.push(thread);
+    }
+    
+    return threads;
   }, [allComments]);
-
-  const renderComment = (comment: Comment & { children: Comment[] }) => {
-    return (
-      <div key={comment.id} className="w-full">
-        <CommentItem 
-            comment={comment} 
-            docId={docId} 
-            collectionType={collectionType}
-            activeReplyId={activeReplyId} 
-            setActiveReplyId={setActiveReplyId}
-            hasReplies={comment.children.length > 0}
-        />
-        {comment.children.length > 0 && (
-          <div className="pl-5 sm:pl-8"> 
-            {comment.children.map(renderComment)}
-          </div>
-        )}
-      </div>
-    );
-  };
 
 
   return (
@@ -448,12 +461,30 @@ export function CommentSection({ docId, collectionType, docAuthorId }: CommentSe
           <div className="flex justify-center p-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : sortedComments.length > 0 ? (
-          sortedComments.map(renderComment)
+        ) : commentThreads.length > 0 ? (
+          commentThreads.map((thread, index) => (
+            <div key={thread[0].id} className="border-t">
+                {thread.map(comment => (
+                    <CommentItem
+                        key={comment.id}
+                        comment={comment}
+                        docId={docId}
+                        collectionType={collectionType}
+                        docAuthorId={docAuthorId}
+                        activeReplyId={activeReplyId}
+                        setActiveReplyId={setActiveReplyId}
+                        isReply={!!comment.parentId}
+                    />
+                ))}
+            </div>
+          ))
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">No comments yet. Be the first to reply!</p>
+          <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
         )}
       </div>
     </div>
   );
 }
+// #endregion
+
+    
