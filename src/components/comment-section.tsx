@@ -20,12 +20,13 @@ import {
   getDoc,
   where,
   getDocs,
+  updateDoc,
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Loader2, Trash2, Heart, MessageCircle, Repeat2, Bookmark, Share2, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { Loader2, Trash2, Heart, MessageCircle, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +61,7 @@ interface Comment extends DocumentData {
   id: string;
   authorId: string;
   authorName: string;
+
   authorUsername: string;
   authorAvatar: string;
   text: string;
@@ -410,8 +412,7 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         {isOwnComment ? (
-                            <>
-                            <AlertDialog>
+                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                         <Trash2 className="mr-2 h-4 w-4" />
@@ -429,7 +430,6 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
-                            </>
                         ) : (
                             <DropdownMenuItem onSelect={handleReportComment}>
                                 <AlertTriangle className="mr-2 h-4 w-4" />
@@ -449,55 +449,27 @@ function CommentItem({ comment, docId, collectionType, onReplyClick }: CommentIt
             <p className="whitespace-pre-wrap text-sm">{comment.text}</p>
           </div>
 
-          <div className="-ml-2 flex justify-between">
+          <div className="-ml-2 flex items-center text-muted-foreground">
               <TooltipProvider>
-              <div className="flex items-center text-muted-foreground">
+              <div className="flex items-center">
                   <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onReplyClick(comment)}>
-                      <MessageCircle className="h-5 w-5" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onReplyClick(comment)}>
+                        <MessageCircle className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
                   </Tooltip>
 
                   <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Repeat2 className="h-5 w-5" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                  <TooltipTrigger asChild>
+                    <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
-                      <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                        <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
                       </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
                   </Tooltip>
                   {comment.likes > 0 && <span className={`pr-2 text-sm ${hasLiked ? 'text-red-500' : ''}`}>{comment.likes}</span>}
-              </div>
-
-              <div className="flex items-center text-muted-foreground">
-                  <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Bookmark className="h-5 w-5" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9">
-                      <Share2 className="h-5 w-5" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
-                  </Tooltip>
               </div>
               </TooltipProvider>
           </div>
@@ -562,17 +534,18 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
     setReplyingTo(comment);
   };
   
-  const renderCommentAndReplies = (commentThread: CommentWithReplies) => {
+  const renderCommentAndReplies = (commentThread: CommentWithReplies, isMainComment: boolean) => {
     return (
-      <div key={commentThread.id} className="border-t first:border-t-0">
+      <div key={commentThread.id} className={`${isMainComment ? 'border-t' : ''}`}>
         <CommentItem
           comment={commentThread}
           docId={docId}
           collectionType={collectionType}
           onReplyClick={handleReplyClick}
         />
-        <div className="pl-4 sm:pl-8">
-          {commentThread.replies.map(reply => renderCommentAndReplies(reply))}
+        {/* Replies */}
+        <div className="pl-0">
+          {commentThread.replies.map(reply => renderCommentAndReplies(reply, false))}
         </div>
       </div>
     );
@@ -593,7 +566,7 @@ export function CommentSection({ docId, collectionType }: CommentSectionProps) {
           </div>
         ) : commentThreads.length > 0 ? (
           <div className="space-y-0">
-            {commentThreads.map(thread => renderCommentAndReplies(thread))}
+            {commentThreads.map(thread => renderCommentAndReplies(thread, true))}
           </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground border-t">No comments yet. Be the first to reply!</p>
