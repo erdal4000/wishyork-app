@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import {
@@ -297,75 +296,66 @@ export default function DashboardPage() {
   
     setLoadingFeed(true);
   
-    // Listen for changes in the user's "following" list
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
       const following = userDoc.data()?.following || [];
       const authorsToFetch = [user.uid, ...following];
   
-      // If there are no authors to fetch, don't proceed.
       if (authorsToFetch.length === 0) {
         setFeedItems([]);
         setLoadingFeed(false);
         return;
       }
       
-      // Use collectionGroup to query across all 'posts' subcollections
       const postsQuery = query(
         collectionGroup(db, "posts"),
         where("authorId", "in", authorsToFetch),
         orderBy("createdAt", "desc")
       );
   
-      // Use collectionGroup for wishlists as well
       const wishlistsQuery = query(
         collectionGroup(db, "wishlists"),
         where("authorId", "in", authorsToFetch),
-        where("privacy", "==", "public"), // Only show public wishlists in feed
+        where("privacy", "==", "public"),
         orderBy("createdAt", "desc")
       );
   
-      // Unsubscribe from previous listeners before creating new ones
       let unsubPosts: (() => void) | null = null;
       let unsubWishlists: (() => void) | null = null;
       
-      const fetchAndMerge = () => {
-        let postsData: Post[] = [];
-        let wishlistsData: Wishlist[] = [];
-        let postsDone = false;
-        let wishlistsDone = false;
-  
-        const mergeData = () => {
-          if (postsDone && wishlistsDone) {
-            const combined = [...postsData, ...wishlistsData];
-            combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-            setFeedItems(combined);
-            setLoadingFeed(false);
-          }
-        };
-  
-        unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-          postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-          postsDone = true;
-          mergeData();
-        }, (error) => {
-          console.error("Error fetching posts:", error);
-          postsDone = true;
-          mergeData();
-        });
-  
-        unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-          wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-          wishlistsDone = true;
-          mergeData();
-        }, (error) => {
-          console.error("Error fetching wishlists:", error);
-          wishlistsDone = true;
-          mergeData();
-        });
+      let postsData: Post[] = [];
+      let wishlistsData: Wishlist[] = [];
+      let postsDone = false;
+      let wishlistsDone = false;
+
+      const mergeData = () => {
+        if (postsDone && wishlistsDone) {
+          const combined = [...postsData, ...wishlistsData];
+          combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+          setFeedItems(combined);
+          setLoadingFeed(false);
+        }
       };
-      
-      fetchAndMerge();
+
+      unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+        postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        postsDone = true;
+        mergeData();
+      }, (error) => {
+        console.error("Error fetching posts:", error);
+        postsDone = true; // Mark as done even on error to unblock merging
+        mergeData();
+      });
+
+      unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+        wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+        wishlistsDone = true;
+        mergeData();
+      }, (error) => {
+        console.error("Error fetching wishlists:", error);
+        wishlistsDone = true; // Mark as done even on error to unblock merging
+        mergeData();
+      });
   
       return () => {
         unsubPosts?.();
