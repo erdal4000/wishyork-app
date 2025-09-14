@@ -121,6 +121,11 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   const handleRemoveImage = () => {
     setImageUrl(null); // It will fallback to picsum on submit
     itemImageUpload.reset();
+    // Also reset the file input so the same file can be re-selected
+    const fileInput = document.getElementById('item-image-upload') as HTMLInputElement;
+    if (fileInput) {
+        fileInput.value = "";
+    }
     toast({ title: 'Image Removed', description: 'A default placeholder image will be used.' });
   };
 
@@ -375,6 +380,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                               !field.value && "text-muted-foreground"
                             )}
                             disabled={isSubmitting || isUploading}
+                            onPointerDown={(e) => e.preventDefault()}
                           >
                             {field.value ? (
                               format(field.value, "PPP")
@@ -434,4 +440,3 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
-
