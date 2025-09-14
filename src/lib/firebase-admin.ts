@@ -21,7 +21,7 @@ function getServiceAccount(): ServiceAccount {
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin server credentials are not fully set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are correctly set in your hosting environment (e.g., Vercel).'
+      'Firebase Admin server credentials are not fully set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are correctly set in your environment.'
     );
   }
   
