@@ -134,10 +134,11 @@ export function ProfilePageClient({
             const data = doc.data();
             setProfileUser(prev => ({
                 ...prev,
+                name: data.name,
+                username: data.username,
+                bio: data.bio,
                 followersCount: data.followersCount || 0,
                 followingCount: data.followingCount || 0,
-                bio: data.bio,
-                name: data.name
             }));
         }
     });
@@ -277,11 +278,11 @@ export function ProfilePageClient({
                     <p><span className="font-bold">{profileUser.followersCount || 0}</span> Followers</p>
                     <p><span className="font-bold">{profileUser.followingCount || 0}</span> Following</p>
                 </div>
-              <p className="mt-2 max-w-2xl text-sm">{profileUser.bio ?? "This user hasn't set a bio yet."}</p>
+              <p className="mt-2 max-w-2xl text-sm">{profileUser.bio || "This user hasn't set a bio yet."}</p>
             </div>
             <div className="mt-2 flex-shrink-0 sm:mt-0">
               {isOwnProfile ? (
-                <Button><Edit className="mr-2 h-4 w-4" /> Edit Profile</Button>
+                <Button asChild><Link href="/dashboard/settings"><Edit className="mr-2 h-4 w-4" /> Edit Profile</Link></Button>
               ) : (
                 currentUser && <FollowButton />
               )}
@@ -321,6 +322,7 @@ export function ProfilePageClient({
                                 data-ai-hint={list.aiHint}
                                 fill
                                 className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                                 />
                                 <Badge variant="secondary" className="absolute left-3 top-3 z-10">{list.category}</Badge>
                             </CardHeader>

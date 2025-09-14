@@ -1,4 +1,17 @@
 
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import debounce from 'lodash.debounce';
+
+import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, writeBatch, query, collection, where, getDocs } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -8,14 +21,188 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+
+const profileSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  username: z.string().min(3, "Username must be at least 3 characters.").refine(val => /^[a-zA-Z0-9_]+$/.test(val), { message: "Only letters, numbers, and underscores are allowed."}),
+  bio: z.string().max(160, "Bio cannot be longer than 160 characters.").optional(),
+});
+
+type ProfileFormData = z.infer<typeof profileSchema>;
+
+const renderUsernameIcon = (isChecking: boolean, isAvailable: boolean | null, serverError: boolean) => {
+    if(isChecking) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
+    if(serverError) return <AlertCircle className="h-5 w-5 text-yellow-500" title="Could not verify username" />;
+    if(isAvailable === true) return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+    if(isAvailable === false) return <AlertCircle className="h-5 w-5 text-destructive" />;
+    return null;
+}
+
+
+function ProfileSettingsSkeleton() {
+    return (
+        <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+              <CardDescription>
+                This is how others will see you on the site.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-12" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-8" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Skeleton className="h-10 w-32" />
+            </CardFooter>
+        </Card>
+    )
+}
 
 export default function SettingsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [loadingData, setLoadingData] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [originalUsername, setOriginalUsername] = useState('');
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameServerError, setUsernameServerError] = useState(false);
+
+  const form = useForm<ProfileFormData>({
+    resolver: zodResolver(profileSchema),
+    mode: 'onChange',
+  });
+
+  const usernameValue = form.watch("username");
+
+  const checkUsername = useCallback(
+    debounce(async (username: string) => {
+      if (username === originalUsername) {
+        setIsUsernameAvailable(null);
+        setIsCheckingUsername(false);
+        form.clearErrors("username");
+        return;
+      }
+      if (username.length < 3) {
+        setIsUsernameAvailable(null);
+        return;
+      }
+
+      setIsCheckingUsername(true);
+      setUsernameServerError(false);
+      const formattedUsername = username.toLowerCase();
+      try {
+        const q = query(collection(db, "usernames"), where("username_lowercase", "==", formattedUsername));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+          setIsUsernameAvailable(true);
+          form.clearErrors("username");
+        } else {
+          setIsUsernameAvailable(false);
+          form.setError("username", { type: "manual", message: "This username is already taken." });
+        }
+      } catch (error) {
+        console.error("Error checking username:", error);
+        setUsernameServerError(true);
+        form.setError("username", { type: "manual", message: "Couldn't verify username. Try again."});
+      } finally {
+        setIsCheckingUsername(false);
+      }
+    }, 500),
+    [originalUsername, form]
+  );
+  
+  useEffect(() => {
+    if (usernameValue !== undefined) {
+      checkUsername(usernameValue);
+    }
+  }, [usernameValue, checkUsername]);
+
+
+  useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      getDoc(userDocRef).then((docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          form.reset({
+            name: data.name || '',
+            username: data.username || '',
+            bio: data.bio || '',
+          });
+          setOriginalUsername(data.username || '');
+        }
+        setLoadingData(false);
+      });
+    }
+  }, [user, form]);
+  
+  const handleProfileSubmit = async (values: ProfileFormData) => {
+    if (!user) return;
+
+    if(usernameValue !== originalUsername && isUsernameAvailable === false) {
+        toast({ title: "Username taken", description: "Please choose a different username.", variant: "destructive" });
+        return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const batch = writeBatch(db);
+
+        batch.update(userDocRef, {
+            name: values.name,
+            bio: values.bio,
+            username: values.username,
+            username_lowercase: values.username.toLowerCase(),
+        });
+
+        // If username was changed, update the usernames collection
+        if (usernameValue !== originalUsername) {
+            const oldUsernameRef = doc(db, 'usernames', originalUsername.toLowerCase());
+            const newUsernameRef = doc(db, 'usernames', values.username.toLowerCase());
+            batch.delete(oldUsernameRef);
+            batch.set(newUsernameRef, { uid: user.uid });
+        }
+
+        await batch.commit();
+
+        toast({ title: 'Profile Updated', description: 'Your changes have been saved successfully.' });
+        setOriginalUsername(values.username); // update original username after successful save
+        
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        toast({ title: 'Update Failed', description: 'An error occurred while saving your profile.', variant: 'destructive' });
+    } finally {
+        setIsSubmitting(false);
+    }
+  }
+
+
+  const isLoading = authLoading || loadingData;
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,35 +220,73 @@ export default function SettingsPage() {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription>
-                This is how others will see you on the site.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" defaultValue="Jane Doe" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" defaultValue="@janedoe" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
-                <textarea
-                  id="bio"
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue="Passionate about social good, clean energy, and animal welfare."
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button>Save Changes</Button>
-            </CardFooter>
-          </Card>
+          {isLoading ? (
+            <ProfileSettingsSkeleton />
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleProfileSubmit)}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Profile</CardTitle>
+                    <CardDescription>
+                      This is how others will see you on the site.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="name">Name</Label>
+                          <Input id="name" {...field} disabled={isSubmitting} />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="username"
+                      render={({ field }) => (
+                         <FormItem>
+                           <Label htmlFor="username">Username</Label>
+                           <div className="relative">
+                            <Input id="username" {...field} disabled={isSubmitting} />
+                            <div className="absolute inset-y-0 right-3 flex items-center">
+                               {renderUsernameIcon(isCheckingUsername, isUsernameAvailable, usernameServerError)}
+                           </div>
+                           </div>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="bio"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="bio">Bio</Label>
+                          <Textarea
+                            id="bio"
+                            placeholder="Tell us a little about yourself"
+                            {...field}
+                            disabled={isSubmitting}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                  <CardFooter>
+                    <Button type="submit" disabled={isSubmitting || isCheckingUsername}>
+                      {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Save Changes
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </form>
+            </Form>
+          )}
         </TabsContent>
         <TabsContent value="account">
           <Card>
@@ -74,7 +299,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="jane.doe@example.com" />
+                <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
               </div>
                <div className="space-y-2">
                 <Label htmlFor="current-password">Current Password</Label>
