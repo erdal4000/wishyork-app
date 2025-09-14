@@ -12,7 +12,7 @@ service firebase.storage {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
+
     // User Images: Profile and Cover photos
     // Path: /user-images/{userId}/{'avatar' or 'cover'}/{fileName}
     match /user-images/{userId}/{imageType}/{fileName} {
@@ -27,8 +27,8 @@ service firebase.storage {
     // Path: /item-images/{wishlistId}/{fileName}
     match /item-images/{wishlistId}/{fileName} {
       // Allow write if the authenticated user is the author of the wishlist.
-      // This requires reading the wishlist document from Firestore.
-      allow write: if isAuthenticated() && get(/databases/(default)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      // This requires reading the wishlist document from Firestore, which is now permitted by firestore.rules.
+      allow write: if isAuthenticated() && firestore.get(/databases/(default)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
       
       // Anyone can read item images
       allow read;
