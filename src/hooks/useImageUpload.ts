@@ -36,8 +36,7 @@ export const useImageUpload = () => {
       setProgress(0);
       setDownloadURL(null);
       setError(null);
-
-      // IMPORTANT: No more compression. Upload the original file for max quality.
+      
       const fileToUpload = file;
 
       const storageRef = ref(storage, path);
