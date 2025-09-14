@@ -1,62 +1,85 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function
+
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // usernames collection: ensures uniqueness
-    match /usernames/{username} {
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Anyone can read a user's public profile data
       allow read;
-      allow create: if isAuthenticated();
+      // Only the owner can write to their own user document
+      allow write: if isOwner(userId);
+    }
+    
+    // Usernames Collection (for ensuring unique usernames)
+    match /usernames/{username} {
+      // Anyone can check if a username exists
+      allow read;
+      // Only an authenticated user can create a username document for themselves
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      // Nobody can update an existing username document
+      allow update: if false;
+      // Only the owner can delete their username document
       allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
-
-    // users collection
-    match /users/{userId} {
-      allow read;
-      allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId;
+    
+    // Reports Collection
+    match /reports/{reportId} {
+        allow create: if isAuthenticated();
+        allow read, write: if false; // Only admins should read/write
     }
 
-    // wishlists collection
+    // Wishlists Collection
     match /wishlists/{wishlistId} {
-      // Allow read access if the wishlist is public, or if the user is the author.
-      // This is crucial for the Storage rule to be able to check authorship.
-      allow read: if resource.data.privacy == 'public' || (isAuthenticated() && resource.data.authorId == request.auth.uid);
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.authorId;
-      allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      // READ Rules:
+      // 1. Allow if the wishlist is public.
+      // 2. Allow if the user is the owner of the wishlist.
+      // 3. (Future) Allow if privacy is 'friends' and users are friends.
+      allow read: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
+      
+      // CREATE Rule:
+      // Only an authenticated user can create a wishlist for themselves.
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      
+      // UPDATE/DELETE Rules:
+      // Only the owner of the wishlist can update or delete it.
+      allow update, delete: if isOwner(resource.data.authorId);
 
-      // items subcollection
+      // Items Subcollection
       match /items/{itemId} {
-        allow read;
-        allow create: if isAuthenticated() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
-        allow update, delete: if isAuthenticated() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+        allow read, write: if true; // Temporarily open for development, will be secured later.
       }
-
-      // comments subcollection
+      
+      // Comments Subcollection
       match /comments/{commentId} {
-        allow read;
+        allow read: if true;
         allow create: if isAuthenticated();
-        allow update, delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid);
+        allow update, delete: if isOwner(get(/databases/$(database)/documents/comments/$(commentId)).data.authorId);
       }
     }
-
-    // posts collection
+    
+    // Posts Collection
     match /posts/{postId} {
-      allow read;
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.authorId;
-      allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
-
-       // comments subcollection within posts
-      match /comments/{commentId} {
-        allow read;
-        allow create: if isAuthenticated();
-        allow update, delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid);
-      }
+        allow read: if true;
+        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isOwner(resource.data.authorId);
+        
+        // Comments Subcollection within Posts
+        match /comments/{commentId} {
+            allow read: if true;
+            allow create: if isAuthenticated();
+            allow update, delete: if isOwner(get(/databases/$(database)/documents/posts/$(postId)/comments/$(commentId)).data.authorId);
+        }
     }
   }
 }
