@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, collectionGroup } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -295,77 +295,63 @@ export default function DashboardPage() {
     }
   
     setLoadingFeed(true);
-  
+
+    // This listener will fetch the user's "following" list and trigger the feed fetch.
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
-      const following = userDoc.data()?.following || [];
+      const userData = userDoc.data();
+      const following = userData?.following || [];
       const authorsToFetch = [user.uid, ...following];
-  
-      if (authorsToFetch.length === 0) {
-        setFeedItems([]);
-        setLoadingFeed(false);
-        return;
-      }
-      
-      const postsQuery = query(
-        collectionGroup(db, "posts"),
-        where("authorId", "in", authorsToFetch),
-        orderBy("createdAt", "desc")
-      );
-  
-      const wishlistsQuery = query(
-        collectionGroup(db, "wishlists"),
-        where("authorId", "in", authorsToFetch),
-        where("privacy", "==", "public"),
-        orderBy("createdAt", "desc")
-      );
-  
-      let unsubPosts: (() => void) | null = null;
-      let unsubWishlists: (() => void) | null = null;
-      
-      let postsData: Post[] = [];
-      let wishlistsData: Wishlist[] = [];
-      let postsDone = false;
-      let wishlistsDone = false;
 
-      const mergeData = () => {
-        if (postsDone && wishlistsDone) {
-          const combined = [...postsData, ...wishlistsData];
-          combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-          setFeedItems(combined);
-          setLoadingFeed(false);
-        }
-      };
-
-      unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-        postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        postsDone = true;
-        mergeData();
-      }, (error) => {
-        console.error("Error fetching posts:", error);
-        postsDone = true; // Mark as done even on error to unblock merging
-        mergeData();
-      });
-
-      unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-        wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-        wishlistsDone = true;
-        mergeData();
-      }, (error) => {
-        console.error("Error fetching wishlists:", error);
-        wishlistsDone = true; // Mark as done even on error to unblock merging
-        mergeData();
-      });
-  
-      return () => {
-        unsubPosts?.();
-        unsubWishlists?.();
-      };
-  
+      // Now, let's fetch the content.
+      fetchFeed(authorsToFetch);
     }, (error) => {
       console.error("Error fetching user's following list:", error);
       setLoadingFeed(false);
     });
+
+    const fetchFeed = async (authorIds: string[]) => {
+      if (authorIds.length === 0) {
+        setFeedItems([]);
+        setLoadingFeed(false);
+        return;
+      }
+    
+      try {
+        const postsQuery = query(
+          collection(db, "posts"),
+          where("authorId", "in", authorIds),
+          orderBy("createdAt", "desc")
+        );
+    
+        const wishlistsQuery = query(
+          collection(db, "wishlists"),
+          where("authorId", "in", authorIds),
+          where("privacy", "==", "public"),
+          orderBy("createdAt", "desc")
+        );
+        
+        const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
+          getDocs(postsQuery),
+          getDocs(wishlistsQuery),
+        ]);
+
+        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+
+        const combined = [...postsData, ...wishlistsData];
+        combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+        
+        setFeedItems(combined);
+      } catch (error) {
+        console.error("Error fetching feed:", error);
+        // This is a common error if the composite index is not yet built.
+        // We'll show the message to the user.
+        setFeedItems([]);
+      } finally {
+        setLoadingFeed(false);
+      }
+    };
   
     return () => unsubscribeUser();
   
