@@ -294,71 +294,67 @@ export default function DashboardPage() {
       return;
     }
 
-    let unsubscribe: () => void = () => {};
-
-    // First, get the user's list of followed people
+    // This is the listener for the user's own data, specifically the 'following' list.
     const userDocRef = doc(db, 'users', user.uid);
-    const unsubUser = onSnapshot(userDocRef, (userDoc) => {
-      // Clean up previous feed listener if following list changes
-      unsubscribe(); 
-
+    const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
       const userData = userDoc.data();
       const following = userData?.following || [];
-      const authorsToFetch = [user.uid, ...following];
+      const authorsToQuery = [user.uid, ...following];
 
-      // Firestore 'in' queries are limited to 30 elements.
-      // We chunk the array to handle cases with more than 30 authors.
-      if (authorsToFetch.length > 0) {
-        setLoadingFeed(true);
-        const allFeedItems: FeedItem[] = [];
+      // Since 'in' queries are limited to 30 items in Firestore, we must chunk the array.
+      // This is a robust way to handle users who follow many people.
+      const authorChunks = [];
+      for (let i = 0; i < authorsToQuery.length; i += 30) {
+        authorChunks.push(authorsToQuery.slice(i, i + 30));
+      }
 
-        // Use Promise.all to fetch all chunks concurrently
-        const fetchPromises = [];
+      setLoadingFeed(true);
 
-        // Fetch Posts
+      const allPromises = authorChunks.flatMap(chunk => {
         const postsQuery = query(
           collectionGroup(db, 'posts'),
-          where('authorId', 'in', authorsToFetch),
+          where('authorId', 'in', chunk),
           orderBy('createdAt', 'desc')
         );
-        fetchPromises.push(getDocs(postsQuery));
-        
-        // Fetch Wishlists
         const wishlistsQuery = query(
           collectionGroup(db, 'wishlists'),
-          where('authorId', 'in', authorsToFetch),
+          where('authorId', 'in', chunk),
           where('privacy', '==', 'public'),
           orderBy('createdAt', 'desc')
         );
-        fetchPromises.push(getDocs(wishlistsQuery));
-        
-        Promise.all(fetchPromises).then(([postsSnapshot, wishlistsSnapshot]) => {
-          const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-          const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
-          
-          const combined = [...postsData, ...wishlistsData];
-          combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-          
-          setFeedItems(combined);
-          setLoadingFeed(false);
-
-        }).catch(error => {
-           console.error("Error fetching feed:", error);
-           setLoadingFeed(false);
+        return [getDocs(postsQuery), getDocs(wishlistsQuery)];
+      });
+      
+      Promise.all(allPromises).then((snapshots) => {
+        const allItems: FeedItem[] = [];
+        snapshots.forEach(snapshot => {
+          snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            // Ensure the document has a 'type' field before adding it to the feed
+            if (data.type === 'post' || data.type === 'wishlist') {
+              allItems.push({ id: doc.id, ...data } as FeedItem);
+            }
+          });
         });
+        
+        // Remove duplicates that might arise from edge cases and sort all items together.
+        const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+        uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
 
-      } else {
-        setFeedItems([]);
+        setFeedItems(uniqueItems);
         setLoadingFeed(false);
-      }
+      }).catch(error => {
+        console.error("Error fetching feed items:", error);
+        setLoadingFeed(false);
+      });
+
     }, (error) => {
-      console.error("Error fetching user's following list:", error);
+      console.error("Error listening to user document:", error);
       setLoadingFeed(false);
     });
 
     return () => {
-      unsubUser();
-      unsubscribe();
+      unsubscribeUser();
     };
   
   }, [user]);
@@ -450,6 +446,7 @@ export default function DashboardPage() {
             if (item.type === 'wishlist') {
                 return <WishlistCard key={`wishlist-${item.id}`} item={item as Wishlist} />;
             }
+            // Defensively return null if item type is unknown
             return null;
         })
       )}

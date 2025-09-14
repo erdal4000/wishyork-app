@@ -9,12 +9,11 @@ service cloud.firestore {
     }
 
     // --- USERS ---
-    // Users can read their own data.
+    // Users can read/write their own data.
     // Public user profiles can be read by anyone.
     match /users/{userId} {
       allow read;
-      allow update, delete: if request.auth.uid == userId;
-      allow create: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
     
     // Usernames must be unique.
@@ -23,49 +22,58 @@ service cloud.firestore {
       allow create: if isSignedIn();
     }
 
-    // --- POSTS ---
+    // --- POSTS (as a top-level collection) ---
+    // This defines rules for when accessing a post directly via /posts/{postId}
     match /posts/{postId} {
-      allow read, create: if isSignedIn();
+      // Anyone signed in can read a post.
+      allow read: if isSignedIn();
+      // Allow create if signed in.
+      allow create: if isSignedIn();
+      // Only the author can update or delete their own post.
       allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
-
-      // Comments subcollection
+      
+      // Comments subcollection within a post
       match /comments/{commentId} {
         allow read, create: if isSignedIn();
-        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
       }
     }
     
-    // --- WISHLISTS ---
+    // --- WISHLISTS (as a top-level collection) ---
     match /wishlists/{wishlistId} {
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
       // Read access logic:
-      // 1. Allow if public
-      // 2. Allow if user is the author (for private/friends lists)
-      allow read: if resource.data.privacy == 'public' || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      // 1. Allow if public.
+      // 2. Allow if user is the author (for private/friends lists).
+      // 3. (Future) Allow if user is a friend.
+      allow read: if resource.data.privacy == 'public' || (isSignedIn() && request.auth.uid == resource.data.authorId);
       
-      // Items subcollection
+      // Items subcollection within a wishlist
       match /items/{itemId} {
-        allow read, create: if isSignedIn();
-        allow update, delete: if isSignedIn() && parent.data.authorId == request.auth.uid;
+        allow read, create, update, delete: if isSignedIn(); // Simplified for now
       }
 
-      // Comments subcollection
+      // Comments subcollection within a wishlist
       match /comments/{commentId} {
         allow read, create: if isSignedIn();
-        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
       }
     }
 
     // --- COLLECTION GROUP RULES ---
-    // These are crucial for the feed functionality to work.
-    // It allows reading posts and wishlists across all users if the user is signed in.
+    // These are crucial for the feed functionality, allowing queries across all 'posts'
+    // and 'wishlists' collections, regardless of their path.
+    // This allows us to fetch posts/wishlists from all users that the current user follows.
     match /{path=**}/posts/{postId} {
+      // A user can read from the 'posts' collection group if they are signed in.
       allow read: if isSignedIn();
     }
 
     match /{path=**}/wishlists/{wishlistId} {
-      allow read: if isSignedIn();
+      // A user can read from the 'wishlists' collection group if they are signed in
+      // AND the wishlist they are trying to read is 'public'.
+      allow read: if isSignedIn() && resource.data.privacy == 'public';
     }
   }
 }
