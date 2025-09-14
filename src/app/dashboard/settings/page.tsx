@@ -21,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -112,7 +120,7 @@ export default function SettingsPage() {
       setUsernameServerError(false);
       const formattedUsername = username.toLowerCase();
       try {
-        const q = query(collection(db, "usernames"), where("username_lowercase", "==", formattedUsername));
+        const q = query(collection(db, "users"), where("username_lowercase", "==", formattedUsername));
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
@@ -181,9 +189,16 @@ export default function SettingsPage() {
 
         // If username was changed, update the usernames collection
         if (usernameValue !== originalUsername) {
+            // Firestore usernames collection uses lowercase usernames as doc IDs
             const oldUsernameRef = doc(db, 'usernames', originalUsername.toLowerCase());
             const newUsernameRef = doc(db, 'usernames', values.username.toLowerCase());
-            batch.delete(oldUsernameRef);
+            
+            // It's possible the old username doesn't exist in the collection if it was created before the collection was in use
+            const oldUsernameDoc = await getDoc(oldUsernameRef);
+            if (oldUsernameDoc.exists()) {
+                batch.delete(oldUsernameRef);
+            }
+
             batch.set(newUsernameRef, { uid: user.uid });
         }
 
@@ -238,8 +253,10 @@ export default function SettingsPage() {
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <Label htmlFor="name">Name</Label>
-                          <Input id="name" {...field} disabled={isSubmitting} />
+                          <FormLabel>Name</FormLabel>
+                          <FormControl>
+                            <Input id="name" {...field} disabled={isSubmitting} />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -249,9 +266,11 @@ export default function SettingsPage() {
                       name="username"
                       render={({ field }) => (
                          <FormItem>
-                           <Label htmlFor="username">Username</Label>
+                           <FormLabel>Username</FormLabel>
                            <div className="relative">
-                            <Input id="username" {...field} disabled={isSubmitting} />
+                            <FormControl>
+                              <Input id="username" {...field} disabled={isSubmitting} />
+                            </FormControl>
                             <div className="absolute inset-y-0 right-3 flex items-center">
                                {renderUsernameIcon(isCheckingUsername, isUsernameAvailable, usernameServerError)}
                            </div>
@@ -265,13 +284,15 @@ export default function SettingsPage() {
                       name="bio"
                       render={({ field }) => (
                         <FormItem>
-                          <Label htmlFor="bio">Bio</Label>
-                          <Textarea
-                            id="bio"
-                            placeholder="Tell us a little about yourself"
-                            {...field}
-                            disabled={isSubmitting}
-                          />
+                          <FormLabel>Bio</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              id="bio"
+                              placeholder="Tell us a little about yourself"
+                              {...field}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -393,4 +414,5 @@ export default function SettingsPage() {
       </Tabs>
     </div>
   );
-}
+
+    
