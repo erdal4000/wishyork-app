@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import Image from 'next/image';
+
+import { useImageUpload } from '@/hooks/useImageUpload';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,7 +42,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, Link as LinkIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, Link as LinkIcon, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -48,11 +51,12 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from './ui/progress';
+import { Label } from './ui/label';
 
 const formSchema = z.object({
   fetchUrl: z.string().url().optional().or(z.literal('')),
   itemName: z.string().min(1, "Item name is required."),
-  // wishlist: z.string().min(1, "Please select a wishlist."), // We'll get this from props
   priority: z.string().default("Medium"),
   recurrence: z.string().default("One-time"),
   quantity: z.coerce.number().min(1, "Quantity must be at least 1").default(1),
@@ -69,6 +73,8 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const itemImageUpload = useImageUpload();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -84,6 +90,39 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
       notes: "",
     },
   });
+
+  const resetDialog = () => {
+    form.reset();
+    itemImageUpload.reset();
+    setImageUrl(null);
+  }
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      resetDialog();
+    }
+  }
+  
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !user) return;
+    const file = e.target.files[0];
+    const path = `item-images/${wishlistId}/${Date.now()}_${file.name}`;
+    
+    try {
+        const newUrl = await itemImageUpload.uploadImage(file, path);
+        setImageUrl(newUrl);
+    } catch(err) {
+        // Error is toasted in the hook
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUrl(null);
+    itemImageUpload.reset();
+    toast({ title: 'Image Removed', description: 'A default image will be used.' });
+  };
+
 
   async function onSubmit(values: FormData) {
     if (!user) {
@@ -111,7 +150,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
             status: 'available',
             addedAt: serverTimestamp(),
             addedBy: user.uid,
-            imageUrl: `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`, // Placeholder image
+            imageUrl: imageUrl || `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`,
             aiHint: values.itemName.split(' ').slice(0,2).join(' '),
         };
 
@@ -124,7 +163,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         toast({ title: "Success!", description: "New item has been added to your wishlist." });
 
         setTimeout(() => {
-          form.reset();
+          resetDialog();
           setOpen(false);
         }, 100);
 
@@ -135,9 +174,11 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         setIsSubmitting(false);
     }
   }
+  
+  const isUploading = itemImageUpload.uploading;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
@@ -159,7 +200,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <FormLabel>Fetch from URL (optional)</FormLabel>
                     <div className="relative">
                       <FormControl>
-                        <Input placeholder="Paste product link here..." {...field} disabled={isSubmitting} className="pr-12"/>
+                        <Input placeholder="Paste product link here..." {...field} disabled={isSubmitting || isUploading} className="pr-12"/>
                       </FormControl>
                       <Button type="button" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-10">
                         <Sparkles className='h-5 w-5' />
@@ -183,7 +224,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                   <FormItem>
                     <FormLabel>Item Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Wireless Headphones" {...field} disabled={isSubmitting}/>
+                      <Input placeholder="e.g., Wireless Headphones" {...field} disabled={isSubmitting || isUploading}/>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -192,16 +233,34 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
               <div className="space-y-2">
                 <Label>Item Image (optional)</Label>
-                <div className="flex h-40 w-full items-center justify-center rounded-lg border-2 border-dashed">
-                  <div className="text-center text-muted-foreground">
-                    <ImageIcon className="mx-auto h-10 w-10" />
-                    <p className="mt-2 text-sm font-medium">No image provided</p>
-                  </div>
+                <div className="relative h-40 w-full rounded-lg border-2 border-dashed flex items-center justify-center">
+                    {imageUrl ? (
+                        <Image src={imageUrl} alt="Item image preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                    ) : (
+                        <div className="text-center text-muted-foreground">
+                            <ImageIcon className="mx-auto h-10 w-10" />
+                            <p className="mt-2 text-sm font-medium">No image provided</p>
+                        </div>
+                    )}
                 </div>
-                 <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Upload</Button>
-                    <Button type="button" variant="outline" disabled><LinkIcon className="mr-2 h-4 w-4" /> Paste URL</Button>
-                </div>
+                 {isUploading ? (
+                     <div className="pt-2">
+                        <Progress value={itemImageUpload.progress} className="w-full h-2" />
+                        <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(itemImageUpload.progress)}%</p>
+                    </div>
+                 ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                        <Label htmlFor="item-image-upload" className="w-full">
+                           <Button type="button" variant="outline" className="w-full" asChild>
+                              <span><Upload className="mr-2 h-4 w-4" /> Upload</span>
+                           </Button>
+                            <input id="item-image-upload" type="file" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/gif" />
+                        </Label>
+                        <Button type="button" variant="destructive" onClick={handleRemoveImage} disabled={!imageUrl}>
+                            <XCircle className="mr-2 h-4 w-4" /> Remove
+                        </Button>
+                    </div>
+                 )}
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -211,7 +270,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isUploading}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
                         </FormControl>
@@ -231,7 +290,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Recurrence</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isUploading}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select recurrence" /></SelectTrigger>
                         </FormControl>
@@ -255,7 +314,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <FormItem>
                       <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} disabled={isSubmitting} />
+                        <Input type="number" {...field} disabled={isSubmitting || isUploading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -268,7 +327,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <FormItem>
                       <FormLabel>Price (optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., ~$50" {...field} disabled={isSubmitting} />
+                        <Input placeholder="e.g., ~$50" {...field} disabled={isSubmitting || isUploading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -285,7 +344,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                     <div className="relative">
                        <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                        <FormControl>
-                         <Input placeholder="https://example.com/product/..." {...field} className="pl-9" disabled={isSubmitting}/>
+                         <Input placeholder="https://example.com/product/..." {...field} className="pl-9" disabled={isSubmitting || isUploading}/>
                        </FormControl>
                     </div>
                     <FormMessage />
@@ -308,7 +367,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                               "w-full pl-3 text-left font-normal",
                               !field.value && "text-muted-foreground"
                             )}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isUploading}
                           >
                             {field.value ? (
                               format(field.value, "PPP")
@@ -344,7 +403,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                       <Textarea
                         placeholder="Any specific details, like color, model, or where to buy it."
                         {...field}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || isUploading}
                       />
                     </FormControl>
                     <FormMessage />
@@ -352,8 +411,8 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                 )}
               />
             <DialogFooter className="pt-4 pr-6 sticky bottom-0 bg-background py-4">
-              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancel</Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button variant="ghost" type="button" onClick={() => handleOpenChange(false)} disabled={isSubmitting || isUploading}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting || isUploading}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Item
               </Button>
@@ -365,10 +424,3 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
-
-// Re-export Label to avoid conflicts with FormLabel
-import { Label } from "@/components/ui/label";
-
-
-
-
