@@ -70,6 +70,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export function AddItemDialog({ children, wishlistId }: { children: React.ReactNode, wishlistId: string }) {
   const [open, setOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -364,7 +365,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Needed By (optional)</FormLabel>
-                    <Popover>
+                    <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
@@ -388,7 +389,10 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                         <Calendar
                           mode="single"
                           selected={field.value}
-                          onSelect={field.onChange}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                            setDatePickerOpen(false);
+                          }}
                           disabled={(date) => date < new Date() || date < new Date("1900-01-01") }
                           initialFocus
                         />
@@ -430,3 +434,4 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
+
