@@ -314,6 +314,8 @@ export default function WishlistDetailPage() {
 
   const authorPhoto = wishlist.authorAvatar || `https://picsum.photos/seed/${wishlist.authorId}/200/200`;
 
+  const isOwnWishlist = user?.uid === wishlist.authorId;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -321,41 +323,43 @@ export default function WishlistDetailPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline">Actions</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-             <DropdownMenuItem onSelect={() => setEditingWishlist(wishlist)}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
-             </DropdownMenuItem>
-            <DropdownMenuItem>
-                <Share2 className="mr-2 h-4 w-4" /> Share
-            </DropdownMenuItem>
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                    </DropdownMenuItem>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete this
-                            wishlist and all its items.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteWishlist} className="bg-destructive hover:bg-destructive/90">
-                            Yes, delete wishlist
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {isOwnWishlist && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">Actions</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setEditingWishlist(wishlist)}>
+                  <Edit className="mr-2 h-4 w-4" /> Edit Wishlist
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                  <Share2 className="mr-2 h-4 w-4" /> Share
+              </DropdownMenuItem>
+              <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                      <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete this
+                              wishlist and all its items.
+                          </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteWishlist} className="bg-destructive hover:bg-destructive/90">
+                              Yes, delete wishlist
+                          </AlertDialogAction>
+                      </AlertDialogFooter>
+                  </AlertDialogContent>
+              </AlertDialog>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Wishlist Header Card */}
@@ -473,11 +477,13 @@ export default function WishlistDetailPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Items ({items.length})</h2>
-          <AddItemDialog wishlistId={id}>
-            <Button>
-                <Plus className="mr-2 h-4 w-4" /> Add Item
-            </Button>
-          </AddItemDialog>
+          {isOwnWishlist && (
+            <AddItemDialog wishlistId={id}>
+              <Button>
+                  <Plus className="mr-2 h-4 w-4" /> Add Item
+              </Button>
+            </AddItemDialog>
+          )}
         </div>
         <Separator />
         
@@ -488,9 +494,11 @@ export default function WishlistDetailPage() {
         ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-12 text-center">
                  <h3 className="text-xl font-semibold">No items yet!</h3>
-                <p className="mt-2 text-muted-foreground">
-                    Click "Add Item" to start building your wishlist.
-                </p>
+                 {isOwnWishlist && (
+                    <p className="mt-2 text-muted-foreground">
+                        Click "Add Item" to start building your wishlist.
+                    </p>
+                 )}
             </div>
         ) : (
           <div className="space-y-4">
@@ -532,41 +540,43 @@ export default function WishlistDetailPage() {
                            </p>
                          )}
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" /> Edit
-                          </DropdownMenuItem>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete the item
-                                        from your wishlist.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteItem(item.id)} className="bg-destructive hover:bg-destructive/90">
-                                        Yes, delete item
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isOwnWishlist && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Edit className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                  </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                          This action cannot be undone. This will permanently delete the item
+                                          from your wishlist.
+                                      </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteItem(item.id)} className="bg-destructive hover:bg-destructive/90">
+                                          Yes, delete item
+                                      </AlertDialogAction>
+                                  </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </CardHeader>
                     <CardContent className="space-y-2 pb-4 pt-0 text-sm">
                       <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
@@ -585,41 +595,43 @@ export default function WishlistDetailPage() {
                       {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" className="text-primary hover:underline">View Product</Link>}
                     </CardContent>
 
-                    <div className="px-6 pb-4">
-                        {item.status === 'available' && (
-                            <Button className="w-full" onClick={() => handleReserveItem(item.id)}>
-                                Reserve this item
-                            </Button>
-                        )}
-                        {item.status === 'fulfilled' && (
-                            <div className="rounded-md border border-green-300 bg-green-50 p-4 dark:bg-green-900/30 dark:border-green-700/50">
-                                <div className="flex items-center gap-3">
-                                    <Gift className="h-5 w-5 flex-shrink-0 text-green-500 dark:text-green-400"/>
-                                    <p className="font-semibold text-green-700 dark:text-green-300">Fulfilled</p>
-                                </div>
-                            </div>
-                        )}
-                        {item.status === 'reserved' && (
-                            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
-                                <div className="flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
-                                    <div>
-                                        <p className="font-semibold">Reserved by {item.reservedBy}</p>
-                                        <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                                <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
-                                {user?.displayName === item.reservedBy && (
-                                    <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id)}>
-                                        <XCircle className="mr-2 h-4 w-4" />
-                                        Cancel Reservation
-                                    </Button>
-                                )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    {!isOwnWishlist && (
+                       <div className="px-6 pb-4">
+                          {item.status === 'available' && (
+                              <Button className="w-full" onClick={() => handleReserveItem(item.id)}>
+                                  Reserve this item
+                              </Button>
+                          )}
+                          {item.status === 'fulfilled' && (
+                              <div className="rounded-md border border-green-300 bg-green-50 p-4 dark:bg-green-900/30 dark:border-green-700/50">
+                                  <div className="flex items-center gap-3">
+                                      <Gift className="h-5 w-5 flex-shrink-0 text-green-500 dark:text-green-400"/>
+                                      <p className="font-semibold text-green-700 dark:text-green-300">Fulfilled</p>
+                                  </div>
+                              </div>
+                          )}
+                          {item.status === 'reserved' && (
+                              <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
+                                  <div className="flex items-start gap-3">
+                                      <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
+                                      <div>
+                                          <p className="font-semibold">Reserved by {item.reservedBy}</p>
+                                          <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
+                                      </div>
+                                  </div>
+                                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
+                                  {user?.displayName === item.reservedBy && (
+                                      <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id)}>
+                                          <XCircle className="mr-2 h-4 w-4" />
+                                          Cancel Reservation
+                                      </Button>
+                                  )}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
