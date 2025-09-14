@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs, collectionGroup } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -293,17 +293,18 @@ export default function DashboardPage() {
       setLoadingFeed(false);
       return;
     }
-  
+
     const userDocRef = doc(db, 'users', user.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
+    // Use onSnapshot to get real-time updates on who the user is following
+    const unsubscribe = onSnapshot(userDocRef, (userDoc) => {
       const userData = userDoc.data();
       const following = userData?.following || [];
+      // Create a list of authors to fetch content from: the user themselves + who they follow
       const authorsToFetch = [user.uid, ...following];
 
-      // Firestore 'in' queries are limited to 10 elements.
-      // If you expect users to follow more than 9 people, this will need pagination
-      // or a different data model (e.g., a "feed" subcollection for each user).
-      // For now, this is a simple and effective approach.
+      // Firestore 'in' queries are limited to 30 elements in the array.
+      // If a user follows more than 29 people, we'll need to paginate or use multiple queries.
+      // For this app, we'll assume a user follows fewer than 29 people.
       if (authorsToFetch.length > 0) {
         fetchFeed(authorsToFetch);
       } else {
@@ -331,6 +332,7 @@ export default function DashboardPage() {
           orderBy("createdAt", "desc")
         );
         
+        // Fetch both posts and wishlists concurrently
         const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
           getDocs(postsQuery),
           getDocs(wishlistsQuery),
@@ -339,23 +341,23 @@ export default function DashboardPage() {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
 
+        // Combine and sort the results client-side
         const combined = [...postsData, ...wishlistsData];
-
-        // Sort client-side since we can't do a union query with different orderBy in Firestore
         combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
         
         setFeedItems(combined);
       } catch (error) {
         console.error("Error fetching feed:", error);
-        // It's possible to get a "missing index" error here. 
-        // The error message in the console will contain a link to create it.
+        // This error often indicates a missing Firestore index. 
+        // The console error message from Firestore will include a link to create it.
         setFeedItems([]);
       } finally {
         setLoadingFeed(false);
       }
     };
   
-    return () => unsubscribeUser();
+    // Cleanup the listener when the component unmounts or user changes
+    return () => unsubscribe();
   
   }, [user]);
 
@@ -433,7 +435,7 @@ export default function DashboardPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : feedItems.length === 0 ? (
-        <Card className="text-center p-8 text-muted-foreground">
+        <Card className="p-8 text-center text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
           <p className="mt-2">Follow some people or create your first post to see content here.</p>
            <p className="mt-4 text-xs italic">If you have recently created a post, please allow a few minutes for the database index to build.</p>
