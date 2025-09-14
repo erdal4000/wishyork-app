@@ -294,9 +294,7 @@ export default function DashboardPage() {
       return;
     }
   
-    setLoadingFeed(true);
-
-    // This listener will fetch the user's "following" list and trigger the feed fetch.
+    // This listener will refetch the feed whenever the user's "following" list changes.
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
       const userData = userDoc.data();
@@ -317,18 +315,19 @@ export default function DashboardPage() {
         return;
       }
     
+      setLoadingFeed(true);
       try {
+        // Query for posts
         const postsQuery = query(
           collection(db, "posts"),
-          where("authorId", "in", authorIds),
-          orderBy("createdAt", "desc")
+          where("authorId", "in", authorIds)
         );
     
+        // Query for public wishlists
         const wishlistsQuery = query(
           collection(db, "wishlists"),
           where("authorId", "in", authorIds),
-          where("privacy", "==", "public"),
-          orderBy("createdAt", "desc")
+          where("privacy", "==", "public")
         );
         
         const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
@@ -339,14 +338,13 @@ export default function DashboardPage() {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
 
+        // Combine and sort the results by creation date
         const combined = [...postsData, ...wishlistsData];
         combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
         
         setFeedItems(combined);
       } catch (error) {
         console.error("Error fetching feed:", error);
-        // This is a common error if the composite index is not yet built.
-        // We'll show the message to the user.
         setFeedItems([]);
       } finally {
         setLoadingFeed(false);
@@ -450,3 +448,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

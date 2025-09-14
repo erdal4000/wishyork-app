@@ -9,8 +9,16 @@
       ]
     },
     {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "authorId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "authorId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
@@ -26,14 +34,6 @@
       ]
     },
     {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "authorId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "comments",
       "queryScope": "COLLECTION",
       "fields": [
@@ -44,3 +44,5 @@
   ],
   "fieldOverrides": []
 }
+
+    
