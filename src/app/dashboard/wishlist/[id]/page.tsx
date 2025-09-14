@@ -24,6 +24,7 @@ import {
   Edit,
   XCircle,
   Repeat2,
+  Calendar,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -58,7 +59,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddItemDialog } from '@/components/add-item-dialog';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
@@ -99,6 +100,7 @@ interface Item extends DocumentData {
     price?: string;
     purchaseUrl?: string;
     addedAt: any;
+    neededBy?: any;
     priority: string;
     recurrence: string;
     quantity: number;
@@ -571,6 +573,12 @@ export default function WishlistDetailPage() {
                         <Badge variant="outline">{item.recurrence}</Badge>
                         <Badge variant="outline">{item.quantity} required</Badge>
                          <Badge variant="outline">Priority: {item.priority}</Badge>
+                         {item.neededBy && (
+                            <Badge variant="outline" className="flex items-center gap-1.5">
+                                <Calendar className="h-3 w-3" />
+                                Needed by {format(item.neededBy.toDate(), "MMM d, yyyy")}
+                            </Badge>
+                         )}
                       </div>
                       {item.description && <p>{item.description}</p>}
                       {item.price && <p className="font-bold">{item.price}</p>}

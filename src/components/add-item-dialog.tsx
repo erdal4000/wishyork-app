@@ -42,7 +42,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, Link as LinkIcon, XCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -118,9 +118,9 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   };
 
   const handleRemoveImage = () => {
-    setImageUrl(null);
+    setImageUrl(null); // It will fallback to picsum on submit
     itemImageUpload.reset();
-    toast({ title: 'Image Removed', description: 'A default image will be used.' });
+    toast({ title: 'Image Removed', description: 'A default placeholder image will be used.' });
   };
 
 
@@ -163,8 +163,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         toast({ title: "Success!", description: "New item has been added to your wishlist." });
 
         setTimeout(() => {
-          resetDialog();
-          setOpen(false);
+          handleOpenChange(false);
         }, 100);
 
     } catch (error) {
@@ -255,14 +254,19 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                         </div>
                      )}
                 </div>
-                {!isUploading && !imageUrl && (
-                    <Label htmlFor="item-image-upload" className="w-full">
-                       <Button type="button" variant="outline" className="w-full" asChild>
-                          <span><Upload className="mr-2 h-4 w-4" /> Upload an Image</span>
+                 <div className="flex gap-2 mt-2">
+                    <Label htmlFor="item-image-upload" className="flex-1">
+                       <Button type="button" variant="outline" className="w-full" asChild disabled={isUploading}>
+                          <span><Upload className="mr-2 h-4 w-4" /> Upload Image</span>
                        </Button>
                         <input id="item-image-upload" type="file" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/gif" />
                     </Label>
-                 )}
+                    {imageUrl && (
+                         <Button type="button" variant="destructive" className="flex-1" onClick={handleRemoveImage} disabled={isUploading}>
+                            <XCircle className="mr-2 h-4 w-4" /> Remove Image
+                         </Button>
+                    )}
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">

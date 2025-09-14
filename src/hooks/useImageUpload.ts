@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -36,8 +37,11 @@ export const useImageUpload = () => {
       setDownloadURL(null);
       setError(null);
 
+      // IMPORTANT: No more compression. Upload the original file for max quality.
+      const fileToUpload = file;
+
       const storageRef = ref(storage, path);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
       uploadTask.on(
         'state_changed',
