@@ -45,7 +45,7 @@ import {
 import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, serverTimestamp, Timestamp, writeBatch, increment } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, writeBatch, increment, runTransaction, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -184,40 +184,48 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
     setIsSubmitting(true);
     try {
-        const batch = writeBatch(db);
         const wishlistRef = doc(db, 'wishlists', wishlistId);
-        const newItemRef = doc(collection(wishlistRef, 'items'));
+        const itemsCollectionRef = collection(wishlistRef, 'items');
+        const newItemRef = doc(itemsCollectionRef);
 
-        const dataToSave: any = {
-            id: newItemRef.id,
-            name: values.itemName,
-            description: values.notes,
-            quantity: values.quantity,
-            price: values.price,
-            priority: values.priority,
-            recurrence: values.recurrence,
-            purchaseUrl: values.purchaseUrl,
-            status: 'available',
-            addedAt: serverTimestamp(),
-            addedBy: user.uid,
-            imageUrl: imageUrl || `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`,
-            aiHint: values.itemName.split(' ').slice(0,2).join(' '),
-        };
+        await runTransaction(db, async (transaction) => {
+            const wishlistDoc = await transaction.get(wishlistRef);
+            if (!wishlistDoc.exists()) {
+                throw "Wishlist does not exist!";
+            }
 
-        if (values.neededBy) {
-            dataToSave.neededBy = Timestamp.fromDate(values.neededBy);
-        }
+            const dataToSave: any = {
+                id: newItemRef.id,
+                name: values.itemName,
+                description: values.notes,
+                quantity: values.quantity,
+                price: values.price,
+                priority: values.priority,
+                recurrence: values.recurrence,
+                purchaseUrl: values.purchaseUrl,
+                status: 'available',
+                addedAt: serverTimestamp(),
+                addedBy: user.uid,
+                imageUrl: imageUrl || `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`,
+                aiHint: values.itemName.split(' ').slice(0,2).join(' '),
+            };
+    
+            if (values.neededBy) {
+                dataToSave.neededBy = Timestamp.fromDate(values.neededBy);
+            }
 
-        // Set the new item data
-        batch.set(newItemRef, dataToSave);
-        
-        // Update the parent wishlist counters
-        batch.update(wishlistRef, {
-            itemCount: increment(1),
-            totalUnits: increment(values.quantity),
+            transaction.set(newItemRef, dataToSave);
+            
+            const currentData = wishlistDoc.data();
+            const newTotalUnits = (currentData.totalUnits || 0) + values.quantity;
+            const newProgress = newTotalUnits > 0 ? Math.round(((currentData.unitsFulfilled || 0) / newTotalUnits) * 100) : 0;
+
+            transaction.update(wishlistRef, {
+                itemCount: increment(1),
+                totalUnits: newTotalUnits,
+                progress: newProgress,
+            });
         });
-        
-        await batch.commit();
 
         toast({ title: "Success!", description: "New item has been added to your wishlist." });
 
@@ -502,3 +510,5 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
+
+    

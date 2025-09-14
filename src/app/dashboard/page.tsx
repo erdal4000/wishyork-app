@@ -60,6 +60,7 @@ interface Wishlist {
   itemCount: number;
   likes: number;
   commentCount: number;
+  privacy: 'public' | 'private' | 'friends';
 }
 
 type FeedItem = Post | Wishlist;
@@ -87,45 +88,53 @@ async function getFeedData(userId: string): Promise<FeedItem[]> {
     const userDoc = await adminDb.collection('users').doc(userId).get();
     const following = userDoc.data()?.following || [];
 
-    // --- Create a list of author IDs to query: the user and people they follow ---
-    const authorIds = [userId, ...following];
+    const authorIdsToQuery = [userId, ...following];
 
-    if (authorIds.length === 0) {
+    if (authorIdsToQuery.length === 0) {
         return [];
     }
 
-    // --- Fetch Posts ---
     const postsQuery = adminDb
         .collectionGroup('posts')
-        .where('authorId', 'in', authorIds)
+        .where('authorId', 'in', authorIdsToQuery)
         .orderBy('createdAt', 'desc')
         .limit(20);
 
-    // --- Fetch Wishlists ---
     const wishlistsQuery = adminDb
         .collectionGroup('wishlists')
-        .where('authorId', 'in', authorIds)
+        .where('authorId', 'in', authorIdsToQuery)
+        .where('privacy', '==', 'public') // Only public wishlists in the feed of others
+        .orderBy('createdAt', 'desc')
+        .limit(20);
+        
+    const ownWishlistsQuery = adminDb
+        .collectionGroup('wishlists')
+        .where('authorId', '==', userId)
+        // No privacy filter for own lists
         .orderBy('createdAt', 'desc')
         .limit(20);
 
-    const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
+
+    const [postsSnapshot, wishlistsSnapshot, ownWishlistsSnapshot] = await Promise.all([
         postsQuery.get(),
         wishlistsQuery.get(),
+        ownWishlistsQuery.get(),
     ]);
 
     const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' }) as Post);
-    const wishlists = wishlistsSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist)
-        .filter(list => list.privacy === 'public' || list.authorId === userId); // Filter for public or own lists
+    const publicWishlists = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
+    const ownWishlists = ownWishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
 
-    // --- Combine and sort the results ---
-    const allItems = [...posts, ...wishlists];
-    const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+    // Combine and remove duplicates (in case user follows themself or for own lists)
+    const allWishlists = [...publicWishlists, ...ownWishlists];
+    const uniqueWishlists = Array.from(new Map(allWishlists.map(item => [item.id, item])).values());
+    
+    const allItems = [...posts, ...uniqueWishlists];
     
     // Sort all items by creation date
-    uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+    allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
 
-    return uniqueItems;
+    return allItems;
 }
 
 
@@ -378,3 +387,5 @@ export default async function DashboardPage() {
     </div>
   );
 }
+
+    

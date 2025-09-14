@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc, writeBatch, increment, getDocFromServer, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -161,6 +161,7 @@ export default function WishlistDetailPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
+  const [isUpdatingItem, setIsUpdatingItem] = useState<string | null>(null);
 
    useEffect(() => {
     if (!id) return;
@@ -206,37 +207,48 @@ export default function WishlistDetailPage() {
     return () => unsubscribe();
   }, [id, toast]);
 
-  const updateWishlistProgress = async (change: { fulfilled?: number; total?: number; items?: number }) => {
+  const updateItemAndWishlist = async (itemId: string, itemChanges: Partial<Item>, wishlistChanges: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
+    setIsUpdatingItem(itemId);
     const wishlistRef = doc(db, 'wishlists', id);
+    const itemRef = doc(wishlistRef, 'items', itemId);
+  
     try {
-        await runTransaction(db, async (transaction) => {
-            const wishlistDoc = await transaction.get(wishlistRef);
-            if (!wishlistDoc.exists()) {
-                throw "Wishlist does not exist!";
-            }
-
-            const data = wishlistDoc.data();
-            const newUnitsFulfilled = (data.unitsFulfilled || 0) + (change.fulfilled || 0);
-            const newTotalUnits = (data.totalUnits || 0) + (change.total || 0);
-            const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
-
-            const updateData: any = {
-                unitsFulfilled: newUnitsFulfilled,
-                totalUnits: newTotalUnits,
-                progress: newProgress,
-            };
-
-            if (change.items) {
-                updateData.itemCount = increment(change.items);
-            }
-
-            transaction.update(wishlistRef, updateData);
+      await runTransaction(db, async (transaction) => {
+        const wishlistDoc = await transaction.get(wishlistRef);
+        if (!wishlistDoc.exists()) {
+          throw "Wishlist does not exist!";
+        }
+        
+        transaction.update(itemRef, itemChanges);
+  
+        const data = wishlistDoc.data();
+        let newUnitsFulfilled = data.unitsFulfilled || 0;
+        let newTotalUnits = data.totalUnits || 0;
+        let newItemCount = data.itemCount || 0;
+  
+        if (wishlistChanges.fulfilled) newUnitsFulfilled += wishlistChanges.fulfilled;
+        if (wishlistChanges.total) newTotalUnits += wishlistChanges.total;
+        if (wishlistChanges.items) newItemCount += wishlistChanges.items;
+  
+        const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
+        
+        transaction.update(wishlistRef, {
+          unitsFulfilled: newUnitsFulfilled,
+          totalUnits: newTotalUnits,
+          itemCount: newItemCount,
+          progress: newProgress,
         });
+      });
+      return true;
     } catch (e) {
-        console.error("Transaction failed: ", e);
-        toast({ title: "Error", description: "Could not update wishlist progress.", variant: "destructive" });
+      console.error("Transaction failed: ", e);
+      toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
+      return false;
+    } finally {
+        setIsUpdatingItem(null);
     }
   };
+
   
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
@@ -261,16 +273,12 @@ export default function WishlistDetailPage() {
         toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
         return;
     }
-    try {
-        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        await updateDoc(itemRef, {
-            status: 'reserved',
-            reservedBy: user.displayName, // Or user.uid for more robust linking
-        });
-        toast({ title: "Success", description: "Item has been reserved!" });
-    } catch (error) {
-        console.error("Error reserving item: ", error);
-        toast({ title: "Error", description: "Could not reserve the item. Please try again.", variant: "destructive" });
+    const success = await updateItemAndWishlist(itemId, {
+        status: 'reserved',
+        reservedBy: user.displayName,
+    }, {});
+    if (success) {
+      toast({ title: "Success", description: "Item has been reserved!" });
     }
   };
 
@@ -279,56 +287,65 @@ export default function WishlistDetailPage() {
         toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
         return;
     }
-    try {
-        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        await updateDoc(itemRef, { status: 'fulfilled' });
-        await updateWishlistProgress({ fulfilled: itemQuantity });
-        toast({ title: "Thank You!", description: "This wish has been fulfilled." });
-    } catch (error) {
-        console.error("Error marking item as purchased: ", error);
-        toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
+    const success = await updateItemAndWishlist(itemId, { status: 'fulfilled' }, { fulfilled: itemQuantity });
+    if(success) {
+      toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     }
   };
 
-  const handleCancelReservation = async (itemId: string) => {
-    try {
-        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        await updateDoc(itemRef, {
-            status: 'available',
-            reservedBy: null,
-        });
-        toast({ title: "Reservation Cancelled", description: "The item is now available for others." });
-    } catch (error) {
-        console.error("Error cancelling reservation: ", error);
-        toast({ title: "Error", description: "Could not cancel the reservation. Please try again.", variant: "destructive" });
+  const handleCancelReservation = async (itemId: string, itemQuantity: number) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    
+    let wishlistChanges = {};
+    // If it was already fulfilled, we need to decrease the fulfilled count
+    if (item.status === 'fulfilled') {
+      wishlistChanges = { fulfilled: -itemQuantity };
+    }
+
+    const success = await updateItemAndWishlist(itemId, {
+        status: 'available',
+        reservedBy: undefined,
+    }, wishlistChanges);
+
+    if(success) {
+      toast({ title: "Reservation Cancelled", description: "The item is now available for others." });
     }
   };
 
 
   const handleDeleteItem = async (item: Item) => {
-    try {
-        const itemRef = doc(db, 'wishlists', id, 'items', item.id);
-        await deleteDoc(itemRef);
+    const success = await updateItemAndWishlist(item.id, {}, {
+      total: -item.quantity,
+      items: -1,
+      fulfilled: item.status === 'fulfilled' ? -item.quantity : 0,
+    });
 
-        const change = {
-            total: -item.quantity,
-            items: -1,
-            fulfilled: item.status === 'fulfilled' ? -item.quantity : 0
-        };
-        await updateWishlistProgress(change);
-
-        toast({ title: "Success", description: "Item removed from wishlist." });
-    } catch (error) {
-        console.error("Error deleting item: ", error);
-        toast({ title: "Error", description: "Could not remove the item. Please try again.", variant: "destructive" });
+    if (success) {
+      const itemRef = doc(db, 'wishlists', id, 'items', item.id);
+      await runTransaction(db, async (transaction) => {
+        transaction.delete(itemRef);
+      });
+      toast({ title: "Success", description: "Item removed from wishlist." });
     }
   }
 
   const handleDeleteWishlist = async () => {
     if (!id) return;
      try {
-        await deleteDoc(doc(db, 'wishlists', id));
-        toast({ title: "Success", description: "Wishlist has been deleted." });
+        const wishlistRef = doc(db, 'wishlists', id);
+        const itemsRef = collection(wishlistRef, 'items');
+        const itemsSnapshot = await runTransaction(db, async t => {
+            return await t.get(query(itemsRef));
+        });
+        
+        const batch = runTransaction(db, async t => {
+            itemsSnapshot.forEach(itemDoc => t.delete(itemDoc.ref));
+            t.delete(wishlistRef);
+        });
+
+        await batch;
+        toast({ title: "Success", description: "Wishlist and all its items have been deleted." });
         router.push('/dashboard/wishlist');
     } catch (error) {
         console.error("Error deleting wishlist: ", error);
@@ -638,7 +655,8 @@ export default function WishlistDetailPage() {
                     {!isOwnWishlist && (
                        <div className="px-6 pb-4">
                           {item.status === 'available' && (
-                              <Button className="w-full" onClick={() => handleReserveItem(item.id)}>
+                              <Button className="w-full" onClick={() => handleReserveItem(item.id)} disabled={isUpdatingItem === item.id}>
+                                  {isUpdatingItem === item.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                   Reserve this item
                               </Button>
                           )}
@@ -660,9 +678,12 @@ export default function WishlistDetailPage() {
                                       </div>
                                   </div>
                                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as purchased</Button>
-                                  {user?.displayName === item.reservedBy && (
-                                      <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id)}>
+                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id, item.quantity)} disabled={isUpdatingItem === item.id}>
+                                      {isUpdatingItem === item.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                      Mark as purchased
+                                  </Button>
+                                  {(user?.displayName === item.reservedBy || isOwnWishlist) && (
+                                      <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id, item.quantity)} disabled={isUpdatingItem === item.id}>
                                           <XCircle className="mr-2 h-4 w-4" />
                                           Cancel Reservation
                                       </Button>
@@ -691,3 +712,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
