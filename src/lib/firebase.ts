@@ -6,7 +6,6 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// İstemci tarafı Firebase yapılandırma anahtarlarınız
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -16,21 +15,19 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Bu fonksiyon, uygulamanın sadece bir kez başlatılmasını garanti eder.
+// This function ensures that the app is initialized only once.
 const getClientFirebaseApp = (): FirebaseApp => {
   if (getApps().length === 0) {
-    // Henüz bir uygulama başlatılmamışsa, yenisini başlat.
+    // If no app is initialized, initialize a new one.
     return initializeApp(firebaseConfig);
   } else {
-    // Zaten bir uygulama varsa, mevcut olanı geri döndür.
+    // If an app is already initialized, return the existing one.
     return getApp();
   }
 };
 
-// Fonksiyonu çağırarak app örneğini alalım
 const app = getClientFirebaseApp();
 
-// İhtiyacımız olan Firebase servislerini export edelim
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
