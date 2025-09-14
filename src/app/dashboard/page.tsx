@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs, collectionGroup } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -294,19 +294,59 @@ export default function DashboardPage() {
       return;
     }
 
+    let unsubscribe: () => void = () => {};
+
+    // First, get the user's list of followed people
     const userDocRef = doc(db, 'users', user.uid);
-    // Use onSnapshot to get real-time updates on who the user is following
-    const unsubscribe = onSnapshot(userDocRef, (userDoc) => {
+    const unsubUser = onSnapshot(userDocRef, (userDoc) => {
+      // Clean up previous feed listener if following list changes
+      unsubscribe(); 
+
       const userData = userDoc.data();
       const following = userData?.following || [];
-      // Create a list of authors to fetch content from: the user themselves + who they follow
       const authorsToFetch = [user.uid, ...following];
 
-      // Firestore 'in' queries are limited to 30 elements in the array.
-      // If a user follows more than 29 people, we'll need to paginate or use multiple queries.
-      // For this app, we'll assume a user follows fewer than 29 people.
+      // Firestore 'in' queries are limited to 30 elements.
+      // We chunk the array to handle cases with more than 30 authors.
       if (authorsToFetch.length > 0) {
-        fetchFeed(authorsToFetch);
+        setLoadingFeed(true);
+        const allFeedItems: FeedItem[] = [];
+
+        // Use Promise.all to fetch all chunks concurrently
+        const fetchPromises = [];
+
+        // Fetch Posts
+        const postsQuery = query(
+          collectionGroup(db, 'posts'),
+          where('authorId', 'in', authorsToFetch),
+          orderBy('createdAt', 'desc')
+        );
+        fetchPromises.push(getDocs(postsQuery));
+        
+        // Fetch Wishlists
+        const wishlistsQuery = query(
+          collectionGroup(db, 'wishlists'),
+          where('authorId', 'in', authorsToFetch),
+          where('privacy', '==', 'public'),
+          orderBy('createdAt', 'desc')
+        );
+        fetchPromises.push(getDocs(wishlistsQuery));
+        
+        Promise.all(fetchPromises).then(([postsSnapshot, wishlistsSnapshot]) => {
+          const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+          const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+          
+          const combined = [...postsData, ...wishlistsData];
+          combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+          
+          setFeedItems(combined);
+          setLoadingFeed(false);
+
+        }).catch(error => {
+           console.error("Error fetching feed:", error);
+           setLoadingFeed(false);
+        });
+
       } else {
         setFeedItems([]);
         setLoadingFeed(false);
@@ -316,48 +356,10 @@ export default function DashboardPage() {
       setLoadingFeed(false);
     });
 
-    const fetchFeed = async (authorIds: string[]) => {
-      setLoadingFeed(true);
-      try {
-        const postsQuery = query(
-          collection(db, "posts"),
-          where("authorId", "in", authorIds),
-          orderBy("createdAt", "desc")
-        );
-    
-        const wishlistsQuery = query(
-          collection(db, "wishlists"),
-          where("authorId", "in", authorIds),
-          where("privacy", "==", "public"),
-          orderBy("createdAt", "desc")
-        );
-        
-        // Fetch both posts and wishlists concurrently
-        const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
-          getDocs(postsQuery),
-          getDocs(wishlistsQuery),
-        ]);
-
-        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-
-        // Combine and sort the results client-side
-        const combined = [...postsData, ...wishlistsData];
-        combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-        
-        setFeedItems(combined);
-      } catch (error) {
-        console.error("Error fetching feed:", error);
-        // This error often indicates a missing Firestore index. 
-        // The console error message from Firestore will include a link to create it.
-        setFeedItems([]);
-      } finally {
-        setLoadingFeed(false);
-      }
+    return () => {
+      unsubUser();
+      unsubscribe();
     };
-  
-    // Cleanup the listener when the component unmounts or user changes
-    return () => unsubscribe();
   
   }, [user]);
 
