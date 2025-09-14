@@ -11,6 +11,7 @@ interface UserProfile extends DocumentData {
   name: string;
   username: string;
   photoURL?: string;
+  coverURL?: string;
   bio?: string;
   followersCount: number;
   followingCount: number;
@@ -45,6 +46,7 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
       name: data.name,
       username: data.username,
       photoURL: data.photoURL,
+      coverURL: data.coverURL,
       bio: data.bio,
       followersCount: data.followersCount || 0,
       followingCount: data.followingCount || 0,
@@ -79,3 +81,5 @@ export default async function ProfilePage({
   // This separates the server-side data fetching from the client-side interactivity.
   return <ProfilePageClient initialProfileUser={profileUser} />;
 }
+
+    

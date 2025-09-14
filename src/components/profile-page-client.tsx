@@ -65,6 +65,7 @@ import {
 } from './ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
+import { EditProfileDialog } from './edit-profile-dialog';
 
 // Data types
 interface UserProfile extends DocumentData {
@@ -72,6 +73,7 @@ interface UserProfile extends DocumentData {
   name: string;
   username: string;
   photoURL?: string;
+  coverURL?: string;
   bio?: string;
   followersCount: number;
   followingCount: number;
@@ -115,6 +117,7 @@ export function ProfilePageClient({
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingExtras, setLoadingExtras] = useState(true);
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const { toast } = useToast();
 
   const { isFollowing, isTogglingFollow, toggleFollow } = useFollow(profileUser?.uid);
@@ -137,6 +140,8 @@ export function ProfilePageClient({
                 name: data.name,
                 username: data.username,
                 bio: data.bio,
+                photoURL: data.photoURL,
+                coverURL: data.coverURL,
                 followersCount: data.followersCount || 0,
                 followingCount: data.followingCount || 0,
             }));
@@ -232,6 +237,7 @@ export function ProfilePageClient({
   const isOwnProfile = currentUser?.uid === profileUser.uid;
 
   const profilePhoto = profileUser.photoURL || `https://picsum.photos/seed/${profileUser.uid}/200/200`;
+  const coverPhoto = profileUser.coverURL || `https://picsum.photos/seed/${profileUser.uid}/1200/400`;
 
   const FollowButton = () => {
     if (isTogglingFollow) {
@@ -255,7 +261,7 @@ export function ProfilePageClient({
       <Card className="overflow-hidden">
         <div className="relative h-48 w-full bg-secondary md:h-64">
           <Image
-            src={`https://picsum.photos/seed/${profileUser.uid}/1200/400`}
+            src={coverPhoto}
             alt="Cover image"
             data-ai-hint="abstract landscape"
             fill
@@ -282,7 +288,7 @@ export function ProfilePageClient({
             </div>
             <div className="mt-2 flex-shrink-0 sm:mt-0">
               {isOwnProfile ? (
-                <Button asChild><Link href="/dashboard/settings"><Edit className="mr-2 h-4 w-4" /> Edit Profile</Link></Button>
+                <Button onClick={() => setIsEditProfileOpen(true)}><Edit className="mr-2 h-4 w-4" /> Edit Profile</Button>
               ) : (
                 currentUser && <FollowButton />
               )}
@@ -290,6 +296,14 @@ export function ProfilePageClient({
           </div>
         </CardContent>
       </Card>
+      
+      {isOwnProfile && (
+        <EditProfileDialog
+          open={isEditProfileOpen}
+          onOpenChange={setIsEditProfileOpen}
+          onSuccess={() => setIsEditProfileOpen(false)}
+        />
+      )}
 
       <Tabs defaultValue="wishlists" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
@@ -449,3 +463,5 @@ export function ProfilePageClient({
     </div>
   );
 }
+
+    
