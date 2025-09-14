@@ -25,7 +25,6 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { revalidatePath } from 'next/cache';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 
 // --- Data Types ---
 interface Post {
@@ -65,9 +64,7 @@ interface Wishlist {
 
 type FeedItem = Post | Wishlist;
 
-
 // --- Server-Side Data Fetching ---
-
 async function getUserIdFromServer(): Promise<string | null> {
   const sessionCookie = cookies().get('session')?.value;
   if (!sessionCookie) return null;
@@ -83,60 +80,50 @@ async function getUserIdFromServer(): Promise<string | null> {
   }
 }
 
-async function getFeedData(userId: string): Promise<FeedItem[]> {
-    const adminDb = getFirestore(await getAdminApp());
-    const userDoc = await adminDb.collection('users').doc(userId).get();
-    const following = userDoc.data()?.following || [];
+async function getFeedPosts(following: string[]): Promise<Post[]> {
+  if (following.length === 0) {
+    return [];
+  }
+  const adminDb = getFirestore(await getAdminApp());
+  const postsQuery = adminDb
+    .collectionGroup('posts')
+    .where('authorId', 'in', following)
+    .orderBy('createdAt', 'desc')
+    .limit(20);
 
-    const authorIdsToQuery = [userId, ...following];
-
-    if (authorIdsToQuery.length === 0) {
-        return [];
-    }
-
-    const postsQuery = adminDb
-        .collectionGroup('posts')
-        .where('authorId', 'in', authorIdsToQuery)
-        .orderBy('createdAt', 'desc')
-        .limit(20);
-
-    const wishlistsQuery = adminDb
-        .collectionGroup('wishlists')
-        .where('authorId', 'in', authorIdsToQuery)
-        .where('privacy', '==', 'public') // Only public wishlists in the feed of others
-        .orderBy('createdAt', 'desc')
-        .limit(20);
-        
-    const ownWishlistsQuery = adminDb
-        .collectionGroup('wishlists')
-        .where('authorId', '==', userId)
-        // No privacy filter for own lists
-        .orderBy('createdAt', 'desc')
-        .limit(20);
-
-
-    const [postsSnapshot, wishlistsSnapshot, ownWishlistsSnapshot] = await Promise.all([
-        postsQuery.get(),
-        wishlistsQuery.get(),
-        ownWishlistsQuery.get(),
-    ]);
-
-    const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' }) as Post);
-    const publicWishlists = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
-    const ownWishlists = ownWishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
-
-    // Combine and remove duplicates (in case user follows themself or for own lists)
-    const allWishlists = [...publicWishlists, ...ownWishlists];
-    const uniqueWishlists = Array.from(new Map(allWishlists.map(item => [item.id, item])).values());
-    
-    const allItems = [...posts, ...uniqueWishlists];
-    
-    // Sort all items by creation date
-    allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-
-    return allItems;
+  const querySnapshot = await postsQuery.get();
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' }) as Post);
 }
 
+async function getFeedWishlists(following: string[]): Promise<Wishlist[]> {
+    if (following.length === 0) {
+      return [];
+    }
+    const adminDb = getFirestore(await getAdminApp());
+    const wishlistsQuery = adminDb
+      .collectionGroup('wishlists')
+      .where('authorId', 'in', following)
+      .where('privacy', '==', 'public')
+      .orderBy('createdAt', 'desc')
+      .limit(20);
+  
+    const querySnapshot = await wishlistsQuery.get();
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
+}
+
+
+async function getOwnContent(userId: string): Promise<FeedItem[]> {
+    const adminDb = getFirestore(await getAdminApp());
+    const postsQuery = adminDb.collection('posts').where('authorId', '==', userId);
+    const wishlistsQuery = adminDb.collection('wishlists').where('authorId', '==', userId);
+    
+    const [postsSnapshot, wishlistsSnapshot] = await Promise.all([postsQuery.get(), wishlistsQuery.get()]);
+
+    const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post'}) as Post);
+    const wishlists = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist'}) as Wishlist);
+    
+    return [...posts, ...wishlists];
+}
 
 // --- Client Components ---
 
@@ -297,7 +284,7 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
             commentCount: 0,
         };
 
-        await adminDb.collection("posts").add({ ...newPost, type: 'post' });
+        await adminDb.collection("posts").add(newPost);
         revalidatePath('/dashboard');
 
     } catch (error) {
@@ -346,16 +333,29 @@ export default async function DashboardPage() {
     );
   }
   
-  const adminApp = await getAdminApp();
-  const adminAuth = getAuth(adminApp);
+  const adminDb = getFirestore(await getAdminApp());
+  const adminAuth = getAuth(await getAdminApp());
+
+  const userDoc = await adminDb.collection('users').doc(userId).get();
   const userRecord = await adminAuth.getUser(userId);
+
+  const following = userDoc.data()?.following || [];
+
+  const [ownContent, feedPosts, feedWishlists] = await Promise.all([
+    getOwnContent(userId),
+    getFeedPosts([userId, ...following]),
+    getFeedWishlists([userId, ...following]),
+  ]);
+
+  const allItems = [...ownContent, ...feedPosts, ...feedWishlists];
+  const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+  const sortedFeed = uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+  
   const userForForm = {
       displayName: userRecord.displayName,
       photoURL: userRecord.photoURL,
       email: userRecord.email,
   }
-
-  const feedItems = await getFeedData(userId);
 
   return (
     <div className="space-y-6">
@@ -366,14 +366,14 @@ export default async function DashboardPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }>
-        {feedItems.length === 0 ? (
+        {sortedFeed.length === 0 ? (
           <Card className="p-8 text-center text-muted-foreground">
             <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
             <p className="mt-2">Follow some people or create your first post to see content here.</p>
              <p className="mt-4 text-xs italic">If you have recently created a post, please allow a few minutes for the database index to build.</p>
           </Card>
         ) : (
-          feedItems.map((item) => {
+          sortedFeed.map((item) => {
              if (item.type === 'post') {
                 return <PostCard key={`post-${item.id}`} item={item as Post} />;
              }
@@ -387,5 +387,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-
-    
