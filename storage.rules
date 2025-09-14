@@ -1,25 +1,27 @@
-
 rules_version = '2';
 
-// See: https://firebase.google.com/docs/storage/security
 service firebase.storage {
-  // The {bucket} wildcard indicates we match any bucket in the project
   match /b/{bucket}/o {
     
-    // User-specific image uploads
-    // Allow users to write only to a folder matching their UID
-    match /user-images/{userId}/{allPaths=**} {
-      // Only the authenticated user can read or write to their own folder
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-
-      // Additionally, you can add rules for file size and type
-      // Example: allow write: if request.resource.size < 5 * 1024 * 1024
-      //                       && request.resource.contentType.matches('image/.*');
+    function isOwner(wishlistId) {
+      return get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
     }
-    
-    // Publicly readable images (like default wishlist covers, etc.) could go here
-    // match /public/{allPaths=**} {
-    //   allow read;
-    // }
+
+    // Rule for Profile & Cover Photos
+    match /user-images/{userId}/{allPaths=**} {
+      allow read;
+      allow write: if request.auth != null && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Rule for Wishlist Item Photos
+    match /item-images/{wishlistId}/{allPaths=**} {
+      allow read;
+      // Allow write only if the user uploading the image is the owner of the wishlist.
+      allow write: if request.auth != null && isOwner(wishlistId)
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
   }
 }
