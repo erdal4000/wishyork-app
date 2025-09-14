@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs, collectionGroup } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -294,69 +294,71 @@ export default function DashboardPage() {
       return;
     }
 
-    // This is the listener for the user's own data, specifically the 'following' list.
-    const userDocRef = doc(db, 'users', user.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
-      const userData = userDoc.data();
-      const following = userData?.following || [];
-      const authorsToQuery = [user.uid, ...following];
-
-      // Since 'in' queries are limited to 30 items in Firestore, we must chunk the array.
-      // This is a robust way to handle users who follow many people.
-      const authorChunks = [];
-      for (let i = 0; i < authorsToQuery.length; i += 30) {
-        authorChunks.push(authorsToQuery.slice(i, i + 30));
-      }
-
+    const fetchFeed = async () => {
       setLoadingFeed(true);
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+        const following = userData?.following || [];
 
-      const allPromises = authorChunks.flatMap(chunk => {
-        const postsQuery = query(
-          collectionGroup(db, 'posts'),
-          where('authorId', 'in', chunk),
-          orderBy('createdAt', 'desc')
-        );
-        const wishlistsQuery = query(
-          collectionGroup(db, 'wishlists'),
-          where('authorId', 'in', chunk),
-          where('privacy', '==', 'public'),
-          orderBy('createdAt', 'desc')
-        );
-        return [getDocs(postsQuery), getDocs(wishlistsQuery)];
-      });
-      
-      Promise.all(allPromises).then((snapshots) => {
-        const allItems: FeedItem[] = [];
-        snapshots.forEach(snapshot => {
-          snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            // Ensure the document has a 'type' field before adding it to the feed
-            if (data.type === 'post' || data.type === 'wishlist') {
-              allItems.push({ id: doc.id, ...data } as FeedItem);
-            }
-          });
-        });
+        // Combine current user's ID with the IDs of people they follow
+        const authorIds = [user.uid, ...following];
         
-        // Remove duplicates that might arise from edge cases and sort all items together.
+        if (authorIds.length === 0) {
+            setFeedItems([]);
+            setLoadingFeed(false);
+            return;
+        }
+
+        // Create an array of promises for all the queries we need to run
+        const queryPromises: Promise<DocumentData[]>[] = [];
+
+        // Firestore 'in' query has a limit of 30 values. Chunk the authorIds array.
+        for (let i = 0; i < authorIds.length; i += 30) {
+            const chunk = authorIds.slice(i, i + 30);
+            
+            const postsQuery = query(
+                collection(db, 'posts'),
+                where('authorId', 'in', chunk)
+            );
+            const wishlistsQuery = query(
+                collection(db, 'wishlists'),
+                where('authorId', 'in', chunk),
+                where('privacy', '==', 'public')
+            );
+            
+            queryPromises.push(
+                getDocs(postsQuery).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+                getDocs(wishlistsQuery).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })))
+            );
+        }
+
+        // Run all queries in parallel
+        const results = await Promise.all(queryPromises);
+
+        // Flatten the array of results and filter out any malformed items
+        const allItems = results.flat().filter(item => item.type && item.createdAt) as FeedItem[];
+        
+        // Remove duplicates that might arise and sort all items by creation date
         const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
         uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
 
         setFeedItems(uniqueItems);
-        setLoadingFeed(false);
-      }).catch(error => {
-        console.error("Error fetching feed items:", error);
-        setLoadingFeed(false);
-      });
 
-    }, (error) => {
-      console.error("Error listening to user document:", error);
-      setLoadingFeed(false);
-    });
-
-    return () => {
-      unsubscribeUser();
+      } catch (error) {
+        console.error("Error fetching feed:", error);
+      } finally {
+        setLoadingFeed(false);
+      }
     };
-  
+    
+    fetchFeed();
+
+    // Note: We are not using a real-time listener (onSnapshot) here for simplicity
+    // and to avoid the complexity of managing multiple listeners. A pull-to-refresh
+    // or periodic refetch would be a good addition in a real-world app.
+
   }, [user]);
 
 
@@ -370,7 +372,8 @@ export default function DashboardPage() {
       const userDoc = await getDoc(userDocRef);
       const userData = userDoc.data();
 
-      await addDoc(collection(db, "posts"), {
+      // Create the new post document
+      const newPost = {
         content: postContent,
         authorId: user.uid,
         authorName: userData?.name || user.displayName,
@@ -383,7 +386,16 @@ export default function DashboardPage() {
         likedBy: [],
         commentCount: 0,
         type: 'post'
-      });
+      };
+
+      const docRef = await addDoc(collection(db, "posts"), newPost);
+      
+      // Manually add the new post to the top of the feed for instant UI update
+      setFeedItems(prevItems => [
+          { ...newPost, id: docRef.id, createdAt: new Timestamp(Math.floor(Date.now()/1000), 0) } as Post, 
+          ...prevItems
+      ]);
+
       setPostContent('');
     } catch (error) {
       console.error("Error creating post: ", error);
