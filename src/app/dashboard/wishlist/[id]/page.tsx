@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc, writeBatch, increment, getDocFromServer } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -168,7 +168,9 @@ export default function WishlistDetailPage() {
     const docRef = doc(db, 'wishlists', id);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setWishlist({ id: docSnap.id, ...docSnap.data() } as Wishlist);
+        const data = docSnap.data();
+        const progress = (data.totalUnits > 0) ? Math.round((data.unitsFulfilled / data.totalUnits) * 100) : 0;
+        setWishlist({ id: docSnap.id, ...data, progress } as Wishlist);
       } else {
         console.log("No such document!");
         setWishlist(null); // Or handle not found state
@@ -241,16 +243,21 @@ export default function WishlistDetailPage() {
     }
   };
 
-  const handleMarkAsPurchased = async (itemId: string) => {
+  const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
     if (!user) {
         toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
         return;
     }
     try {
+        const batch = writeBatch(db);
+        const wishlistRef = doc(db, 'wishlists', id);
         const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        await updateDoc(itemRef, {
-            status: 'fulfilled',
-        });
+        
+        batch.update(itemRef, { status: 'fulfilled' });
+        batch.update(wishlistRef, { unitsFulfilled: increment(itemQuantity) });
+
+        await batch.commit();
+
         toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     } catch (error) {
         console.error("Error marking item as purchased: ", error);
@@ -273,10 +280,27 @@ export default function WishlistDetailPage() {
   };
 
 
-  const handleDeleteItem = async (itemId: string) => {
+  const handleDeleteItem = async (item: Item) => {
     try {
-        const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        await deleteDoc(itemRef);
+        const batch = writeBatch(db);
+        const wishlistRef = doc(db, 'wishlists', id);
+        const itemRef = doc(db, 'wishlists', id, 'items', item.id);
+
+        batch.delete(itemRef);
+
+        const updateData: { [key: string]: any } = {
+            itemCount: increment(-1),
+            totalUnits: increment(-item.quantity),
+        };
+
+        if (item.status === 'fulfilled') {
+            updateData.unitsFulfilled = increment(-item.quantity);
+        }
+
+        batch.update(wishlistRef, updateData);
+
+        await batch.commit();
+
         toast({ title: "Success", description: "Item removed from wishlist." });
     } catch (error) {
         console.error("Error deleting item: ", error);
@@ -400,12 +424,12 @@ export default function WishlistDetailPage() {
           <div className="mt-4 space-y-1">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>
-                {wishlist.unitsFulfilled} of {wishlist.totalUnits} units
+                {wishlist.unitsFulfilled || 0} of {wishlist.totalUnits || 0} units
                 fulfilled
               </span>
-              <span>{wishlist.progress}%</span>
+              <span>{wishlist.progress || 0}%</span>
             </div>
-            <Progress value={wishlist.progress} className="h-2" />
+            <Progress value={wishlist.progress || 0} className="h-2" />
           </div>
         </CardContent>
         <CardFooter className="flex justify-between p-2">
@@ -563,12 +587,12 @@ export default function WishlistDetailPage() {
                                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                       <AlertDialogDescription>
                                           This action cannot be undone. This will permanently delete the item
-                                          from your wishlist.
+                                          from your wishlist and update the progress.
                                       </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDeleteItem(item.id)} className="bg-destructive hover:bg-destructive/90">
+                                      <AlertDialogAction onClick={() => handleDeleteItem(item)} className="bg-destructive hover:bg-destructive/90">
                                           Yes, delete item
                                       </AlertDialogAction>
                                   </AlertDialogFooter>
@@ -620,7 +644,7 @@ export default function WishlistDetailPage() {
                                       </div>
                                   </div>
                                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id)}>Mark as purchased</Button>
+                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as purchased</Button>
                                   {user?.displayName === item.reservedBy && (
                                       <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id)}>
                                           <XCircle className="mr-2 h-4 w-4" />

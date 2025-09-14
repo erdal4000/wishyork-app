@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -44,7 +45,7 @@ import {
 import { Calendar as CalendarIcon, Image as ImageIcon, Link2, Loader2, Sparkles, Upload, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, writeBatch, increment } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -183,10 +184,12 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
     setIsSubmitting(true);
     try {
+        const batch = writeBatch(db);
         const wishlistRef = doc(db, 'wishlists', wishlistId);
-        const itemsCollectionRef = collection(wishlistRef, 'items');
+        const newItemRef = doc(collection(wishlistRef, 'items'));
 
         const dataToSave: any = {
+            id: newItemRef.id,
             name: values.itemName,
             description: values.notes,
             quantity: values.quantity,
@@ -204,8 +207,17 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         if (values.neededBy) {
             dataToSave.neededBy = Timestamp.fromDate(values.neededBy);
         }
+
+        // Set the new item data
+        batch.set(newItemRef, dataToSave);
         
-        await addDoc(itemsCollectionRef, dataToSave);
+        // Update the parent wishlist counters
+        batch.update(wishlistRef, {
+            itemCount: increment(1),
+            totalUnits: increment(values.quantity),
+        });
+        
+        await batch.commit();
 
         toast({ title: "Success!", description: "New item has been added to your wishlist." });
 
