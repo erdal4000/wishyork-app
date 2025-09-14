@@ -225,7 +225,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   const isBusy = isSubmitting || isUploading || isFetchingUrl;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
@@ -249,7 +249,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                       <FormControl>
                         <Input placeholder="Paste product link here..." {...field} disabled={isBusy} className="pr-12"/>
                       </FormControl>
-                      <Button type="button" size="icon" onClick={handleFetchUrl} disabled={isBusy}>
+                      <Button type="button" size="icon" onClick={handleFetchUrl} disabled={isBusy || !form.getValues('fetchUrl')}>
                         {isFetchingUrl ? <Loader2 className='h-5 w-5 animate-spin' /> : <Sparkles className='h-5 w-5' />}
                         <span className="sr-only">Fetch Details</span>
                       </Button>
@@ -431,7 +431,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                               !field.value && "text-muted-foreground"
                             )}
                             disabled={isBusy}
-                            onPointerDown={(e) => e.preventDefault()}
                           >
                             {field.value ? (
                               format(field.value, "PPP")
