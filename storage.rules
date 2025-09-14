@@ -3,25 +3,35 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    function isOwner(wishlistId) {
-      return get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+    // Helper function to check if a user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Rule for Profile & Cover Photos
-    match /user-images/{userId}/{allPaths=**} {
+    // Helper function to check if the user is the owner of the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // User Images: Profile and Cover photos
+    // Path: /user-images/{userId}/{'avatar' or 'cover'}/{fileName}
+    match /user-images/{userId}/{imageType}/{fileName} {
+      // Only the owner of the folder can upload images
+      allow write: if isOwner(userId) && (imageType == 'avatar' || imageType == 'cover');
+      
+      // Anyone can read user images
       allow read;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
     }
 
-    // Rule for Wishlist Item Photos
-    match /item-images/{wishlistId}/{allPaths=**} {
+    // Item Images: Images for items within a wishlist
+    // Path: /item-images/{wishlistId}/{fileName}
+    match /item-images/{wishlistId}/{fileName} {
+      // Allow write if the authenticated user is the author of the wishlist.
+      // This requires reading the wishlist document from Firestore.
+      allow write: if isAuthenticated() && get(/databases/(default)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      
+      // Anyone can read item images
       allow read;
-      // Allow write only if the user uploading the image is the owner of the wishlist.
-      allow write: if request.auth != null && isOwner(wishlistId)
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
     }
   }
 }
