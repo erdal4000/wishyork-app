@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,6 +12,7 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, writeBatch, query, collection, where, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useImageUpload } from '@/hooks/useImageUpload';
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,9 +34,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, RefreshCw, Upload, ImageUp } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/lib/utils';
+import { Progress } from './ui/progress';
 
 interface EditProfileDialogProps {
   open: boolean;
@@ -62,6 +64,11 @@ const renderUsernameIcon = (isChecking: boolean, isAvailable: boolean | null, se
 export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfileDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { uploading, progress, error: uploadError, uploadImage } = useImageUpload();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -82,7 +89,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
 
   const checkUsername = useCallback(
     debounce(async (username: string) => {
-      if (!username || username === originalUsername) {
+      if (!username || username.toLowerCase() === originalUsername.toLowerCase()) {
         setIsUsernameAvailable(null);
         setIsCheckingUsername(false);
         form.clearErrors("username");
@@ -145,6 +152,23 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     }
   }, [user, open, form]);
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+    if (!e.target.files || e.target.files.length === 0 || !user) return;
+    const file = e.target.files[0];
+    const path = `user-images/${user.uid}/${type}/${Date.now()}_${file.name}`;
+    try {
+        const newUrl = await uploadImage(file, path);
+        if (type === 'avatar') {
+            setPhotoUrl(newUrl);
+        } else {
+            setCoverUrl(newUrl);
+        }
+    } catch(err) {
+        // Error is already toasted in the hook
+    }
+  };
+
+
   const handleProfileSubmit = async (values: ProfileFormData) => {
     if (!user) return;
 
@@ -166,14 +190,15 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
         coverURL: coverUrl
       };
 
-      if (usernameValue !== originalUsername) {
+      if (values.username.toLowerCase() !== originalUsername.toLowerCase()) {
         dataToUpdate.username = values.username;
         dataToUpdate.username_lowercase = values.username.toLowerCase();
         
-        const oldUsernameRef = doc(db, 'usernames', originalUsername.toLowerCase());
+        if (originalUsername) {
+          const oldUsernameRef = doc(db, 'usernames', originalUsername.toLowerCase());
+          batch.delete(oldUsernameRef);
+        }
         const newUsernameRef = doc(db, 'usernames', values.username.toLowerCase());
-        
-        batch.delete(oldUsernameRef);
         batch.set(newUsernameRef, { uid: user.uid });
       }
 
@@ -190,16 +215,6 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
       setIsSubmitting(false);
     }
   };
-
-  const generateNewImage = (type: 'avatar' | 'cover') => {
-    if (!user) return;
-    const seed = `${user.uid}-${Date.now()}`;
-    if (type === 'avatar') {
-        setPhotoUrl(`https://picsum.photos/seed/${seed}/200/200`);
-    } else {
-        setCoverUrl(`https://picsum.photos/seed/${seed}/1200/400`);
-    }
-  }
 
 
   return (
@@ -225,7 +240,16 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                  <div className="relative h-32 w-full rounded-lg bg-muted">
                     {coverUrl && <Image src={coverUrl} alt="Cover image" layout="fill" objectFit="cover" className="rounded-lg" />}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
-                        <Button type="button" size="sm" onClick={() => generateNewImage('cover')}><RefreshCw className="mr-2 h-4 w-4" /> New Cover</Button>
+                        <Button type="button" size="sm" onClick={() => coverInputRef.current?.click()} disabled={uploading}>
+                          <Upload className="mr-2 h-4 w-4" /> Upload Cover
+                        </Button>
+                        <input
+                            type="file"
+                            ref={coverInputRef}
+                            onChange={(e) => handleImageUpload(e, 'cover')}
+                            className="hidden"
+                            accept="image/png, image/jpeg"
+                        />
                     </div>
                     <div className="absolute bottom-0 left-4 translate-y-1/2">
                         <div className="relative group">
@@ -234,13 +258,26 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                                 <AvatarFallback>{getInitials(form.getValues('name'))}</AvatarFallback>
                             </Avatar>
                             <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.preventDefault(); generateNewImage('avatar'); }}>
-                                    <RefreshCw className="h-4 w-4 text-white" />
+                                <Button type="button" size="icon" variant="ghost" className="h-10 w-10" onClick={() => avatarInputRef.current?.click()} disabled={uploading}>
+                                    <Upload className="h-5 w-5 text-white" />
                                 </Button>
+                                <input
+                                    type="file"
+                                    ref={avatarInputRef}
+                                    onChange={(e) => handleImageUpload(e, 'avatar')}
+                                    className="hidden"
+                                    accept="image/png, image/jpeg"
+                                />
                             </div>
                         </div>
                     </div>
                  </div>
+                 {uploading && (
+                    <div className="pt-2">
+                        <Progress value={progress} className="w-full h-2" />
+                        <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(progress)}%</p>
+                    </div>
+                 )}
               </div>
 
               <div className="pt-10 space-y-4">
@@ -251,7 +288,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                       <FormItem>
                         <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled={isSubmitting} />
+                          <Input {...field} disabled={isSubmitting || uploading} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -265,7 +302,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                         <FormLabel>Username</FormLabel>
                         <div className="relative">
                           <FormControl>
-                            <Input {...field} disabled={isSubmitting} />
+                            <Input {...field} disabled={isSubmitting || uploading} />
                           </FormControl>
                           <div className="absolute inset-y-0 right-3 flex items-center">
                             {renderUsernameIcon(isCheckingUsername, isUsernameAvailable, usernameServerError)}
@@ -285,7 +322,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                           <Textarea
                             placeholder="Tell us a little about yourself"
                             {...field}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || uploading}
                           />
                         </FormControl>
                         <FormMessage />
@@ -295,9 +332,9 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
               </div>
 
               <DialogFooter className="pt-4 pr-6 sticky bottom-0 bg-background py-4">
-                <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting || isCheckingUsername}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting || uploading}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting || isCheckingUsername || uploading}>
+                  {(isSubmitting || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Changes
                 </Button>
               </DialogFooter>
@@ -309,5 +346,3 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     </Dialog>
   );
 }
-
-    

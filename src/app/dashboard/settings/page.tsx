@@ -2,7 +2,6 @@
 'use client';
 
 import { useAuth } from '@/context/auth-context';
-
 import {
   Card,
   CardContent,
@@ -11,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -32,10 +30,9 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="account" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
         </TabsList>
         
         <TabsContent value="account">
@@ -43,7 +40,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Account</CardTitle>
               <CardDescription>
-                Manage your account settings. Profile information can be edited directly on your profile page.
+                Manage your account settings. Profile information can be edited directly on your profile page by clicking "Edit Profile".
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -122,27 +119,7 @@ export default function SettingsPage() {
             </CardFooter>
           </Card>
         </TabsContent>
-        <TabsContent value="appearance">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>
-                Customize the look and feel of the application.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Theme</Label>
-                <p className="text-sm text-muted-foreground">
-                  Select the theme for the dashboard. This is already handled by the toggle in the top right.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
 }
-
-    
