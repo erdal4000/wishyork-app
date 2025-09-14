@@ -34,7 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, CheckCircle2, AlertCircle, RefreshCw, Upload, ImageUp } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Upload, Trash2, XCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { Progress } from './ui/progress';
@@ -64,7 +64,7 @@ const renderUsernameIcon = (isChecking: boolean, isAvailable: boolean | null, se
 export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfileDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { uploading, progress, error: uploadError, uploadImage } = useImageUpload();
+  const { uploading, progress, uploadImage } = useImageUpload();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -168,6 +168,17 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     }
   };
 
+  const handleRemoveImage = (type: 'avatar' | 'cover') => {
+    if (!user) return;
+    const newSeed = Date.now(); // To get a new random image
+    if (type === 'avatar') {
+        setPhotoUrl(`https://picsum.photos/seed/${newSeed}/200/200`);
+        toast({ title: 'Avatar Removed', description: 'Your avatar will be reset to a default image upon saving.' });
+    } else {
+        setCoverUrl(`https://picsum.photos/seed/${newSeed}/1200/400`);
+        toast({ title: 'Cover Image Removed', description: 'Your cover image will be reset to a default image upon saving.' });
+    }
+  };
 
   const handleProfileSubmit = async (values: ProfileFormData) => {
     if (!user) return;
@@ -235,13 +246,18 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleProfileSubmit)} className="space-y-6 py-4">
               
-              <div className="space-y-4 px-1">
-                 <FormLabel>Images</FormLabel>
-                 <div className="relative h-32 w-full rounded-lg bg-muted">
-                    {coverUrl && <Image src={coverUrl} alt="Cover image" layout="fill" objectFit="cover" className="rounded-lg" />}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
-                        <Button type="button" size="sm" onClick={() => coverInputRef.current?.click()} disabled={uploading}>
-                          <Upload className="mr-2 h-4 w-4" /> Upload Cover
+              <div className="space-y-6 px-1">
+                 <div className="space-y-2">
+                    <FormLabel>Cover Image</FormLabel>
+                    <div className="relative h-32 w-full rounded-lg bg-muted">
+                        {coverUrl && <Image src={coverUrl} alt="Cover image" layout="fill" objectFit="cover" className="rounded-lg" />}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => coverInputRef.current?.click()} disabled={uploading}>
+                          <Upload className="mr-2 h-4 w-4" /> Upload
+                        </Button>
+                        <Button type="button" size="sm" variant="destructive" className="w-full" onClick={() => handleRemoveImage('cover')} disabled={uploading}>
+                          <XCircle className="mr-2 h-4 w-4" /> Remove
                         </Button>
                         <input
                             type="file"
@@ -251,27 +267,32 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                             accept="image/png, image/jpeg"
                         />
                     </div>
-                    <div className="absolute bottom-0 left-4 translate-y-1/2">
-                        <div className="relative group">
-                            <Avatar className="h-20 w-20 border-4 border-background">
-                                <AvatarImage src={photoUrl} />
-                                <AvatarFallback>{getInitials(form.getValues('name'))}</AvatarFallback>
-                            </Avatar>
-                            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button type="button" size="icon" variant="ghost" className="h-10 w-10" onClick={() => avatarInputRef.current?.click()} disabled={uploading}>
-                                    <Upload className="h-5 w-5 text-white" />
-                                </Button>
-                                <input
-                                    type="file"
-                                    ref={avatarInputRef}
-                                    onChange={(e) => handleImageUpload(e, 'avatar')}
-                                    className="hidden"
-                                    accept="image/png, image/jpeg"
-                                />
-                            </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <FormLabel>Profile Photo</FormLabel>
+                    <div className="flex items-center gap-4">
+                       <Avatar className="h-20 w-20">
+                            <AvatarImage src={photoUrl} />
+                            <AvatarFallback>{getInitials(form.getValues('name'))}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-2">
+                             <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => avatarInputRef.current?.click()} disabled={uploading}>
+                               <Upload className="mr-2 h-4 w-4" /> Upload
+                             </Button>
+                             <Button type="button" size="sm" variant="destructive" className="w-full" onClick={() => handleRemoveImage('avatar')} disabled={uploading}>
+                               <XCircle className="mr-2 h-4 w-4" /> Remove
+                             </Button>
+                             <input
+                                ref={avatarInputRef}
+                                onChange={(e) => handleImageUpload(e, 'avatar')}
+                                className="hidden"
+                                accept="image/png, image/jpeg"
+                             />
                         </div>
                     </div>
                  </div>
+
                  {uploading && (
                     <div className="pt-2">
                         <Progress value={progress} className="w-full h-2" />
@@ -280,7 +301,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                  )}
               </div>
 
-              <div className="pt-10 space-y-4">
+              <div className="space-y-4">
                  <FormField
                     control={form.control}
                     name="name"
