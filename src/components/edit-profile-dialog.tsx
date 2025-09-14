@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -38,6 +37,7 @@ import { Loader2, CheckCircle2, AlertCircle, Upload, XCircle } from 'lucide-reac
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { Progress } from './ui/progress';
+import { Label } from './ui/label';
 
 interface EditProfileDialogProps {
   open: boolean;
@@ -67,10 +67,6 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
   
   const avatarUpload = useImageUpload();
   const coverUpload = useImageUpload();
-
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
-
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -173,6 +169,11 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
         }
     } catch(err) {
         // Error is already toasted in the hook
+    } finally {
+        // Clear the input value to allow re-uploading the same file
+        if (e.target) {
+            e.target.value = '';
+        }
     }
   };
 
@@ -181,19 +182,12 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     const newSeed = Date.now(); // To get a new random image
     if (type === 'avatar') {
         setPhotoUrl(`https://picsum.photos/seed/${newSeed}/200/200`);
-        if (avatarInputRef.current) {
-            avatarInputRef.current.value = "";
-        }
         avatarUpload.reset();
-        toast({ title: 'Avatar Removed', description: 'Your avatar will be reset to a default image upon saving.' });
     } else {
         setCoverUrl(`https://picsum.photos/seed/${newSeed}/1200/400`);
-        if (coverInputRef.current) {
-            coverInputRef.current.value = "";
-        }
         coverUpload.reset();
-        toast({ title: 'Cover Image Removed', description: 'Your cover image will be reset to a default image upon saving.' });
     }
+    toast({ title: 'Image Removed', description: 'Your image will be reset to a default image upon saving.' });
   };
 
   const handleProfileSubmit = async (values: ProfileFormData) => {
@@ -276,19 +270,15 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                         </div>
                      ) : (
                         <div className="flex gap-2">
-                            <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => coverInputRef.current?.click()}>
-                              <Upload className="mr-2 h-4 w-4" /> Upload
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('cover')}>
+                            <Label htmlFor="cover-upload" className="flex-1">
+                                <Button type="button" variant="outline" className="w-full" asChild>
+                                  <span><Upload className="mr-2 h-4 w-4" /> Upload</span>
+                                </Button>
+                                <input id="cover-upload" type="file" onChange={(e) => handleImageUpload(e, 'cover')} className="hidden" accept="image/png, image/jpeg, image/gif" />
+                            </Label>
+                            <Button type="button" size="sm" variant="destructive" className="w-full flex-1" onClick={() => handleRemoveImage('cover')}>
                               <XCircle className="mr-2 h-4 w-4" /> Remove
                             </Button>
-                            <input
-                                type="file"
-                                ref={coverInputRef}
-                                onChange={(e) => handleImageUpload(e, 'cover')}
-                                className="hidden"
-                                accept="image/png, image/jpeg"
-                            />
                         </div>
                      )}
                  </div>
@@ -308,18 +298,15 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                                 </div>
                              ) : (
                                 <>
-                                 <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => avatarInputRef.current?.click()}>
-                                   <Upload className="mr-2 h-4 w-4" /> Upload
-                                 </Button>
-                                 <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('avatar')}>
+                                  <Label htmlFor="avatar-upload" className='w-full block'>
+                                    <Button type="button" variant="outline" className="w-full" asChild>
+                                      <span><Upload className="mr-2 h-4 w-4" /> Upload</span>
+                                    </Button>
+                                    <input id="avatar-upload" type="file" onChange={(e) => handleImageUpload(e, 'avatar')} className="hidden" accept="image/png, image/jpeg, image/gif" />
+                                  </Label>
+                                 <Button type="button" size="sm" variant="destructive" className="w-full" onClick={() => handleRemoveImage('avatar')}>
                                    <XCircle className="mr-2 h-4 w-4" /> Remove
                                  </Button>
-                                 <input
-                                    ref={avatarInputRef}
-                                    onChange={(e) => handleImageUpload(e, 'avatar')}
-                                    className="hidden"
-                                    accept="image/png, image/jpeg"
-                                 />
                                 </>
                              )}
                         </div>
@@ -380,7 +367,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
 
               <DialogFooter className="pt-4 pr-6 sticky bottom-0 bg-background py-4">
                 <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting || isUploading}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting || isCheckingUsername || isUploading}>
+                <Button type="submit" disabled={isSubmitting || isCheckingUsername || isUploading || isUsernameAvailable === false}>
                   {(isSubmitting || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Changes
                 </Button>
