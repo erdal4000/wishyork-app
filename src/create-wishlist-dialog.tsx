@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from './ui/textarea';
 import {
   Select,
   SelectContent,
@@ -36,10 +36,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Globe, Users, Lock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, getDoc, serverTimestamp, doc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from './ui/scroll-area';
 import { Label } from "@/components/ui/label";
+
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -195,7 +196,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Personal">Personal</SelectItem>
+                         <SelectItem value="Personal">Personal</SelectItem>
                         <SelectItem value="Charity">Charity</SelectItem>
                         <SelectItem value="Community">Community</SelectItem>
                         <SelectItem value="Travel">Travel</SelectItem>
