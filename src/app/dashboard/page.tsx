@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, collectionGroup } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -294,62 +294,91 @@ export default function DashboardPage() {
       setLoadingFeed(false);
       return;
     }
-
+  
     setLoadingFeed(true);
-
+  
+    // Listen for changes in the user's "following" list
     const userDocRef = doc(db, 'users', user.uid);
-    const unsubUser = onSnapshot(userDocRef, (userDoc) => {
+    const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
       const following = userDoc.data()?.following || [];
       const authorsToFetch = [user.uid, ...following];
-
+  
+      // If there are no authors to fetch, don't proceed.
       if (authorsToFetch.length === 0) {
         setFeedItems([]);
         setLoadingFeed(false);
         return;
       }
       
+      // Use collectionGroup to query across all 'posts' subcollections
       const postsQuery = query(
-        collection(db, "posts"),
+        collectionGroup(db, "posts"),
         where("authorId", "in", authorsToFetch),
         orderBy("createdAt", "desc")
       );
-
+  
+      // Use collectionGroup for wishlists as well
       const wishlistsQuery = query(
-        collection(db, "wishlists"),
+        collectionGroup(db, "wishlists"),
         where("authorId", "in", authorsToFetch),
+        where("privacy", "==", "public"), // Only show public wishlists in feed
         orderBy("createdAt", "desc")
-      )
-
-      const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        
-        // When posts update, refetch wishlists and merge
-        const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-            const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-            
+      );
+  
+      // Unsubscribe from previous listeners before creating new ones
+      let unsubPosts: (() => void) | null = null;
+      let unsubWishlists: (() => void) | null = null;
+      
+      const fetchAndMerge = () => {
+        let postsData: Post[] = [];
+        let wishlistsData: Wishlist[] = [];
+        let postsDone = false;
+        let wishlistsDone = false;
+  
+        const mergeData = () => {
+          if (postsDone && wishlistsDone) {
             const combined = [...postsData, ...wishlistsData];
             combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-            
             setFeedItems(combined);
             setLoadingFeed(false);
+          }
+        };
+  
+        unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+          postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+          postsDone = true;
+          mergeData();
+        }, (error) => {
+          console.error("Error fetching posts:", error);
+          postsDone = true;
+          mergeData();
         });
-
-        return () => unsubWishlists();
-
-      }, (error) => {
-        console.error("Error fetching posts:", error);
-        setLoadingFeed(false);
-      });
-
-      return () => unsubPosts();
-
+  
+        unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+          wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+          wishlistsDone = true;
+          mergeData();
+        }, (error) => {
+          console.error("Error fetching wishlists:", error);
+          wishlistsDone = true;
+          mergeData();
+        });
+      };
+      
+      fetchAndMerge();
+  
+      return () => {
+        unsubPosts?.();
+        unsubWishlists?.();
+      };
+  
     }, (error) => {
       console.error("Error fetching user's following list:", error);
       setLoadingFeed(false);
     });
-
-    return () => unsubUser();
-
+  
+    return () => unsubscribeUser();
+  
   }, [user]);
 
 
@@ -429,7 +458,7 @@ export default function DashboardPage() {
         <Card className="text-center p-8 text-muted-foreground">
           <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
           <p className="mt-2">Follow some people or create your first post to see content here.</p>
-           <p className="mt-4 text-xs italic">If you still see no posts after creating one, please check the browser console (F12) for a Firestore index error and click the link to create it.</p>
+           <p className="mt-4 text-xs italic">If you have recently created a post, please allow a few minutes for the database index to build.</p>
         </Card>
       ) : (
         feedItems.map((item) => {

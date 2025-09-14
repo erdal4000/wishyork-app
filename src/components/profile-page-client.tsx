@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -15,6 +16,7 @@ import {
   getCountFromServer,
   deleteDoc,
   doc,
+  Query,
 } from 'firebase/firestore';
 import { useFollow } from '@/hooks/use-follow';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -122,15 +124,13 @@ export function ProfilePageClient({
 
   const { isFollowing, isTogglingFollow, toggleFollow } = useFollow(profileUser?.uid);
 
+  const isOwnProfile = currentUser?.uid === profileUser.uid;
 
-  // This useEffect is now only for fetching secondary data like wishlists and posts.
-  // The main profile data is already available.
   useEffect(() => {
     if (!profileUser) return;
 
     setLoadingExtras(true);
     
-    // --- User Profile Live Updates ---
     const userDocRef = doc(db, "users", profileUser.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
         if(doc.exists()){
@@ -148,11 +148,17 @@ export function ProfilePageClient({
         }
     });
 
-    // --- Wishlists Fetching ---
-    const wishlistsQuery = query(
+    // Base wishlists query
+    let wishlistsQuery: Query<DocumentData> = query(
       collection(db, 'wishlists'),
       where('authorId', '==', profileUser.uid)
     );
+
+    // If not the owner's profile, add the privacy filter.
+    if (!isOwnProfile) {
+        wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
+    }
+
     const unsubscribeWishlists = onSnapshot(
       wishlistsQuery,
       async (snapshot) => {
@@ -170,10 +176,12 @@ export function ProfilePageClient({
               (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)
           )
         );
+      }, (error) => {
+        console.error("Error fetching wishlists:", error);
       }
     );
 
-    // --- Posts Fetching ---
+    // Posts Fetching
     const postsQuery = query(
       collection(db, 'posts'),
       where('authorId', '==', profileUser.uid),
@@ -185,19 +193,20 @@ export function ProfilePageClient({
       );
       setPosts(postsData);
       setLoadingExtras(false);
+    }, (error) => {
+        console.error("Error fetching posts:", error);
+        setLoadingExtras(false);
     });
 
-    // Cleanup function
     return () => {
       unsubscribeUser();
       unsubscribeWishlists();
       unsubscribePosts();
     };
-  }, [profileUser.uid]); // This effect now ONLY re-runs if the profile user's ID changes.
+  }, [profileUser.uid, isOwnProfile]);
 
 
   if (!profileUser) {
-    // This should theoretically not be reached if page.tsx works correctly
     return notFound();
   }
 
@@ -234,8 +243,6 @@ export function ProfilePageClient({
     }
   };
 
-  const isOwnProfile = currentUser?.uid === profileUser.uid;
-
   const profilePhoto = profileUser.photoURL || `https://picsum.photos/seed/${profileUser.uid}/200/200`;
   const coverPhoto = profileUser.coverURL || `https://picsum.photos/seed/${profileUser.uid}/1200/400`;
 
@@ -249,12 +256,7 @@ export function ProfilePageClient({
     return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>;
   };
   
-  const visibleWishlists = wishlists.filter(list => {
-      if (isOwnProfile) return true;
-      if (list.privacy === 'public') return true;
-      // TODO: Add 'friends' logic here if needed
-      return false;
-  });
+  // No need for separate visibleWishlists, the query handles it now.
 
   return (
     <div className="space-y-6">
@@ -307,7 +309,7 @@ export function ProfilePageClient({
 
       <Tabs defaultValue="wishlists" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="wishlists">Wishlists ({visibleWishlists.length})</TabsTrigger>
+          <TabsTrigger value="wishlists">Wishlists ({wishlists.length})</TabsTrigger>
           <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
         </TabsList>
@@ -324,8 +326,8 @@ export function ProfilePageClient({
             <>
                 <TabsContent value="wishlists" className="mt-6">
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    {visibleWishlists.length > 0 ? (
-                    visibleWishlists.map((list) => (
+                    {wishlists.length > 0 ? (
+                    wishlists.map((list) => (
                         <div key={list.id} className="group relative block">
                         <Link href={`/dashboard/wishlist/${list.id}`}>
                             <Card className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl">
