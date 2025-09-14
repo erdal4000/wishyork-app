@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc, writeBatch, increment, getDocFromServer } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, deleteDoc, updateDoc, writeBatch, increment, getDocFromServer, getDoc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -169,8 +169,7 @@ export default function WishlistDetailPage() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const progress = (data.totalUnits > 0) ? Math.round((data.unitsFulfilled / data.totalUnits) * 100) : 0;
-        setWishlist({ id: docSnap.id, ...data, progress } as Wishlist);
+        setWishlist({ id: docSnap.id, ...data } as Wishlist);
       } else {
         console.log("No such document!");
         setWishlist(null); // Or handle not found state
@@ -206,6 +205,38 @@ export default function WishlistDetailPage() {
 
     return () => unsubscribe();
   }, [id, toast]);
+
+  const updateWishlistProgress = async (change: { fulfilled?: number; total?: number; items?: number }) => {
+    const wishlistRef = doc(db, 'wishlists', id);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const wishlistDoc = await transaction.get(wishlistRef);
+            if (!wishlistDoc.exists()) {
+                throw "Wishlist does not exist!";
+            }
+
+            const data = wishlistDoc.data();
+            const newUnitsFulfilled = (data.unitsFulfilled || 0) + (change.fulfilled || 0);
+            const newTotalUnits = (data.totalUnits || 0) + (change.total || 0);
+            const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
+
+            const updateData: any = {
+                unitsFulfilled: newUnitsFulfilled,
+                totalUnits: newTotalUnits,
+                progress: newProgress,
+            };
+
+            if (change.items) {
+                updateData.itemCount = increment(change.items);
+            }
+
+            transaction.update(wishlistRef, updateData);
+        });
+    } catch (e) {
+        console.error("Transaction failed: ", e);
+        toast({ title: "Error", description: "Could not update wishlist progress.", variant: "destructive" });
+    }
+  };
   
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
@@ -249,15 +280,9 @@ export default function WishlistDetailPage() {
         return;
     }
     try {
-        const batch = writeBatch(db);
-        const wishlistRef = doc(db, 'wishlists', id);
         const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-        
-        batch.update(itemRef, { status: 'fulfilled' });
-        batch.update(wishlistRef, { unitsFulfilled: increment(itemQuantity) });
-
-        await batch.commit();
-
+        await updateDoc(itemRef, { status: 'fulfilled' });
+        await updateWishlistProgress({ fulfilled: itemQuantity });
         toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     } catch (error) {
         console.error("Error marking item as purchased: ", error);
@@ -282,24 +307,15 @@ export default function WishlistDetailPage() {
 
   const handleDeleteItem = async (item: Item) => {
     try {
-        const batch = writeBatch(db);
-        const wishlistRef = doc(db, 'wishlists', id);
         const itemRef = doc(db, 'wishlists', id, 'items', item.id);
+        await deleteDoc(itemRef);
 
-        batch.delete(itemRef);
-
-        const updateData: { [key: string]: any } = {
-            itemCount: increment(-1),
-            totalUnits: increment(-item.quantity),
+        const change = {
+            total: -item.quantity,
+            items: -1,
+            fulfilled: item.status === 'fulfilled' ? -item.quantity : 0
         };
-
-        if (item.status === 'fulfilled') {
-            updateData.unitsFulfilled = increment(-item.quantity);
-        }
-
-        batch.update(wishlistRef, updateData);
-
-        await batch.commit();
+        await updateWishlistProgress(change);
 
         toast({ title: "Success", description: "Item removed from wishlist." });
     } catch (error) {

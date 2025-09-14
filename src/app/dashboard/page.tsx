@@ -90,6 +90,10 @@ async function getFeedData(userId: string): Promise<FeedItem[]> {
     // --- Create a list of author IDs to query: the user and people they follow ---
     const authorIds = [userId, ...following];
 
+    if (authorIds.length === 0) {
+        return [];
+    }
+
     // --- Fetch Posts ---
     const postsQuery = adminDb
         .collectionGroup('posts')
@@ -101,30 +105,21 @@ async function getFeedData(userId: string): Promise<FeedItem[]> {
     const wishlistsQuery = adminDb
         .collectionGroup('wishlists')
         .where('authorId', 'in', authorIds)
-        .where('privacy', '==', 'public') // Only public wishlists in the feed for others
-        .orderBy('createdAt', 'desc')
-        .limit(20);
-    
-    // Own private wishlists query
-     const ownWishlistsQuery = adminDb
-        .collection('wishlists')
-        .where('authorId', '==', userId)
         .orderBy('createdAt', 'desc')
         .limit(20);
 
-
-    const [postsSnapshot, wishlistsSnapshot, ownWishlistsSnapshot] = await Promise.all([
+    const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
         postsQuery.get(),
         wishlistsQuery.get(),
-        ownWishlistsQuery.get()
     ]);
 
     const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' }) as Post);
-    const publicWishlists = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
-    const ownWishlists = ownWishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
+    const wishlists = wishlistsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist)
+        .filter(list => list.privacy === 'public' || list.authorId === userId); // Filter for public or own lists
 
     // --- Combine and sort the results ---
-    const allItems = [...posts, ...publicWishlists, ...ownWishlists];
+    const allItems = [...posts, ...wishlists];
     const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
     
     // Sort all items by creation date
@@ -280,7 +275,7 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
         const userDoc = await userDocRef.get();
         const userData = userDoc.data();
 
-        const newPost: Omit<Post, 'id'> = {
+        const newPost: Omit<Post, 'id' | 'type'> = {
             content: postContent,
             authorId: userId,
             authorName: userData?.name || user.displayName || 'Anonymous',
@@ -291,10 +286,9 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
             aiHint: null,
             likes: 0,
             commentCount: 0,
-            type: 'post',
         };
 
-        await adminDb.collection("posts").add(newPost);
+        await adminDb.collection("posts").add({ ...newPost, type: 'post' });
         revalidatePath('/dashboard');
 
     } catch (error) {

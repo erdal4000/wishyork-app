@@ -124,19 +124,9 @@ export default function WishlistPage() {
 
     const q = query(collection(db, "wishlists"), where("authorId", "==", user.uid));
     
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
         setLoading(true);
-        const listsPromises = querySnapshot.docs.map(async (doc) => {
-            const wishlistData = { id: doc.id, ...doc.data() } as Wishlist;
-            
-            const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-            const snapshot = await getCountFromServer(itemsColRef);
-            wishlistData.itemCount = snapshot.data().count;
-
-            return wishlistData;
-        });
-
-        const lists = await Promise.all(listsPromises);
+        const lists = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
         
         setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
         setLoading(false);
@@ -226,7 +216,7 @@ export default function WishlistPage() {
                           </div>
                           <p className="mt-2 flex items-center text-muted-foreground">
                             <Package className="mr-2 h-4 w-4" />
-                            {list.itemCount} {list.itemCount === 1 ? 'item' : 'items'}
+                            {list.itemCount || 0} {list.itemCount === 1 ? 'item' : 'items'}
                           </p>
                        </div>
                        <div className="flex items-center gap-2">
@@ -238,10 +228,10 @@ export default function WishlistPage() {
                     </div>
                      <div className="mt-4">
                           <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                              <span>{list.unitsFulfilled} of {list.totalUnits} units</span>
-                              <span>{list.progress}%</span>
+                              <span>{list.unitsFulfilled || 0} of {list.totalUnits || 0} units</span>
+                              <span>{list.progress || 0}%</span>
                           </div>
-                          <Progress value={list.progress} className="h-2" />
+                          <Progress value={list.progress || 0} className="h-2" />
                      </div>
                   </CardContent>
                   <Separator />
