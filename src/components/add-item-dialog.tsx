@@ -105,7 +105,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   }
   
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0 || !user) return;
+    if (!e.target.files || e.target.files.length === 0 || !user || !wishlistId) return;
     const file = e.target.files[0];
     const path = `item-images/${wishlistId}/${Date.now()}_${file.name}`;
     
@@ -235,31 +235,33 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                 <Label>Item Image (optional)</Label>
                 <div className="relative h-40 w-full rounded-lg border-2 border-dashed flex items-center justify-center">
                     {imageUrl ? (
-                        <Image src={imageUrl} alt="Item image preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                        <>
+                           <Image src={imageUrl} alt="Item image preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                           <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={handleRemoveImage} disabled={isUploading}>
+                                <XCircle className="h-4 w-4" />
+                           </Button>
+                        </>
                     ) : (
                         <div className="text-center text-muted-foreground">
                             <ImageIcon className="mx-auto h-10 w-10" />
                             <p className="mt-2 text-sm font-medium">No image provided</p>
                         </div>
                     )}
+                     {isUploading && (
+                        <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center rounded-lg">
+                           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                           <p className="text-sm text-muted-foreground mt-2">Uploading...</p>
+                           <Progress value={itemImageUpload.progress} className="w-3/4 h-2 mt-2" />
+                        </div>
+                     )}
                 </div>
-                 {isUploading ? (
-                     <div className="pt-2">
-                        <Progress value={itemImageUpload.progress} className="w-full h-2" />
-                        <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(itemImageUpload.progress)}%</p>
-                    </div>
-                 ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                        <Label htmlFor="item-image-upload" className="w-full">
-                           <Button type="button" variant="outline" className="w-full" asChild>
-                              <span><Upload className="mr-2 h-4 w-4" /> Upload</span>
-                           </Button>
-                            <input id="item-image-upload" type="file" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/gif" />
-                        </Label>
-                        <Button type="button" variant="destructive" onClick={handleRemoveImage} disabled={!imageUrl}>
-                            <XCircle className="mr-2 h-4 w-4" /> Remove
-                        </Button>
-                    </div>
+                {!isUploading && !imageUrl && (
+                    <Label htmlFor="item-image-upload" className="w-full">
+                       <Button type="button" variant="outline" className="w-full" asChild>
+                          <span><Upload className="mr-2 h-4 w-4" /> Upload an Image</span>
+                       </Button>
+                        <input id="item-image-upload" type="file" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/gif" />
+                    </Label>
                  )}
               </div>
               
