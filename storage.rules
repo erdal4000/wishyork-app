@@ -1,23 +1,25 @@
+
 rules_version = '2';
 
+// See: https://firebase.google.com/docs/storage/security
 service firebase.storage {
+  // The {bucket} wildcard indicates we match any bucket in the project
   match /b/{bucket}/o {
-    // Allow read access to all files for everyone.
-    // This allows anyone to view profile pictures, cover photos, etc.
-    match /{allPaths=**} {
-      allow read;
-    }
-
-    // Rules for user-specific images (avatars, covers)
+    
+    // User-specific image uploads
+    // Allow users to write only to a folder matching their UID
     match /user-images/{userId}/{allPaths=**} {
-      // 1. Only the authenticated user can write to their own folder.
-      // 2. The user must be logged in (request.auth != null).
-      // 3. The uploaded file must be an image.
-      // 4. The uploaded file size must be less than 5MB.
-      allow write: if request.auth != null && 
-                      request.auth.uid == userId &&
-                      request.resource.contentType.matches('image/.*') &&
-                      request.resource.size < 5 * 1024 * 1024;
+      // Only the authenticated user can read or write to their own folder
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Additionally, you can add rules for file size and type
+      // Example: allow write: if request.resource.size < 5 * 1024 * 1024
+      //                       && request.resource.contentType.matches('image/.*');
     }
+    
+    // Publicly readable images (like default wishlist covers, etc.) could go here
+    // match /public/{allPaths=**} {
+    //   allow read;
+    // }
   }
 }
