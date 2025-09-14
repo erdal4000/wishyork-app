@@ -183,7 +183,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
   const isUploading = itemImageUpload.uploading;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
@@ -380,7 +380,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                               !field.value && "text-muted-foreground"
                             )}
                             disabled={isSubmitting || isUploading}
-                            onPointerDown={(e) => e.preventDefault()}
                           >
                             {field.value ? (
                               format(field.value, "PPP")
