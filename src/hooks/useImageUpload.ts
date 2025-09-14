@@ -15,6 +15,13 @@ export const useImageUpload = () => {
   const [downloadURL, setDownloadURL] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
+  const reset = () => {
+    setUploading(false);
+    setProgress(0);
+    setDownloadURL(null);
+    setError(null);
+  }
+
   const uploadImage = (file: File, path: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       if (!user) {
@@ -65,5 +72,5 @@ export const useImageUpload = () => {
     });
   };
 
-  return { uploading, progress, downloadURL, error, uploadImage };
+  return { uploading, progress, downloadURL, error, uploadImage, reset };
 };

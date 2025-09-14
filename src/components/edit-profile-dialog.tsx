@@ -64,7 +64,10 @@ const renderUsernameIcon = (isChecking: boolean, isAvailable: boolean | null, se
 export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfileDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { uploading, progress, uploadImage } = useImageUpload();
+  
+  const avatarUpload = useImageUpload();
+  const coverUpload = useImageUpload();
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +137,8 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
   useEffect(() => {
     if (user && open) {
       setLoadingData(true);
+      avatarUpload.reset();
+      coverUpload.reset();
       const userDocRef = doc(db, 'users', user.uid);
       getDoc(userDocRef).then((docSnap) => {
         if (docSnap.exists()) {
@@ -156,8 +161,11 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     if (!e.target.files || e.target.files.length === 0 || !user) return;
     const file = e.target.files[0];
     const path = `user-images/${user.uid}/${type}/${Date.now()}_${file.name}`;
+    
+    const uploader = type === 'avatar' ? avatarUpload : coverUpload;
+
     try {
-        const newUrl = await uploadImage(file, path);
+        const newUrl = await uploader.uploadImage(file, path);
         if (type === 'avatar') {
             setPhotoUrl(newUrl);
         } else {
@@ -176,12 +184,14 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
         if (avatarInputRef.current) {
             avatarInputRef.current.value = "";
         }
+        avatarUpload.reset();
         toast({ title: 'Avatar Removed', description: 'Your avatar will be reset to a default image upon saving.' });
     } else {
         setCoverUrl(`https://picsum.photos/seed/${newSeed}/1200/400`);
         if (coverInputRef.current) {
             coverInputRef.current.value = "";
         }
+        coverUpload.reset();
         toast({ title: 'Cover Image Removed', description: 'Your cover image will be reset to a default image upon saving.' });
     }
   };
@@ -233,6 +243,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     }
   };
 
+  const isUploading = avatarUpload.uploading || coverUpload.uploading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,21 +269,28 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                     <div className="relative h-32 w-full rounded-lg bg-muted">
                         {coverUrl && <Image src={coverUrl} alt="Cover image" layout="fill" objectFit="cover" className="rounded-lg" />}
                     </div>
-                    <div className="flex gap-2">
-                        <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => coverInputRef.current?.click()} disabled={uploading}>
-                          <Upload className="mr-2 h-4 w-4" /> Upload
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('cover')} disabled={uploading}>
-                          <XCircle className="mr-2 h-4 w-4" /> Remove
-                        </Button>
-                        <input
-                            type="file"
-                            ref={coverInputRef}
-                            onChange={(e) => handleImageUpload(e, 'cover')}
-                            className="hidden"
-                            accept="image/png, image/jpeg"
-                        />
-                    </div>
+                     {coverUpload.uploading ? (
+                         <div className="pt-2">
+                            <Progress value={coverUpload.progress} className="w-full h-2" />
+                            <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(coverUpload.progress)}%</p>
+                        </div>
+                     ) : (
+                        <div className="flex gap-2">
+                            <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => coverInputRef.current?.click()}>
+                              <Upload className="mr-2 h-4 w-4" /> Upload
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('cover')}>
+                              <XCircle className="mr-2 h-4 w-4" /> Remove
+                            </Button>
+                            <input
+                                type="file"
+                                ref={coverInputRef}
+                                onChange={(e) => handleImageUpload(e, 'cover')}
+                                className="hidden"
+                                accept="image/png, image/jpeg"
+                            />
+                        </div>
+                     )}
                  </div>
 
                  <div className="space-y-2">
@@ -283,28 +301,30 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                             <AvatarFallback>{getInitials(form.getValues('name'))}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 space-y-2">
-                             <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => avatarInputRef.current?.click()} disabled={uploading}>
-                               <Upload className="mr-2 h-4 w-4" /> Upload
-                             </Button>
-                             <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('avatar')} disabled={uploading}>
-                               <XCircle className="mr-2 h-4 w-4" /> Remove
-                             </Button>
-                             <input
-                                ref={avatarInputRef}
-                                onChange={(e) => handleImageUpload(e, 'avatar')}
-                                className="hidden"
-                                accept="image/png, image/jpeg"
-                             />
+                             {avatarUpload.uploading ? (
+                                <div className="pt-2">
+                                    <Progress value={avatarUpload.progress} className="w-full h-2" />
+                                    <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(avatarUpload.progress)}%</p>
+                                </div>
+                             ) : (
+                                <>
+                                 <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => avatarInputRef.current?.click()}>
+                                   <Upload className="mr-2 h-4 w-4" /> Upload
+                                 </Button>
+                                 <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => handleRemoveImage('avatar')}>
+                                   <XCircle className="mr-2 h-4 w-4" /> Remove
+                                 </Button>
+                                 <input
+                                    ref={avatarInputRef}
+                                    onChange={(e) => handleImageUpload(e, 'avatar')}
+                                    className="hidden"
+                                    accept="image/png, image/jpeg"
+                                 />
+                                </>
+                             )}
                         </div>
                     </div>
                  </div>
-
-                 {uploading && (
-                    <div className="pt-2">
-                        <Progress value={progress} className="w-full h-2" />
-                        <p className="text-xs text-muted-foreground mt-1 text-center">Uploading... {Math.round(progress)}%</p>
-                    </div>
-                 )}
               </div>
 
               <div className="space-y-4">
@@ -315,7 +335,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                       <FormItem>
                         <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled={isSubmitting || uploading} />
+                          <Input {...field} disabled={isSubmitting || isUploading} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -329,7 +349,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                         <FormLabel>Username</FormLabel>
                         <div className="relative">
                           <FormControl>
-                            <Input {...field} disabled={isSubmitting || uploading} />
+                            <Input {...field} disabled={isSubmitting || isUploading} />
                           </FormControl>
                           <div className="absolute inset-y-0 right-3 flex items-center">
                             {renderUsernameIcon(isCheckingUsername, isUsernameAvailable, usernameServerError)}
@@ -349,7 +369,7 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
                           <Textarea
                             placeholder="Tell us a little about yourself"
                             {...field}
-                            disabled={isSubmitting || uploading}
+                            disabled={isSubmitting || isUploading}
                           />
                         </FormControl>
                         <FormMessage />
@@ -359,9 +379,9 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
               </div>
 
               <DialogFooter className="pt-4 pr-6 sticky bottom-0 bg-background py-4">
-                <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting || uploading}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting || isCheckingUsername || uploading}>
-                  {(isSubmitting || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting || isUploading}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting || isCheckingUsername || isUploading}>
+                  {(isSubmitting || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Changes
                 </Button>
               </DialogFooter>
