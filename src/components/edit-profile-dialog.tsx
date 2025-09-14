@@ -55,7 +55,7 @@ type ProfileFormData = z.infer<typeof profileSchema>;
 
 const renderUsernameIcon = (isChecking: boolean, isAvailable: boolean | null, serverError: boolean) => {
   if (isChecking) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
-  if (serverError) return <AlertCircle className="h-5 w-5 text-yellow-500" title="Could not verify username" />;
+  if (serverError) return <AlertCircle className="h-5 w-5 text-yellow-500" />;
   if (isAvailable === true) return <CheckCircle2 className="h-5 w-5 text-green-500" />;
   if (isAvailable === false) return <AlertCircle className="h-5 w-5 text-destructive" />;
   return null;
@@ -169,11 +169,6 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
         }
     } catch(err) {
         // Error is already toasted in the hook
-    } finally {
-        // Clear the input value to allow re-uploading the same file
-        if (e.target) {
-            e.target.value = '';
-        }
     }
   };
 
