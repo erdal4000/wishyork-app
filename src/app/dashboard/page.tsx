@@ -294,36 +294,31 @@ export default function DashboardPage() {
       return;
     }
   
-    // This listener will refetch the feed whenever the user's "following" list changes.
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
       const userData = userDoc.data();
       const following = userData?.following || [];
       const authorsToFetch = [user.uid, ...following];
 
-      // Now, let's fetch the content.
-      fetchFeed(authorsToFetch);
+      if (authorsToFetch.length > 0) {
+        fetchFeed(authorsToFetch);
+      } else {
+        setFeedItems([]);
+        setLoadingFeed(false);
+      }
     }, (error) => {
       console.error("Error fetching user's following list:", error);
       setLoadingFeed(false);
     });
 
     const fetchFeed = async (authorIds: string[]) => {
-      if (authorIds.length === 0) {
-        setFeedItems([]);
-        setLoadingFeed(false);
-        return;
-      }
-    
       setLoadingFeed(true);
       try {
-        // Query for posts
         const postsQuery = query(
           collection(db, "posts"),
           where("authorId", "in", authorIds)
         );
     
-        // Query for public wishlists
         const wishlistsQuery = query(
           collection(db, "wishlists"),
           where("authorId", "in", authorIds),
@@ -338,7 +333,6 @@ export default function DashboardPage() {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
 
-        // Combine and sort the results by creation date
         const combined = [...postsData, ...wishlistsData];
         combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
         
@@ -448,5 +442,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
