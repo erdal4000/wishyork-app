@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { FormEvent, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, DocumentData, getDoc, doc, where, Timestamp, getDocs, collectionGroup } from "firebase/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Progress } from '@/components/ui/progress';
@@ -300,6 +300,10 @@ export default function DashboardPage() {
       const following = userData?.following || [];
       const authorsToFetch = [user.uid, ...following];
 
+      // Firestore 'in' queries are limited to 10 elements.
+      // If you expect users to follow more than 9 people, this will need pagination
+      // or a different data model (e.g., a "feed" subcollection for each user).
+      // For now, this is a simple and effective approach.
       if (authorsToFetch.length > 0) {
         fetchFeed(authorsToFetch);
       } else {
@@ -316,13 +320,15 @@ export default function DashboardPage() {
       try {
         const postsQuery = query(
           collection(db, "posts"),
-          where("authorId", "in", authorIds)
+          where("authorId", "in", authorIds),
+          orderBy("createdAt", "desc")
         );
     
         const wishlistsQuery = query(
           collection(db, "wishlists"),
           where("authorId", "in", authorIds),
-          where("privacy", "==", "public")
+          where("privacy", "==", "public"),
+          orderBy("createdAt", "desc")
         );
         
         const [postsSnapshot, wishlistsSnapshot] = await Promise.all([
@@ -334,11 +340,15 @@ export default function DashboardPage() {
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
 
         const combined = [...postsData, ...wishlistsData];
+
+        // Sort client-side since we can't do a union query with different orderBy in Firestore
         combined.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
         
         setFeedItems(combined);
       } catch (error) {
         console.error("Error fetching feed:", error);
+        // It's possible to get a "missing index" error here. 
+        // The error message in the console will contain a link to create it.
         setFeedItems([]);
       } finally {
         setLoadingFeed(false);

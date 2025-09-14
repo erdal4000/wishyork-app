@@ -56,7 +56,7 @@ function FullPageLoader() {
     return (
         <div className="flex h-screen w-screen items-center justify-center bg-background">
            <div className="w-full h-full p-4 space-y-4">
-              <header className="flex h-16 items-center justify-between border-b px-4 lg:px-8">
+              <div className="flex h-16 items-center justify-between border-b px-4 lg:px-8">
                 <div className="flex items-center gap-4">
                   <Skeleton className="h-8 w-8 rounded-md" />
                    <Skeleton className="h-6 w-32 hidden lg:block" />
@@ -65,7 +65,7 @@ function FullPageLoader() {
                   <Skeleton className="h-10 w-10 rounded-md" />
                    <Skeleton className="h-10 w-10 rounded-full" />
                 </div>
-              </header>
+              </div>
               <div className="grid grid-cols-12 gap-8 container mx-auto px-4">
                 <div className="col-span-2 hidden lg:block">
                     <div className="space-y-2">
