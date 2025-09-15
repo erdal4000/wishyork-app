@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            const idToken = await user.getIdToken();
+            const idToken = await user.getIdToken(true); // Force refresh
             await setSessionCookie(idToken);
         } catch (error) {
             console.error("Failed to set session cookie:", error);

@@ -341,14 +341,13 @@ export default async function DashboardPage() {
 
   const following = userDoc.data()?.following || [];
 
-  const [ownContent, feedPosts, feedWishlists] = await Promise.all([
-    getOwnContent(userId),
+  const [feedPosts, feedWishlists] = await Promise.all([
     getFeedPosts([userId, ...following]),
     getFeedWishlists([userId, ...following]),
   ]);
 
-  const allItems = [...ownContent, ...feedPosts, ...feedWishlists];
-  const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+  const allItems = [...feedPosts, ...feedWishlists];
+  const uniqueItems = Array.from(new Map(allItems.map(item => [`${item.type}-${item.id}`, item])).values());
   const sortedFeed = uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
   
   const userForForm = {
