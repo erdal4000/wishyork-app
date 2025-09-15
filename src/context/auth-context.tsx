@@ -15,7 +15,6 @@ const setCookie = (name: string, value: string, days: number) => {
     expires = "; expires=" + date.toUTCString();
   }
   if (typeof document !== 'undefined') {
-    // Setting a more generic path and ensuring it's secure in production
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax" + secure;
   }
@@ -50,8 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            // STRATEGY CHANGE: Directly store the idToken in a client-side cookie.
-            // This bypasses the problematic /api/auth/session route.
             const idToken = await user.getIdToken(true); // Force refresh for freshness
             setCookie('idToken', idToken, 1); // Store for 1 day
         } catch (error) {
