@@ -17,11 +17,18 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 async function setSessionCookie(idToken: string) {
-    await fetch('/api/auth/session', {
+    const response = await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
     });
+
+    if (!response.ok) {
+        console.error("Failed to set session cookie. Status:", response.status);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Error details:", errorData.error || "No details provided.");
+        throw new Error("Failed to set session cookie.");
+    }
 }
 
 async function clearSessionCookie() {
@@ -41,10 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            const idToken = await user.getIdToken(true); // Force refresh
+            const idToken = await user.getIdToken(true); // Force refresh to get a fresh token
             await setSessionCookie(idToken);
         } catch (error) {
-            console.error("Failed to set session cookie:", error);
+            console.error("Error during session creation:", error);
+            // If we can't create a session, something is wrong. Log the user out client-side.
             await auth.signOut();
         }
       } else {

@@ -68,7 +68,7 @@ type FeedItem = Post | Wishlist;
 async function getUserIdFromServer(): Promise<string | null> {
   const sessionCookieValue = cookies().get('session')?.value;
   if (!sessionCookieValue) {
-    console.error('SERVER-SIDE AUTH: Session cookie not found.');
+    // This is not an error, it just means the user is not logged in.
     return null;
   }
   
@@ -76,10 +76,10 @@ async function getUserIdFromServer(): Promise<string | null> {
     const adminApp = await getAdminApp();
     const adminAuth = getAuth(adminApp);
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
-    console.log('✅ SERVER-SIDE AUTH: Session cookie successfully verified for UID:', decodedToken.uid);
     return decodedToken.uid;
   } catch (error) {
-    // This is the critical log we need to see.
+    // This can happen if the cookie is expired or invalid.
+    // We log it for debugging but treat it as "not logged in".
     console.error('❌ SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
     return null;
   }
@@ -116,19 +116,6 @@ async function getFeedWishlists(following: string[]): Promise<Wishlist[]> {
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' }) as Wishlist);
 }
 
-
-async function getOwnContent(userId: string): Promise<FeedItem[]> {
-    const adminDb = getFirestore(await getAdminApp());
-    const postsQuery = adminDb.collection('posts').where('authorId', '==', userId);
-    const wishlistsQuery = adminDb.collection('wishlists').where('authorId', '==', userId);
-    
-    const [postsSnapshot, wishlistsSnapshot] = await Promise.all([postsQuery.get(), wishlistsQuery.get()]);
-
-    const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post'}) as Post);
-    const wishlists = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist'}) as Wishlist);
-    
-    return [...posts, ...wishlists];
-}
 
 // --- Client Components ---
 
