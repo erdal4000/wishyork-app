@@ -6,27 +6,6 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
-// Helper for client-side cookie management
-const setCookie = (name: string, value: string, days: number) => {
-  let expires = "";
-  if (days) {
-    let date = new Date();
-    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-    expires = "; expires=" + date.toUTCString();
-  }
-  if (typeof document !== 'undefined') {
-    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-    document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax" + secure;
-  }
-};
-
-const eraseCookie = (name: string) => {
-  if (typeof document !== 'undefined') {
-    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-  }
-};
-
-
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -48,21 +27,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
 
       if (user) {
+        // User is logged in, get the idToken and create a session cookie.
+        const idToken = await user.getIdToken(true); // Force refresh to ensure a fresh token.
         try {
-            const idToken = await user.getIdToken(true); // Force refresh for freshness
-            setCookie('idToken', idToken, 1); // Store for 1 day
+          await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ idToken }),
+          });
         } catch (error) {
-            console.error("Error getting/setting idToken cookie on auth state change:", error);
-            eraseCookie('idToken');
+          console.error("Failed to create session cookie:", error);
         }
       } else {
-        // If user logs out, clear the idToken cookie.
-        eraseCookie('idToken');
+        // User is logged out, clear the session cookie.
+        try {
+          await fetch('/api/auth/session', { method: 'DELETE' });
+        } catch (error) {
+          console.error("Failed to clear session cookie:", error);
+        }
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, []);
 
   const value = { user, loading };
 

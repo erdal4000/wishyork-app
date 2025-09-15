@@ -65,22 +65,21 @@ interface Wishlist {
 type FeedItem = Post | Wishlist;
 
 // --- NEW, SIMPLIFIED Server-Side Data Fetching ---
-async function getUserIdFromIdTokenCookie(): Promise<string> {
+async function getUserIdFromSessionCookie(): Promise<string> {
   const cookieStore = cookies();
-  // CORRECTED: Look for 'idToken' cookie, not 'session'
-  const idTokenCookie = cookieStore.get('idToken');
+  const sessionCookie = cookieStore.get('session');
 
-  if (!idTokenCookie?.value) {
+  if (!sessionCookie?.value) {
     throw new Error('Session cookie not found.');
   }
 
   try {
     const adminApp = getAdminApp();
     const adminAuth = getAuth(adminApp);
-    const decodedToken = await adminAuth.verifyIdToken(idTokenCookie.value);
+    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie.value, true);
     return decodedToken.uid;
   } catch (error: any) {
-    console.error('Error verifying ID Token:', error.code, error.message);
+    console.error('Error verifying session cookie:', error.code, error.message);
     throw new Error(`Could not verify user session. Reason: ${error.message}`);
   }
 }
@@ -318,7 +317,7 @@ export default async function DashboardPage() {
   let authError: string | null = null;
 
   try {
-    userId = await getUserIdFromIdTokenCookie();
+    userId = await getUserIdFromSessionCookie();
   } catch (error: any) {
     authError = error.message;
   }
@@ -327,8 +326,8 @@ export default async function DashboardPage() {
     return (
       <Card className="p-8 text-center text-muted-foreground">
         <h3 className="text-lg font-semibold">Authentication Error</h3>
-        <p className="mt-2">{authError || 'Could not verify user session. Please try logging in again.'}</p>
-        <p className="mt-4 text-xs italic">If the problem persists, please check the server logs.</p>
+        <p className="mt-2">Could not verify user session. Please try logging in again.</p>
+        <p className="mt-4 text-xs italic">{authError}</p>
       </Card>
     );
   }
