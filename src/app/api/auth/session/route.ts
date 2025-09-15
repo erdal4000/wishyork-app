@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
   try {
     const { idToken } = await request.json();
     if (!idToken) {
-      console.log('Session API: ID token is required, but not provided.');
       return NextResponse.json({ error: 'ID token is required.' }, { status: 400 });
     }
 
@@ -35,16 +34,6 @@ export async function POST(request: NextRequest) {
 
     // Set the cookie on the browser.
     cookies().set(cookieOptions);
-
-    console.log('✅ [SESSION API] Session cookie created and set with options:', {
-      name: cookieOptions.name,
-      maxAge: cookieOptions.maxAge,
-      httpOnly: cookieOptions.httpOnly,
-      secure: cookieOptions.secure,
-      path: cookieOptions.path,
-      sameSite: cookieOptions.sameSite,
-      value: `${sessionCookie.substring(0, 20)}... (truncated)`,
-    });
     
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -60,7 +49,6 @@ export async function DELETE(request: NextRequest) {
         maxAge: 0,
         path: '/',
     });
-    console.log('✅ [SESSION API] Session cookie cleared.');
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ [SESSION API] Error deleting session cookie:', error);

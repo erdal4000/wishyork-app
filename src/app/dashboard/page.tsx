@@ -65,32 +65,19 @@ interface Wishlist {
 type FeedItem = Post | Wishlist;
 
 // --- Server-Side Data Fetching ---
-async function getUserIdFromServer(): Promise<{ uid: string | null; error: string | null; details: string | null }> {
-  console.log('--- [DASHBOARD] Starting server-side user verification ---');
-
-  const allHeaders = headers();
-  const cookieHeader = allHeaders.get('cookie');
-  console.log('Request Headers (Cookie):', cookieHeader || 'No cookie header found');
-
+async function getUserIdFromServer(): Promise<string> {
   const sessionCookieValue = cookies().get('session')?.value;
   if (!sessionCookieValue) {
-    const message = 'Session cookie not found.';
-    console.error(`❌ [DASHBOARD] ${message}`);
-    return { uid: null, error: 'Authentication Error', details: message };
+    throw new Error('Session cookie not found.');
   }
-  console.log(`✅ [DASHBOARD] Found session cookie: ${sessionCookieValue.substring(0,20)}...`);
 
   try {
-    const adminApp = getAdminApp(); // This can throw if initialization fails
+    const adminApp = getAdminApp();
     const adminAuth = getAuth(adminApp);
-    console.log('Verifying session cookie...');
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
-    console.log('✅ [DASHBOARD] Session cookie verified successfully for UID:', decodedToken.uid);
-    return { uid: decodedToken.uid, error: null, details: null };
+    return decodedToken.uid;
   } catch (error: any) {
-    let errorMessage = `Could not verify user session. Reason: ${error.code || error.message}`;
-    console.error(`❌ [DASHBOARD] ${errorMessage}`, error);
-    return { uid: null, error: 'Authentication Error', details: errorMessage };
+    throw new Error(`Could not verify user session. Reason: ${error.code || error.message}`);
   }
 }
 
@@ -323,13 +310,20 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
 
 // --- Main Page Component ---
 export default async function DashboardPage() {
-  const { uid: userId, error: authError, details: authErrorDetails } = await getUserIdFromServer();
+  let userId: string | null = null;
+  let authError: string | null = null;
+
+  try {
+    userId = await getUserIdFromServer();
+  } catch (error: any) {
+    authError = error.message;
+  }
 
   if (!userId) {
     return (
       <Card className="p-8 text-center text-muted-foreground">
-        <h3 className="text-lg font-semibold">{authError || 'Authentication Error'}</h3>
-        <p className="mt-2">{authErrorDetails || 'Could not verify user session. Please try logging in again.'}</p>
+        <h3 className="text-lg font-semibold">Authentication Error</h3>
+        <p className="mt-2">{authError || 'Could not verify user session. Please try logging in again.'}</p>
         <p className="mt-4 text-xs italic">If the problem persists, please check the server logs.</p>
       </Card>
     );
