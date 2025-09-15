@@ -67,6 +67,7 @@ type FeedItem = Post | Wishlist;
 // --- NEW, SIMPLIFIED Server-Side Data Fetching ---
 async function getUserIdFromIdTokenCookie(): Promise<string> {
   const cookieStore = cookies();
+  // CORRECTED: Look for 'idToken' cookie, not 'session'
   const idTokenCookie = cookieStore.get('idToken');
 
   if (!idTokenCookie?.value) {
