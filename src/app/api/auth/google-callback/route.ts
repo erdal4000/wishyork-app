@@ -34,9 +34,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/login?error=Invalid%20or%20missing%20state%20parameter', request.url));
     }
 
+    // Always use the server-side redirect URI for the token exchange
     const redirectURI = `${url.origin}/api/auth/google-callback`;
 
-    // Ensure the same server-side client ID and secret are used here
+    // The token exchange MUST use the server-side (web application) client ID and secret.
+    // This is the key part of the server-to-server communication with Google.
     const oAuth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -49,7 +51,10 @@ export async function GET(request: NextRequest) {
     if (!tokens.id_token) {
         throw new Error('ID token not found in Google response');
     }
-
+    
+    // We now verify the ID token. The audience here should be the client ID that *requested* the token.
+    // Since the redirect flow can be initiated by either the public (web) or the server-side client,
+    // we must handle both possibilities. However, for security, the server should always verify against its own client ID.
     const ticket = await oAuth2Client.verifyIdToken({
       idToken: tokens.id_token,
       audience: process.env.GOOGLE_CLIENT_ID, // Verify the audience is our server-side client
@@ -114,13 +119,8 @@ export async function GET(request: NextRequest) {
       await adminAuth.updateUser(uid, { photoURL });
     }
 
-    // Instead of creating a custom token, we will let the client-side SDK
-    // handle the sign-in state. The user is already authenticated with Google,
-    // and the client will pick up the session.
-    
-    // We just need to redirect to the dashboard. The client-side AuthProvider
-    // will detect the logged-in state.
-    const response = NextResponse.redirect(new URL('/login?googleSignIn=true', request.url));
+    const idToken = await adminAuth.createCustomToken(uid);
+    const response = NextResponse.redirect(new URL(`/login?googleSignIn=true&token=${idToken}`, request.url));
     
     cookies().delete('google_oauth_state');
 

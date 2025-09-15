@@ -6,23 +6,23 @@ import { OAuth2Client } from 'google-auth-library';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
-  // Dynamically construct the redirect URI based on the request's origin.
-  // This makes the flow resilient to changing ports in Cloud Workstations.
-  const requestUrl = new URL(request.url);
-  const redirectURI = `${requestUrl.origin}/api/auth/google-callback`;
+  // This redirect URI must be authorized for BOTH the server-side and client-side Client IDs in Google Cloud Console.
+  const redirectURI = `${new URL(request.url).origin}/api/auth/google-callback`;
 
-  // Use GOOGLE_CLIENT_ID for server-side access
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  // Determine which client ID to use.
+  // Use the public client ID for requests from the browser (especially local dev).
+  // Use the server-side client ID for other contexts if needed, but public is safer for browser-initiated flows.
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error('FATAL: Google OAuth client ID or secret is not set.');
+    console.error('FATAL: Google OAuth client credentials are not set.');
     return NextResponse.json({ error: 'Server configuration error: Missing Google client credentials.' }, { status: 500 });
   }
 
   const oAuth2Client = new OAuth2Client(
-    clientId,
-    clientSecret,
+    clientId, // Use the determined client ID
+    clientSecret, // The secret is still needed, tied to the server-side config.
     redirectURI
   );
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       'https://www.googleapis.com/auth/userinfo.profile',
       'https://www.googleapis.com/auth/userinfo.email',
     ],
-    prompt: 'consent', // Force the consent screen to be shown every time.
+    prompt: 'consent',
     state: state,
   });
 

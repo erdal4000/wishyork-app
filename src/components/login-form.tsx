@@ -25,7 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Waves, LogIn, Loader2, AlertCircle } from "lucide-react";
 import Link from 'next/link';
-import { signInWithEmailAndPassword, getRedirectResult, GoogleAuthProvider } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithCustomToken } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { query, collection, where, getDocs } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -75,21 +75,23 @@ export function LoginForm() {
     
     // This effect will handle the result of the Google sign-in redirect
     const handleRedirect = async () => {
-        try {
-            const result = await getRedirectResult(auth);
-            if (result) {
-                // User signed in. The onAuthStateChanged listener in AuthProvider
-                // will handle the user state update and redirect.
+        const customToken = searchParams.get('token');
+        if (customToken) {
+            try {
+                await signInWithCustomToken(auth, customToken);
+                // The onAuthStateChanged listener in AuthProvider will handle the redirect.
                 toast({ title: "Welcome!", description: "You have successfully signed in." });
+            } catch (error: any) {
+                console.error("Google sign-in with custom token error:", error);
+                setError(error.message || "Failed to sign in with Google.");
+            } finally {
+                setIsHandlingRedirect(false);
+                // Clean up URL params
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
             }
-        } catch (error: any) {
-            console.error("Google sign-in redirect error:", error);
-            setError(error.message || "Failed to sign in with Google.");
-        } finally {
+        } else {
             setIsHandlingRedirect(false);
-            // Clean up URL params
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
         }
     };
     
@@ -98,7 +100,7 @@ export function LoginForm() {
     } else {
         setIsHandlingRedirect(false);
     }
-  }, [searchParams, toast]);
+  }, [searchParams, toast, router]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -114,6 +116,7 @@ export function LoginForm() {
   
   const handleGoogleSignIn = () => {
     setError(null);
+    setIsSubmitting(true); // Show loading state
     window.location.href = '/api/auth/google-signin-redirect';
   };
 
@@ -129,7 +132,7 @@ export function LoginForm() {
       if (isEmail(values.login)) {
         emailToLogin = values.login;
       } else {
-        const q = query(collection(db, "users"), where("username", "==", values.login.toLowerCase()));
+        const q = query(collection(db, "users"), where("username_lowercase", "==", values.login.toLowerCase()));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           emailToLogin = querySnapshot.docs[0].data().email;
