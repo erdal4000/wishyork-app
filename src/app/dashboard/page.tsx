@@ -18,7 +18,7 @@ import { Timestamp, DocumentData } from "firebase-admin/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { getInitials } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getAdminApp } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -65,22 +65,32 @@ interface Wishlist {
 type FeedItem = Post | Wishlist;
 
 // --- Server-Side Data Fetching ---
-async function getUserIdFromServer(): Promise<{ uid: string | null; error: string | null }> {
+async function getUserIdFromServer(): Promise<{ uid: string | null; error: string | null; details: string | null }> {
+  console.log('--- [DASHBOARD] Starting server-side user verification ---');
+
+  const allHeaders = headers();
+  const cookieHeader = allHeaders.get('cookie');
+  console.log('Request Headers (Cookie):', cookieHeader || 'No cookie header found');
+
+  const sessionCookieValue = cookies().get('session')?.value;
+  if (!sessionCookieValue) {
+    const message = 'Session cookie not found.';
+    console.error(`❌ [DASHBOARD] ${message}`);
+    return { uid: null, error: 'Authentication Error', details: message };
+  }
+  console.log(`✅ [DASHBOARD] Found session cookie: ${sessionCookieValue.substring(0,20)}...`);
+
   try {
-    const sessionCookieValue = cookies().get('session')?.value;
-    if (!sessionCookieValue) {
-      // This is not an error, it just means the user is not logged in.
-      return { uid: null, error: 'Session cookie not found.' };
-    }
-    
     const adminApp = getAdminApp(); // This can throw if initialization fails
     const adminAuth = getAuth(adminApp);
+    console.log('Verifying session cookie...');
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
-    return { uid: decodedToken.uid, error: null };
+    console.log('✅ [DASHBOARD] Session cookie verified successfully for UID:', decodedToken.uid);
+    return { uid: decodedToken.uid, error: null, details: null };
   } catch (error: any) {
-    // This can happen if the cookie is expired, invalid, or admin SDK fails.
-    console.error('❌ SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
-    return { uid: null, error: `Could not verify user session. Reason: ${error.message}` };
+    let errorMessage = `Could not verify user session. Reason: ${error.code || error.message}`;
+    console.error(`❌ [DASHBOARD] ${errorMessage}`, error);
+    return { uid: null, error: 'Authentication Error', details: errorMessage };
   }
 }
 
@@ -313,18 +323,14 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
 
 // --- Main Page Component ---
 export default async function DashboardPage() {
-  const { uid: userId, error: authError } = await getUserIdFromServer();
+  const { uid: userId, error: authError, details: authErrorDetails } = await getUserIdFromServer();
 
   if (!userId) {
     return (
       <Card className="p-8 text-center text-muted-foreground">
-        <h3 className="text-lg font-semibold">Authentication Error</h3>
-        <p className="mt-2">Could not verify user session. Please try logging in again.</p>
-        {authError && (
-          <pre className="mt-4 text-left text-xs bg-muted p-2 rounded-md whitespace-pre-wrap">
-            {authError}
-          </pre>
-        )}
+        <h3 className="text-lg font-semibold">{authError || 'Authentication Error'}</h3>
+        <p className="mt-2">{authErrorDetails || 'Could not verify user session. Please try logging in again.'}</p>
+        <p className="mt-4 text-xs italic">If the problem persists, please check the server logs.</p>
       </Card>
     );
   }
@@ -383,11 +389,11 @@ export default async function DashboardPage() {
       </div>
     );
   } catch (error: any) {
-    console.error('❌ DASHBOARD VERİ ÇEKME HATASI:', error);
+    console.error('❌ [DASHBOARD] Error fetching feed data after auth:', error);
     return (
       <Card className="p-8 text-center text-muted-foreground">
         <h3 className="text-lg font-semibold">Error Loading Feed</h3>
-        <p className="mt-2">Could not load your feed. The database might be offline or there could be a permission issue.</p>
+        <p className="mt-2">Could not load your feed after authentication. The database might be offline or there could be a permission issue.</p>
         <pre className="mt-4 text-left text-xs bg-muted p-2 rounded-md whitespace-pre-wrap">{error.message}</pre>
       </Card>
     );

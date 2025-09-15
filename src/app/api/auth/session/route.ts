@@ -17,25 +17,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ID token is required.' }, { status: 400 });
     }
 
-    const adminApp = await getAdminApp();
+    const adminApp = getAdminApp();
     const adminAuth = getAuth(adminApp);
     
     // Create the session cookie. This will throw an error if the token is invalid.
     const sessionCookie = await adminAuth.createSessionCookie(idToken, { expiresIn });
 
-    // Set the cookie on the browser.
-    cookies().set('session', sessionCookie, {
+    const cookieOptions = {
+      name: 'session',
+      value: sessionCookie,
       maxAge: expiresIn / 1000, // maxAge is in seconds
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      sameSite: 'lax',
-    });
+      sameSite: 'lax' as const,
+    };
 
-    console.log(`✅ Session cookie SUCCESSFULLY created: ${sessionCookie.substring(0, 20)}...`);
+    // Set the cookie on the browser.
+    cookies().set(cookieOptions);
+
+    console.log('✅ [SESSION API] Session cookie created and set with options:', {
+      name: cookieOptions.name,
+      maxAge: cookieOptions.maxAge,
+      httpOnly: cookieOptions.httpOnly,
+      secure: cookieOptions.secure,
+      path: cookieOptions.path,
+      sameSite: cookieOptions.sameSite,
+      value: `${sessionCookie.substring(0, 20)}... (truncated)`,
+    });
+    
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error creating session cookie:', error);
+    console.error('❌ [SESSION API] Error creating session cookie:', error);
     return NextResponse.json({ error: 'Failed to create session.' }, { status: 401 });
   }
 }
@@ -47,9 +60,10 @@ export async function DELETE(request: NextRequest) {
         maxAge: 0,
         path: '/',
     });
+    console.log('✅ [SESSION API] Session cookie cleared.');
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting session cookie:', error);
+    console.error('❌ [SESSION API] Error deleting session cookie:', error);
     return NextResponse.json({ error: 'Failed to clear session.' }, { status: 500 });
   }
 }
