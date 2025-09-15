@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import {
@@ -77,6 +76,7 @@ async function getUserIdFromServer(): Promise<string | null> {
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken.uid;
   } catch (error) {
+    console.error("Server-side auth error:", error);
     return null;
   }
 }
