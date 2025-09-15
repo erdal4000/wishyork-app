@@ -67,18 +67,16 @@ type FeedItem = Post | Wishlist;
 
 // --- Server-Side Data Fetching ---
 async function getUserIdFromServer(): Promise<string | null> {
+  const sessionCookie = cookies().get('session')?.value;
+  if (!sessionCookie) {
+    return null;
+  }
   try {
-    const sessionCookie = cookies().get('session')?.value;
-    if (!sessionCookie) {
-      throw new Error('Session cookie not found.');
-    }
     const adminApp = await getAdminApp();
     const adminAuth = getAuth(adminApp);
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken.uid;
   } catch (error) {
-    console.error('SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
-    // Bu, bize "Authentication Error"dan çok daha fazla bilgi verecektir.
     return null;
   }
 }
