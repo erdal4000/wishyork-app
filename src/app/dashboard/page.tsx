@@ -66,17 +66,21 @@ type FeedItem = Post | Wishlist;
 
 // --- Server-Side Data Fetching ---
 async function getUserIdFromServer(): Promise<string | null> {
-  const sessionCookie = cookies().get('session')?.value;
-  if (!sessionCookie) {
+  const sessionCookieValue = cookies().get('session')?.value;
+  if (!sessionCookieValue) {
+    console.error('SERVER-SIDE AUTH: Session cookie not found.');
     return null;
   }
+  
   try {
     const adminApp = await getAdminApp();
     const adminAuth = getAuth(adminApp);
-    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
+    const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
+    console.log('✅ SERVER-SIDE AUTH: Session cookie successfully verified for UID:', decodedToken.uid);
     return decodedToken.uid;
   } catch (error) {
-    console.error("Server-side auth error:", error);
+    // This is the critical log we need to see.
+    console.error('❌ SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
     return null;
   }
 }

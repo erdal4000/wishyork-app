@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
     });
 
+    console.log(`✅ Session cookie SUCCESSFULLY created: ${sessionCookie.substring(0, 20)}...`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error creating session cookie:', error);
