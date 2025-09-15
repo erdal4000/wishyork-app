@@ -6,12 +6,9 @@ import { OAuth2Client } from 'google-auth-library';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
-  // This redirect URI must be authorized for BOTH the server-side and client-side Client IDs in Google Cloud Console.
   const redirectURI = `${new URL(request.url).origin}/api/auth/google-callback`;
 
-  // Determine which client ID to use.
-  // Use the public client ID for requests from the browser (especially local dev).
-  // Use the server-side client ID for other contexts if needed, but public is safer for browser-initiated flows.
+  // Use the PUBLIC client ID for browser-initiated flows.
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -21,8 +18,8 @@ export async function GET(request: NextRequest) {
   }
 
   const oAuth2Client = new OAuth2Client(
-    clientId, // Use the determined client ID
-    clientSecret, // The secret is still needed, tied to the server-side config.
+    clientId,
+    clientSecret,
     redirectURI
   );
 

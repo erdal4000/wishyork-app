@@ -37,8 +37,6 @@ export async function GET(request: NextRequest) {
     // Always use the server-side redirect URI for the token exchange
     const redirectURI = `${url.origin}/api/auth/google-callback`;
 
-    // The token exchange MUST use the server-side (web application) client ID and secret.
-    // This is the key part of the server-to-server communication with Google.
     const oAuth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -52,12 +50,9 @@ export async function GET(request: NextRequest) {
         throw new Error('ID token not found in Google response');
     }
     
-    // We now verify the ID token. The audience here should be the client ID that *requested* the token.
-    // Since the redirect flow can be initiated by either the public (web) or the server-side client,
-    // we must handle both possibilities. However, for security, the server should always verify against its own client ID.
     const ticket = await oAuth2Client.verifyIdToken({
       idToken: tokens.id_token,
-      audience: process.env.GOOGLE_CLIENT_ID, // Verify the audience is our server-side client
+      audience: process.env.GOOGLE_CLIENT_ID, 
     });
     
     const payload = ticket.getPayload();
@@ -72,12 +67,10 @@ export async function GET(request: NextRequest) {
       throw new Error('UID or email not found in Google token payload');
     }
     
-    // Create or update the user in Firebase Auth. This is important!
     try {
       await adminAuth.getUser(uid);
     } catch (error: any) {
       if (error.code === 'auth/user-not-found') {
-        // If user doesn't exist, create them in Firebase Auth
         await adminAuth.createUser({
           uid: uid,
           email: email,
@@ -85,7 +78,7 @@ export async function GET(request: NextRequest) {
           photoURL: picture,
         });
       } else {
-        throw error; // Re-throw other errors
+        throw error;
       }
     }
 
@@ -115,7 +108,6 @@ export async function GET(request: NextRequest) {
       batch.set(usernameDocRef, { uid: uid });
       await batch.commit();
 
-      // Ensure the Auth user record has the photoURL
       await adminAuth.updateUser(uid, { photoURL });
     }
 

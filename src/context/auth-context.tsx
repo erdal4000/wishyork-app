@@ -45,7 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await setSessionCookie(idToken);
         } catch (error) {
             console.error("Failed to set session cookie:", error);
-            // Handle error, maybe sign out user
             await auth.signOut();
         }
       } else {
