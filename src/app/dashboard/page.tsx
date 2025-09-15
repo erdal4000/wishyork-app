@@ -73,13 +73,12 @@ async function getUserIdFromServer(): Promise<string | null> {
   }
   
   try {
-    const adminApp = await getAdminApp();
+    const adminApp = getAdminApp();
     const adminAuth = getAuth(adminApp);
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
     return decodedToken.uid;
   } catch (error) {
     // This can happen if the cookie is expired or invalid.
-    // We log it for debugging but treat it as "not logged in".
     console.error('❌ SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
     return null;
   }
@@ -89,7 +88,7 @@ async function getFeedPosts(following: string[]): Promise<Post[]> {
   if (following.length === 0) {
     return [];
   }
-  const adminDb = getFirestore(await getAdminApp());
+  const adminDb = getFirestore(getAdminApp());
   const postsQuery = adminDb
     .collectionGroup('posts')
     .where('authorId', 'in', following)
@@ -104,7 +103,7 @@ async function getFeedWishlists(following: string[]): Promise<Wishlist[]> {
     if (following.length === 0) {
       return [];
     }
-    const adminDb = getFirestore(await getAdminApp());
+    const adminDb = getFirestore(getAdminApp());
     const wishlistsQuery = adminDb
       .collectionGroup('wishlists')
       .where('authorId', 'in', following)
@@ -258,7 +257,7 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
     if (!postContent?.trim() || !userId) return;
 
     try {
-        const adminDb = getFirestore(await getAdminApp());
+        const adminDb = getFirestore(getAdminApp());
         const userDocRef = adminDb.collection('users').doc(userId);
         const userDoc = await userDocRef.get();
         const userData = userDoc.data();
@@ -325,56 +324,67 @@ export default async function DashboardPage() {
     );
   }
   
-  const adminDb = getFirestore(await getAdminApp());
-  const adminAuth = getAuth(await getAdminApp());
+  try {
+    const adminDb = getFirestore(getAdminApp());
+    const adminAuth = getAuth(getAdminApp());
 
-  const userDoc = await adminDb.collection('users').doc(userId).get();
-  const userRecord = await adminAuth.getUser(userId);
+    const userDoc = await adminDb.collection('users').doc(userId).get();
+    const userRecord = await adminAuth.getUser(userId);
 
-  const following = userDoc.data()?.following || [];
+    const following = userDoc.data()?.following || [];
 
-  const [feedPosts, feedWishlists] = await Promise.all([
-    getFeedPosts([userId, ...following]),
-    getFeedWishlists([userId, ...following]),
-  ]);
+    const [feedPosts, feedWishlists] = await Promise.all([
+      getFeedPosts([userId, ...following]),
+      getFeedWishlists([userId, ...following]),
+    ]);
 
-  const allItems = [...feedPosts, ...feedWishlists];
-  const uniqueItems = Array.from(new Map(allItems.map(item => [`${item.type}-${item.id}`, item])).values());
-  const sortedFeed = uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-  
-  const userForForm = {
-      displayName: userRecord.displayName,
-      photoURL: userRecord.photoURL,
-      email: userRecord.email,
+    const allItems = [...feedPosts, ...feedWishlists];
+    const uniqueItems = Array.from(new Map(allItems.map(item => [`${item.type}-${item.id}`, item])).values());
+    const sortedFeed = uniqueItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+    
+    const userForForm = {
+        displayName: userRecord.displayName,
+        photoURL: userRecord.photoURL,
+        email: userRecord.email,
+    }
+
+    return (
+      <div className="space-y-6">
+        <CreatePostForm userId={userId} user={userForForm} />
+
+        <Suspense fallback={
+          <div className="flex justify-center p-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        }>
+          {sortedFeed.length === 0 ? (
+            <Card className="p-8 text-center text-muted-foreground">
+              <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
+              <p className="mt-2">Follow some people or create your first post to see content here.</p>
+               <p className="mt-4 text-xs italic">If you have recently created a post, please allow a few minutes for the database index to build.</p>
+            </Card>
+          ) : (
+            sortedFeed.map((item) => {
+               if (item.type === 'post') {
+                  return <PostCard key={`post-${item.id}`} item={item as Post} />;
+               }
+               if (item.type === 'wishlist') {
+                  return <WishlistCard key={`wishlist-${item.id}`} item={item as Wishlist} />;
+               }
+               return null;
+            })
+          )}
+        </Suspense>
+      </div>
+    );
+  } catch (error: any) {
+    console.error('❌ DASHBOARD VERİ ÇEKME HATASI:', error.message);
+    return (
+      <Card className="p-8 text-center text-muted-foreground">
+        <h3 className="text-lg font-semibold">Error Loading Feed</h3>
+        <p className="mt-2">Could not load your feed. The database might be offline or there could be a permission issue.</p>
+        <pre className="mt-4 text-left text-xs bg-muted p-2 rounded-md whitespace-pre-wrap">{error.message}</pre>
+      </Card>
+    );
   }
-
-  return (
-    <div className="space-y-6">
-      <CreatePostForm userId={userId} user={userForForm} />
-
-      <Suspense fallback={
-        <div className="flex justify-center p-8">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      }>
-        {sortedFeed.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">
-            <h3 className="text-lg font-semibold">Your feed is looking empty!</h3>
-            <p className="mt-2">Follow some people or create your first post to see content here.</p>
-             <p className="mt-4 text-xs italic">If you have recently created a post, please allow a few minutes for the database index to build.</p>
-          </Card>
-        ) : (
-          sortedFeed.map((item) => {
-             if (item.type === 'post') {
-                return <PostCard key={`post-${item.id}`} item={item as Post} />;
-             }
-             if (item.type === 'wishlist') {
-                return <WishlistCard key={`wishlist-${item.id}`} item={item as Wishlist} />;
-             }
-             return null;
-          })
-        )}
-      </Suspense>
-    </div>
-  );
 }
