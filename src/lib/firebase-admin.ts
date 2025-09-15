@@ -18,6 +18,15 @@ function getServiceAccount(): ServiceAccount {
   // newlines before being passed to the Firebase Admin SDK.
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
+  // --- TEMPORARY DEBUGGING LOGS ---
+  // This helps us verify what the server is actually seeing.
+  console.log('--- SUNUCU TARAFI ORTAM DEĞİŞKENLERİNİ KONTROL ET ---');
+  console.log('Project ID:', projectId ? 'Loaded' : '!!! NOT FOUND !!!');
+  console.log('Client Email:', clientEmail ? 'Loaded' : '!!! NOT FOUND !!!');
+  console.log('Private Key (first 30 chars):', privateKey?.substring(0, 30));
+  console.log('--- KONTROL BİTTİ ---');
+  // --- END OF DEBUGGING LOGS ---
+
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
       'Firebase Admin server credentials are not fully set. Please ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY are correctly set in your environment.'
