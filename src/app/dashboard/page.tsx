@@ -65,22 +65,22 @@ interface Wishlist {
 type FeedItem = Post | Wishlist;
 
 // --- Server-Side Data Fetching ---
-async function getUserIdFromServer(): Promise<string | null> {
-  const sessionCookieValue = cookies().get('session')?.value;
-  if (!sessionCookieValue) {
-    // This is not an error, it just means the user is not logged in.
-    return null;
-  }
-  
+async function getUserIdFromServer(): Promise<{ uid: string | null; error: string | null }> {
   try {
-    const adminApp = getAdminApp();
+    const sessionCookieValue = cookies().get('session')?.value;
+    if (!sessionCookieValue) {
+      // This is not an error, it just means the user is not logged in.
+      return { uid: null, error: 'Session cookie not found.' };
+    }
+    
+    const adminApp = getAdminApp(); // This can throw if initialization fails
     const adminAuth = getAuth(adminApp);
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
-    return decodedToken.uid;
-  } catch (error) {
-    // This can happen if the cookie is expired or invalid.
+    return { uid: decodedToken.uid, error: null };
+  } catch (error: any) {
+    // This can happen if the cookie is expired, invalid, or admin SDK fails.
     console.error('❌ SUNUCU TARAFI KİMLİK DOĞRULAMA HATASI:', error);
-    return null;
+    return { uid: null, error: `Could not verify user session. Reason: ${error.message}` };
   }
 }
 
@@ -313,13 +313,18 @@ async function CreatePostForm({ userId, user }: { userId: string, user: { displa
 
 // --- Main Page Component ---
 export default async function DashboardPage() {
-  const userId = await getUserIdFromServer();
+  const { uid: userId, error: authError } = await getUserIdFromServer();
 
   if (!userId) {
     return (
       <Card className="p-8 text-center text-muted-foreground">
         <h3 className="text-lg font-semibold">Authentication Error</h3>
         <p className="mt-2">Could not verify user session. Please try logging in again.</p>
+        {authError && (
+          <pre className="mt-4 text-left text-xs bg-muted p-2 rounded-md whitespace-pre-wrap">
+            {authError}
+          </pre>
+        )}
       </Card>
     );
   }
@@ -378,7 +383,7 @@ export default async function DashboardPage() {
       </div>
     );
   } catch (error: any) {
-    console.error('❌ DASHBOARD VERİ ÇEKME HATASI:', error.message);
+    console.error('❌ DASHBOARD VERİ ÇEKME HATASI:', error);
     return (
       <Card className="p-8 text-center text-muted-foreground">
         <h3 className="text-lg font-semibold">Error Loading Feed</h3>
