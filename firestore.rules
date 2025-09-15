@@ -5,25 +5,45 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Helper function to check if a user is authenticated
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // Allow authenticated users to read and write their own user document
+    // Default-deny all reads and writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow authenticated users to read and write to their own user document
     match /users/{userId} {
       allow read, update, delete: if request.auth.uid == userId;
-      allow create: if isAuthenticated();
+      allow create: if isSignedIn();
     }
 
-    // Allow username lookups for authenticated users
+    // Allow any authenticated user to check if a username exists
     match /usernames/{username} {
-      allow read, create, delete: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow create: if request.auth.uid == request.resource.data.uid;
     }
 
-    // Allow authenticated users to read/write posts, wishlists, and their subcollections (items, comments)
-    // This is a broad rule for debugging purposes.
-    match /{path=**} {
-       allow read, write: if isAuthenticated();
+    // Allow authenticated users to read/write their own posts
+    match /posts/{postId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    // Allow authenticated users to read/write their own wishlists and items
+    match /wishlists/{wishlistId} {
+      allow read, write: if isSignedIn();
+        match /items/{itemId} {
+          allow read, write: if isSignedIn();
+        }
+        match /comments/{commentId} {
+            allow read, write: if isSignedIn();
+        }
+    }
+    
+     match /posts/{postId}/comments/{commentId} {
+        allow read, write: if isSignedIn();
     }
   }
 }
