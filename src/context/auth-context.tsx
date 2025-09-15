@@ -5,6 +5,27 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+import { cookies } from 'next/headers'; // This is a placeholder, will use a client-side library
+
+// Helper for client-side cookie management
+const setCookie = (name: string, value: string, days: number) => {
+  let expires = "";
+  if (days) {
+    let date = new Date();
+    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+    expires = "; expires=" + date.toUTCString();
+  }
+  if (typeof document !== 'undefined') {
+    document.cookie = name + "=" + (value || "") + expires + "; path=/";
+  }
+};
+
+const eraseCookie = (name: string) => {
+  if (typeof document !== 'undefined') {
+    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+  }
+};
+
 
 interface AuthContextType {
   user: User | null;
@@ -15,26 +36,6 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
 });
-
-async function setSessionCookie(idToken: string) {
-    const response = await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-    });
-
-    if (!response.ok) {
-        console.error("Failed to set session cookie. Status:", response.status);
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Error details:", errorData.error || "No details provided.");
-        throw new Error("Failed to set session cookie.");
-    }
-}
-
-async function clearSessionCookie() {
-    await fetch('/api/auth/session', { method: 'DELETE' });
-}
-
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -48,16 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            // Force refresh to get a fresh token, crucial for session creation.
+            // This is our new strategy: store the ID token directly.
             const idToken = await user.getIdToken(true); 
-            await setSessionCookie(idToken);
+            setCookie('idToken', idToken, 1); // Store for 1 day
         } catch (error) {
-            console.error("Error during session creation on auth state change:", error);
-            // If session creation fails, something is wrong. Log out to be safe.
-            await auth.signOut();
+            console.error("Error getting ID token on auth state change:", error);
+            eraseCookie('idToken');
         }
       } else {
-        await clearSessionCookie();
+        // If user logs out, clear the ID token cookie.
+        eraseCookie('idToken');
       }
     });
 

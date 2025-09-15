@@ -14,11 +14,11 @@ import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat
 import Image from 'next/image';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { Timestamp, DocumentData } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { getInitials } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { getAdminApp } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -64,20 +64,23 @@ interface Wishlist {
 
 type FeedItem = Post | Wishlist;
 
-// --- Server-Side Data Fetching ---
-async function getUserIdFromServer(): Promise<string> {
-  const sessionCookieValue = cookies().get('session')?.value;
-  if (!sessionCookieValue) {
-    throw new Error('Session cookie not found.');
+// --- NEW, SIMPLIFIED Server-Side Data Fetching ---
+async function getUserIdFromIdTokenCookie(): Promise<string> {
+  const cookieStore = cookies();
+  const idTokenCookie = cookieStore.get('idToken');
+
+  if (!idTokenCookie?.value) {
+    throw new Error('ID Token cookie not found.');
   }
 
   try {
     const adminApp = getAdminApp();
     const adminAuth = getAuth(adminApp);
-    const decodedToken = await adminAuth.verifySessionCookie(sessionCookieValue, true);
+    const decodedToken = await adminAuth.verifyIdToken(idTokenCookie.value);
     return decodedToken.uid;
   } catch (error: any) {
-    throw new Error(`Could not verify user session. Reason: ${error.code || error.message}`);
+    console.error('Error verifying ID Token:', error.code, error.message);
+    throw new Error(`Could not verify user session. Reason: ${error.message}`);
   }
 }
 
@@ -314,7 +317,7 @@ export default async function DashboardPage() {
   let authError: string | null = null;
 
   try {
-    userId = await getUserIdFromServer();
+    userId = await getUserIdFromIdTokenCookie();
   } catch (error: any) {
     authError = error.message;
   }
