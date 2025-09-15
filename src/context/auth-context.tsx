@@ -5,7 +5,6 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
-import { cookies } from 'next/headers'; // This is a placeholder, will use a client-side library
 
 // Helper for client-side cookie management
 const setCookie = (name: string, value: string, days: number) => {
@@ -16,7 +15,9 @@ const setCookie = (name: string, value: string, days: number) => {
     expires = "; expires=" + date.toUTCString();
   }
   if (typeof document !== 'undefined') {
-    document.cookie = name + "=" + (value || "") + expires + "; path=/";
+    // Setting a more generic path and ensuring it's secure in production
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax" + secure;
   }
 };
 
@@ -49,15 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            // This is our new strategy: store the ID token directly.
-            const idToken = await user.getIdToken(true); 
+            // STRATEGY CHANGE: Directly store the idToken in a client-side cookie.
+            // This bypasses the problematic /api/auth/session route.
+            const idToken = await user.getIdToken(true); // Force refresh for freshness
             setCookie('idToken', idToken, 1); // Store for 1 day
         } catch (error) {
-            console.error("Error getting ID token on auth state change:", error);
+            console.error("Error getting/setting idToken cookie on auth state change:", error);
             eraseCookie('idToken');
         }
       } else {
-        // If user logs out, clear the ID token cookie.
+        // If user logs out, clear the idToken cookie.
         eraseCookie('idToken');
       }
     });
