@@ -11,7 +11,7 @@ import { cookies } from 'next/headers';
 export async function GET(request: NextRequest) {
   let adminApp;
   try {
-    adminApp = await getAdminApp();
+    adminApp = getAdminApp();
   } catch (error: any) {
     console.error('CRITICAL: Failed to initialize Firebase Admin SDK in callback.', error);
     const redirectUrl = new URL('/login', request.url);
@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     // Always use the server-side redirect URI for the token exchange
     const redirectURI = `${url.origin}/api/auth/google-callback`;
 
+    // Use the appropriate client IDs for server-side token exchange
     const oAuth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -111,8 +112,9 @@ export async function GET(request: NextRequest) {
       await adminAuth.updateUser(uid, { photoURL });
     }
 
-    const idToken = await adminAuth.createCustomToken(uid);
-    const response = NextResponse.redirect(new URL(`/login?googleSignIn=true&token=${idToken}`, request.url));
+    const customToken = await adminAuth.createCustomToken(uid);
+    // Redirect to the login page with the custom token for client-side sign-in
+    const response = NextResponse.redirect(new URL(`/login?googleSignIn=true&token=${customToken}`, request.url));
     
     cookies().delete('google_oauth_state');
 

@@ -8,8 +8,9 @@ import { cookies } from 'next/headers';
 export async function GET(request: NextRequest) {
   const redirectURI = `${new URL(request.url).origin}/api/auth/google-callback`;
 
-  // Use the PUBLIC client ID for browser-initiated flows.
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  // This should be the PUBLIC client ID for browser-initiated flows if you have separate ones.
+  // If you only have one, this will work fine.
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {

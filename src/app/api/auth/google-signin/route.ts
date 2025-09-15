@@ -6,11 +6,12 @@ import { getAdminApp } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
+// This route is kept for potential future use with client-side Google Sign-In SDKs,
+// but the primary flow now uses the server-side OAuth2 redirect.
 export async function POST(request: NextRequest) {
   let adminApp;
   try {
-    // Lazily initialize the admin app only when this route is hit.
-    adminApp = await getAdminApp();
+    adminApp = getAdminApp();
   } catch (error: any) {
     console.error('CRITICAL: Failed to initialize Firebase Admin SDK.', error);
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });

@@ -79,7 +79,7 @@ export function LoginForm() {
         if (customToken) {
             try {
                 await signInWithCustomToken(auth, customToken);
-                // The onAuthStateChanged listener in AuthProvider will handle the redirect.
+                // The onAuthStateChanged listener in AuthProvider will handle the redirect and cookie creation.
                 toast({ title: "Welcome!", description: "You have successfully signed in." });
             } catch (error: any) {
                 console.error("Google sign-in with custom token error:", error);
