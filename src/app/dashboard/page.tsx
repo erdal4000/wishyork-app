@@ -67,7 +67,10 @@ type FeedItem = Post | Wishlist;
 // --- Server-Side Data Fetching ---
 async function getUserIdFromServer(): Promise<string | null> {
   const sessionCookie = cookies().get('session')?.value;
-  if (!sessionCookie) return null;
+  if (!sessionCookie) {
+    console.log("getUserIdFromServer: No session cookie found.");
+    return null;
+  }
 
   try {
     const adminApp = await getAdminApp();
@@ -75,7 +78,9 @@ async function getUserIdFromServer(): Promise<string | null> {
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken.uid;
   } catch (error) {
-    console.error("Session cookie verification failed:", error);
+    console.error("getUserIdFromServer: Session cookie verification failed:", error);
+    // Clear the invalid cookie
+    cookies().set('session', '', { maxAge: 0, path: '/' });
     return null;
   }
 }
