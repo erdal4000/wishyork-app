@@ -48,11 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
-            const idToken = await user.getIdToken(true); // Force refresh to get a fresh token
+            // Force refresh to get a fresh token, crucial for session creation.
+            const idToken = await user.getIdToken(true); 
             await setSessionCookie(idToken);
         } catch (error) {
-            console.error("Error during session creation:", error);
-            // If we can't create a session, something is wrong. Log the user out client-side.
+            console.error("Error during session creation on auth state change:", error);
+            // If session creation fails, something is wrong. Log out to be safe.
             await auth.signOut();
         }
       } else {
