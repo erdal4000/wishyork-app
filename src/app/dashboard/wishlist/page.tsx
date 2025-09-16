@@ -107,6 +107,24 @@ function WishlistCardSkeleton() {
   )
 }
 
+const getPrivacyIcon = (privacy: string) => {
+  switch (privacy) {
+    case 'public':
+      return <Globe className="h-4 w-4" />;
+    case 'friends':
+      return <Users className="h-4 w-4" />;
+    case 'private':
+      return <Lock className="h-4 w-4" />;
+    default:
+      return null;
+  }
+};
+
+const getPrivacyLabel = (privacy: string) => {
+    if (!privacy) return 'Public';
+    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+}
+
 export default function WishlistPage() {
   const { user } = useAuth();
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
@@ -135,25 +153,6 @@ export default function WishlistPage() {
 
     return () => unsubscribe();
   }, [user, toast]);
-
-
-  const getPrivacyIcon = (privacy: string) => {
-    switch (privacy) {
-      case 'public':
-        return <Globe className="h-4 w-4" />;
-      case 'friends':
-        return <Users className="h-4 w-4" />;
-      case 'private':
-        return <Lock className="h-4 w-4" />;
-      default:
-        return null;
-    }
-  };
-  
-  const getPrivacyLabel = (privacy: string) => {
-      if (!privacy) return 'Public';
-      return privacy.charAt(0).toUpperCase() + privacy.slice(1);
-  }
 
   const handleDeleteWishlist = async (wishlistId: string) => {
     try {
