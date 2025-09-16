@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -7,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/auth-context';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { getInitials } from '@/lib/utils';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { ArrowLeft, MoreHorizontal, Heart, MessageCircle, Share2, Loader2, Repeat2, Bookmark, CalendarIcon, ClockIcon } from 'lucide-react';
@@ -24,9 +22,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface Post extends DocumentData {
   id: string;
   authorId: string;
-  authorName: string;
-  authorUsername: string;
-  authorAvatar: string;
   content: string;
   imageUrl: string | null;
   aiHint: string | null;
@@ -34,6 +29,38 @@ interface Post extends DocumentData {
   likes: number;
   commentCount: number;
 }
+
+interface UserProfile extends DocumentData {
+  name: string;
+  username: string;
+  photoURL?: string;
+}
+
+const useAuthorProfile = (authorId?: string) => {
+    const [authorProfile, setAuthorProfile] = useState<UserProfile | null>(null);
+    const [loadingProfile, setLoadingProfile] = useState(true);
+
+    useEffect(() => {
+        if (!authorId) {
+            setLoadingProfile(false);
+            return;
+        };
+
+        const userDocRef = doc(db, 'users', authorId);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setAuthorProfile(docSnap.data() as UserProfile);
+            } else {
+                setAuthorProfile(null);
+            }
+            setLoadingProfile(false);
+        });
+
+        return () => unsubscribe();
+    }, [authorId]);
+
+    return { authorProfile, loadingProfile };
+};
 
 function PostDetailSkeleton() {
     return (
@@ -79,7 +106,8 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const { hasLiked, isLiking, toggleLike } = usePostInteraction(id);
+  const { authorProfile, loadingProfile } = useAuthorProfile(post?.authorId);
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'post');
 
   useEffect(() => {
     if (!id) return;
@@ -101,15 +129,14 @@ export default function PostDetailPage() {
     return () => unsubscribe();
   }, [id]);
 
-  if (loading) {
+  if (loading || loadingProfile) {
     return <PostDetailSkeleton />;
   }
 
-  if (!post) {
-    return <div>Post not found.</div>;
+  if (!post || !authorProfile) {
+    return <div>Post not found or author could not be loaded.</div>;
   }
 
-  const authorPhoto = post.authorAvatar || `https://picsum.photos/seed/${post.authorId}/200/200`;
   const postDate = post.createdAt?.toDate();
 
   return (
@@ -127,13 +154,13 @@ export default function PostDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center gap-4 p-4">
           <Avatar>
-            <AvatarImage src={authorPhoto} alt={post.authorName} />
-            <AvatarFallback>{getInitials(post.authorName)}</AvatarFallback>
+            <AvatarImage src={authorProfile.photoURL} alt={authorProfile.name} />
+            <AvatarFallback>{getInitials(authorProfile.name)}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <p className="font-bold">{post.authorName}</p>
+            <p className="font-bold">{authorProfile.name}</p>
             <p className="text-sm text-muted-foreground">
-              <Link href={`/dashboard/profile/${post.authorUsername}`}>@{post.authorUsername}</Link>
+              <Link href={`/dashboard/profile/${authorProfile.username}`}>@{authorProfile.username}</Link>
             </p>
           </div>
         </CardHeader>
@@ -143,7 +170,7 @@ export default function PostDetailPage() {
             <div className="relative aspect-video w-full overflow-hidden rounded-xl">
               <Image
                 src={post.imageUrl}
-                alt={`Post by ${post.authorName}`}
+                alt={`Post by ${authorProfile.name}`}
                 fill
                 className="object-cover"
                 data-ai-hint={post.aiHint ?? ''}

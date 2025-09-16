@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -47,9 +46,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { GlobalSearch } from '@/components/global-search';
 import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
+import { getInitials } from '@/lib/utils';
+
 
 interface UserProfile extends DocumentData {
   username?: string;
+  name?: string;
+  photoURL?: string;
 }
 
 function FullPageLoader() {
@@ -110,6 +113,8 @@ export default function DashboardLayout({
       const unsubscribe = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
           setUserProfile(doc.data() as UserProfile);
+        } else {
+          setUserProfile(null);
         }
       });
       return () => unsubscribe();
@@ -124,18 +129,11 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     await auth.signOut();
-    router.push('/');
+    // No need to push, AuthProvider will handle redirect via useEffect
   };
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
-  const userPhoto = user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`;
+  
+  const displayName = userProfile?.name || user.displayName;
+  const photoURL = userProfile?.photoURL || user.photoURL;
 
   return (
     <SidebarProvider>
@@ -168,10 +166,10 @@ export default function DashboardLayout({
                   >
                     <Avatar>
                       <AvatarImage
-                        src={userPhoto}
-                        alt={user.displayName ?? 'User'}
+                        src={photoURL ?? undefined}
+                        alt={displayName ?? 'User'}
                       />
-                      <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                      <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>

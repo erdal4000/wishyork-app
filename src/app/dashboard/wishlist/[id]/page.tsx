@@ -1,10 +1,8 @@
-
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -65,15 +63,14 @@ import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { CommentSection } from '@/components/comment-section';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getInitials } from '@/lib/utils';
+
 
 interface Wishlist extends DocumentData {
     id: string;
     title: string;
     description?: string;
     authorId: string;
-    authorName: string;
-    authorUsername: string;
-    authorAvatar: string;
     imageUrl: string;
     aiHint: string;
     category: string;
@@ -85,6 +82,12 @@ interface Wishlist extends DocumentData {
     saves: number;
     progress: number;
     itemCount: number;
+}
+
+interface UserProfile extends DocumentData {
+  name: string;
+  username: string;
+  photoURL?: string;
 }
 
 interface Item extends DocumentData {
@@ -105,6 +108,33 @@ interface Item extends DocumentData {
     recurrence: string;
     quantity: number;
 }
+
+
+const useAuthorProfile = (authorId?: string) => {
+    const [authorProfile, setAuthorProfile] = useState<UserProfile | null>(null);
+    const [loadingProfile, setLoadingProfile] = useState(true);
+
+    useEffect(() => {
+        if (!authorId) {
+            setLoadingProfile(false);
+            return;
+        };
+
+        const userDocRef = doc(db, 'users', authorId);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setAuthorProfile(docSnap.data() as UserProfile);
+            } else {
+                setAuthorProfile(null);
+            }
+            setLoadingProfile(false);
+        });
+
+        return () => unsubscribe();
+    }, [authorId]);
+
+    return { authorProfile, loadingProfile };
+};
 
 
 function WishlistDetailSkeleton() {
@@ -163,6 +193,8 @@ export default function WishlistDetailPage() {
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
   const [isUpdatingItem, setIsUpdatingItem] = useState<string | null>(null);
 
+  const { authorProfile, loadingProfile } = useAuthorProfile(wishlist?.authorId);
+
    useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -173,7 +205,7 @@ export default function WishlistDetailPage() {
         setWishlist({ id: docSnap.id, ...data } as Wishlist);
       } else {
         console.log("No such document!");
-        setWishlist(null); // Or handle not found state
+        setWishlist(null);
       }
       setLoading(false);
     }, (error) => {
@@ -298,7 +330,6 @@ export default function WishlistDetailPage() {
     if (!item) return;
     
     let wishlistChanges = {};
-    // If it was already fulfilled, we need to decrease the fulfilled count
     if (item.status === 'fulfilled') {
       wishlistChanges = { fulfilled: -itemQuantity };
     }
@@ -335,9 +366,7 @@ export default function WishlistDetailPage() {
      try {
         const wishlistRef = doc(db, 'wishlists', id);
         const itemsRef = collection(wishlistRef, 'items');
-        const itemsSnapshot = await runTransaction(db, async t => {
-            return await t.get(query(itemsRef));
-        });
+        const itemsSnapshot = await getDocs(itemsRef);
         
         const batch = runTransaction(db, async t => {
             itemsSnapshot.forEach(itemDoc => t.delete(itemDoc.ref));
@@ -353,23 +382,13 @@ export default function WishlistDetailPage() {
     }
   }
 
-  if (loading) {
+  if (loading || loadingProfile) {
     return <WishlistDetailSkeleton />;
   }
 
-  if (!wishlist) {
-    return <div>Wishlist not found.</div>; // Or a more elaborate "Not Found" component
+  if (!wishlist || !authorProfile) {
+    return <div>Wishlist or author not found.</div>;
   }
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
-  const authorPhoto = wishlist.authorAvatar || `https://picsum.photos/seed/${wishlist.authorId}/200/200`;
 
   const isOwnWishlist = user?.uid === wishlist.authorId;
 
@@ -419,7 +438,6 @@ export default function WishlistDetailPage() {
         )}
       </div>
 
-      {/* Wishlist Header Card */}
       <Card className="overflow-hidden">
         <CardHeader className="relative h-48 w-full p-0">
           <Image
@@ -431,9 +449,9 @@ export default function WishlistDetailPage() {
           />
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <Avatar className="h-24 w-24 border-4 border-card">
-              <AvatarImage src={authorPhoto} alt={wishlist.authorName} />
+              <AvatarImage src={authorProfile.photoURL} alt={authorProfile.name} />
               <AvatarFallback className="text-3xl">
-                {getInitials(wishlist.authorName)}
+                {getInitials(authorProfile.name)}
               </AvatarFallback>
             </Avatar>
           </div>
@@ -449,8 +467,8 @@ export default function WishlistDetailPage() {
           <h1 className="mt-2 text-3xl font-bold">{wishlist.title}</h1>
           <p className="text-muted-foreground">
             by{' '}
-            <Link href={`/dashboard/profile/${wishlist.authorUsername}`} className="text-primary hover:underline">
-              {wishlist.authorName}
+            <Link href={`/dashboard/profile/${authorProfile.username}`} className="text-primary hover:underline">
+              {authorProfile.name}
             </Link>
           </p>
 
@@ -529,8 +547,6 @@ export default function WishlistDetailPage() {
         />
       )}
 
-
-      {/* Items Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Items ({items.length})</h2>
@@ -562,7 +578,6 @@ export default function WishlistDetailPage() {
             {items.map((item) => (
               <Card key={item.id} className="overflow-hidden">
                 <div className="flex">
-                  {/* Image / Icon */}
                   <div
                     className={`flex w-32 flex-shrink-0 items-center justify-center ${
                       item.status === 'fulfilled'
@@ -586,7 +601,6 @@ export default function WishlistDetailPage() {
                     )}
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1">
                     <CardHeader className="flex flex-row items-start justify-between pb-2">
                       <div>
@@ -703,7 +717,6 @@ export default function WishlistDetailPage() {
 
       <Separator />
 
-      {/* Comments Section */}
        <div className="space-y-4">
          <h2 className="text-2xl font-bold">Replies ({wishlist.commentCount || 0})</h2>
          <CommentSection docId={id} collectionType="wishlists" docAuthorId={wishlist.authorId} />
@@ -712,5 +725,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    

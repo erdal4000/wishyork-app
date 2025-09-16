@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -36,7 +35,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Globe, Users, Lock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Label } from "@/components/ui/label";
@@ -79,15 +78,8 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
     setIsSubmitting(true);
     try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        const userData = userDoc.data();
-
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
-            authorName: userData?.name || user.displayName,
-            authorUsername: userData?.username || user.email?.split('@')[0], // Placeholder
-            authorAvatar: userData?.photoURL || user.photoURL,
             title: values.wishlistName,
             title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,

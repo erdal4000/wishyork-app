@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth, storage } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
@@ -14,7 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getInitials } from '@/lib/utils';
@@ -29,7 +29,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
     AlertDialog,
@@ -49,19 +48,17 @@ interface FeedItem extends DocumentData {
   id: string;
   type: 'post' | 'wishlist';
   authorId: string;
-  authorName: string;
-  authorUsername: string;
-  authorAvatar: string;
   createdAt: Timestamp;
-  // Post specific
+  // Denormalized fields (now we will fetch them in real-time)
+  // authorName: string;
+  // authorUsername: string;
+  // authorAvatar: string;
   content?: string;
-  // Wishlist specific
   title?: string;
   category?: string;
   privacy?: 'public' | 'private' | 'friends';
   progress?: number;
   itemCount?: number;
-  // Common
   imageUrl: string | null;
   aiHint: string | null;
   likes: number;
@@ -69,9 +66,47 @@ interface FeedItem extends DocumentData {
 }
 
 interface UserProfile extends DocumentData {
+  name: string;
+  username: string;
   photoURL?: string;
-  name?: string;
 }
+
+const userProfilesCache: { [key: string]: UserProfile } = {};
+
+const useAuthorProfile = (authorId: string) => {
+    const [authorProfile, setAuthorProfile] = useState<UserProfile | null>(userProfilesCache[authorId] || null);
+    const [loadingProfile, setLoadingProfile] = useState(!userProfilesCache[authorId]);
+
+    useEffect(() => {
+        if (!authorId) return;
+        if (userProfilesCache[authorId]) {
+            setAuthorProfile(userProfilesCache[authorId]);
+            setLoadingProfile(false);
+            return;
+        }
+
+        setLoadingProfile(true);
+        const userDocRef = doc(db, 'users', authorId);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const profileData = docSnap.data() as UserProfile;
+                userProfilesCache[authorId] = profileData; // Cache the data
+                setAuthorProfile(profileData);
+            } else {
+                setAuthorProfile(null);
+            }
+            setLoadingProfile(false);
+        }, (error) => {
+            console.error(`Failed to fetch profile for ${authorId}`, error);
+            setLoadingProfile(false);
+        });
+
+        return () => unsubscribe();
+    }, [authorId]);
+
+    return { authorProfile, loadingProfile };
+};
+
 
 function FeedCardSkeleton() {
   return (
@@ -114,10 +149,10 @@ const getPrivacyLabel = (privacy?: string) => {
 function PostCard({ item }: { item: FeedItem }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
   const itemDate = item.createdAt?.toDate();
   const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
 
@@ -158,7 +193,6 @@ function PostCard({ item }: { item: FeedItem }) {
     try {
         const wishlistRef = doc(db, 'wishlists', item.id);
         
-        // Batch delete items in subcollection
         const itemsRef = collection(wishlistRef, 'items');
         const itemsSnapshot = await getDocs(itemsRef);
         const batch = writeBatch(db);
@@ -166,7 +200,6 @@ function PostCard({ item }: { item: FeedItem }) {
             batch.delete(itemDoc.ref);
         });
 
-        // Delete the wishlist document itself
         batch.delete(wishlistRef);
 
         await batch.commit();
@@ -180,18 +213,26 @@ function PostCard({ item }: { item: FeedItem }) {
     }
   }
 
+  if (loadingProfile) {
+      return <FeedCardSkeleton />;
+  }
+
+  if (!authorProfile) {
+      // This can happen if the user account was deleted
+      return null;
+  }
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage src={authorPhoto} alt={item.authorName} />
-          <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
+          <AvatarImage src={authorProfile.photoURL} alt={authorProfile.name} />
+          <AvatarFallback>{getInitials(authorProfile.name)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <p className="font-bold">{item.authorName}</p>
+          <p className="font-bold">{authorProfile.name}</p>
           <p className="text-sm text-muted-foreground">
-            <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link> · {timeAgo}
+            <Link href={`/dashboard/profile/${authorProfile.username}`}>@{authorProfile.username}</Link> · {timeAgo}
           </p>
         </div>
          <DropdownMenu>
@@ -351,6 +392,8 @@ export default function DashboardPage() {
       const unsubscribe = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
           setUserProfile(doc.data() as UserProfile);
+        } else {
+          setUserProfile(null);
         }
       });
       return () => unsubscribe();
@@ -391,15 +434,8 @@ export default function DashboardPage() {
         aiHint = postContent.split(' ').slice(0, 2).join(' ') || 'user post';
       }
 
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
-      const userData = userDoc.data();
-
       await addDoc(collection(db, 'posts'), {
         authorId: user.uid,
-        authorName: userData?.name || user.displayName,
-        authorUsername: userData?.username || 'user',
-        authorAvatar: userData?.photoURL || user.photoURL,
         content: postContent,
         imageUrl: imageUrl,
         aiHint: aiHint,
@@ -490,7 +526,6 @@ export default function DashboardPage() {
             },
             (err) => {
                 console.error("Error fetching wishlists:", err);
-                // Do not set a global error, as posts might still load
             }
         );
 
