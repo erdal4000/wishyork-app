@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from './ui/textarea';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -84,9 +84,6 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
-            authorName: userData?.name || user.displayName,
-            authorUsername: userData?.username || user.email?.split('@')[0],
-            authorAvatar: userData?.photoURL || user.photoURL,
             title: values.wishlistName,
             title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,
@@ -262,3 +259,4 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
     </Dialog>
   );
 }
+

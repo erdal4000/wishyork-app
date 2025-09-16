@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -23,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from './ui/textarea';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -35,7 +36,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Globe, Users, Lock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Label } from "@/components/ui/label";
@@ -86,7 +87,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             category: values.category,
             privacy: values.privacy,
             createdAt: serverTimestamp(),
-            type: 'wishlist',
+            // Default values for new wishlists
             itemCount: 0,
             imageUrl: `https://picsum.photos/seed/${values.wishlistName.replace(/\s/g, '-')}/1200/400`,
             aiHint: values.category.toLowerCase(),
@@ -188,7 +189,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                         <SelectItem value="Personal">Personal</SelectItem>
+                        <SelectItem value="Personal">Personal</SelectItem>
                         <SelectItem value="Charity">Charity</SelectItem>
                         <SelectItem value="Community">Community</SelectItem>
                         <SelectItem value="Travel">Travel</SelectItem>
