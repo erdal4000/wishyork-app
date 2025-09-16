@@ -36,9 +36,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Globe, Users, Lock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
+import { Label } from "@/components/ui/label";
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -77,10 +78,15 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
     setIsSubmitting(true);
     try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
-            authorName: user.displayName,
-            authorUsername: user.email?.split('@')[0], // Placeholder
+            authorName: userData?.name || user.displayName,
+            authorUsername: userData?.username || user.email?.split('@')[0],
+            authorAvatar: userData?.photoURL || user.photoURL,
             title: values.wishlistName,
             title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,
@@ -95,7 +101,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             unitsFulfilled: 0,
             totalUnits: 0,
             likes: 0,
-            comments: 0,
+            commentCount: 0,
             saves: 0,
         });
 
@@ -189,11 +195,15 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Fashion">Fashion</SelectItem>
+                        <SelectItem value="Personal">Personal</SelectItem>
+                        <SelectItem value="Charity">Charity</SelectItem>
+                        <SelectItem value="Community">Community</SelectItem>
                         <SelectItem value="Travel">Travel</SelectItem>
                         <SelectItem value="Home">Home</SelectItem>
                         <SelectItem value="Technology">Technology</SelectItem>
                         <SelectItem value="Health">Health</SelectItem>
+                        <SelectItem value="Fashion">Fashion</SelectItem>
+                        <SelectItem value="Education">Education</SelectItem>
                         <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
@@ -252,8 +262,3 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
     </Dialog>
   );
 }
-
-// Re-export Label to avoid conflicts with FormLabel
-import { Label } from "@/components/ui/label";
-
-    
