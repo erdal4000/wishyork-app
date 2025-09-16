@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User Images: Profile and Cover photos
+    // Path: /user-images/{userId}/{'avatar' or 'cover'}/{fileName}
+    match /user-images/{userId}/{imageType}/{fileName} {
+      // Only the owner of the folder can upload images
+      allow write: if isOwner(userId) && (imageType == 'avatar' || imageType == 'cover');
+      
+      // Anyone can read user images
+      allow read;
+    }
+
+    // Item Images: Images for items within a wishlist
+    // Path: /item-images/{wishlistId}/{fileName}
+    match /item-images/{wishlistId}/{fileName} {
+      // Allow write if the authenticated user is the author of the wishlist.
+      allow write: if isAuthenticated() && firestore.get(/databases/(default)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      
+      // Anyone can read item images
+      allow read;
+    }
+    
+    // Post Images: Images for posts on the feed
+    // Path: /post-images/{userId}/{fileName}
+    match /post-images/{userId}/{fileName} {
+      // Allow a user to write only to their own folder.
+      allow write: if isOwner(userId);
+      
+      // Anyone can read post images.
+      allow read;
+    }
+  }
+}
