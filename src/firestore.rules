@@ -4,72 +4,59 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth.uid != null;
     }
-
+    
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
-
+    
     // --- COLLECTION GROUP & BROAD READ RULES ---
 
     match /{path=**}/posts/{postId} {
-      allow list: if isSignedIn();
+      allow list, get: if isSignedIn();
+      allow create: if isOwner(request.resource.data.authorId);
+      allow update, delete: if isOwner(resource.data.authorId);
     }
 
     match /{path=**}/wishlists/{wishlistId} {
       allow list: if isSignedIn();
+      allow get: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
+      allow create: if isOwner(request.resource.data.authorId);
+      allow update, delete: if isOwner(resource.data.authorId);
     }
     
-    // Allow any signed-in user to search/list users for the search bar.
-    match /users/{userId} {
-       allow list: if isSignedIn();
-       allow get: if isSignedIn();
-       allow create: if isSignedIn() && isOwner(userId);
-       allow update, delete: if isOwner(userId);
-    }
-    
-
-    // --- SINGLE DOCUMENT & WRITE RULES ---
+    // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      // These are redefined for clarity on single-document access.
-      // A user can read any single profile, but only write to their own.
-      allow get: if isSignedIn();
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update, delete: if isOwner(userId);
+      // Allow any signed-in user to LIST users for search functionality.
+      // Allow any signed-in user to GET a single user's profile data.
+      allow list, get: if isSignedIn();
+      
+      // Allow a user to create, update, and delete their OWN user document.
+      allow create, update, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow create: if isOwner(request.resource.data.uid);
     }
-
-    match /posts/{postId} {
-      allow get: if isSignedIn();
-      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
-      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
-    }
-
-    match /wishlists/{wishlistId} {
-      allow get: if resource.data.privacy == 'public' || (isSignedIn() && isOwner(resource.data.authorId));
-      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
-      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
-    }
-
-
-    // --- SUB-COLLECTION RULES ---
+    
+    // --- SUB-COLLECTION RULES for direct access ---
 
     match /wishlists/{wishlistId}/items/{itemId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
     }
-
+    
     match /wishlists/{wishlistId}/comments/{commentId} {
-      allow read, write: if isSignedIn();
+      allow read, create: if isSignedIn();
+      allow update, delete: if isOwner(resource.data.authorId);
     }
-
+    
     match /posts/{postId}/comments/{commentId} {
-      allow read, write: if isSignedIn();
+      allow read, create: if isSignedIn();
+      allow update, delete: if isOwner(resource.data.authorId);
     }
   }
 }
