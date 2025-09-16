@@ -49,7 +49,7 @@ import { Progress } from '@/components/ui/progress';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, DocumentData, Timestamp, getCountFromServer, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, DocumentData, Timestamp, deleteDoc, doc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -113,7 +113,6 @@ export default function WishlistPage() {
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const router = useRouter();
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
 
   useEffect(() => {
@@ -288,7 +287,7 @@ export default function WishlistPage() {
                                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         This action cannot be undone. This will permanently delete this wishlist.
-                                    </AlertDialogDescription>
+                                    </Description>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -323,10 +322,11 @@ export default function WishlistPage() {
           }}
           onSuccess={() => {
             setEditingWishlist(null);
-            // No need to manually refetch, onSnapshot will do it.
           }}
         />
       )}
     </div>
   );
 }
+
+    
