@@ -19,10 +19,17 @@
     },
     {
       "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "privacy", "order": "ASCENDING" },
         { "fieldPath": "title_lowercase", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "username_lowercase", "order": "ASCENDING" }
       ]
     }
   ],

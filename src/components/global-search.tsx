@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -16,7 +17,7 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command';
-import { Search, List, Loader2 } from 'lucide-react';
+import { Search, List, Loader2, User } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -26,6 +27,7 @@ import {
   getDocs,
   DocumentData,
   orderBy,
+  collectionGroup,
 } from 'firebase/firestore';
 import debounce from 'lodash.debounce';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -55,11 +57,10 @@ export function GlobalSearch() {
 
     setLoading(true);
     
-    const searchText = trimmedQuery.startsWith('@') ? trimmedQuery.substring(1) : trimmedQuery;
-    const lowerCaseQuery = searchText.toLowerCase();
+    const lowerCaseQuery = trimmedQuery.toLowerCase();
 
     try {
-      // --- Users Query ---
+      // --- Users Query using prefix search ---
       const usersQuery = query(
         collection(db, 'users'),
         orderBy('username_lowercase'),
@@ -68,9 +69,9 @@ export function GlobalSearch() {
         limit(5)
       );
       
-      // --- Wishlists Query ---
+      // --- Wishlists Query using prefix search ---
       const wishlistsQuery = query(
-        collection(db, 'wishlists'),
+        collectionGroup(db, 'wishlists'),
         where('privacy', '==', 'public'),
         orderBy('title_lowercase'),
         where('title_lowercase', '>=', lowerCaseQuery),
@@ -89,6 +90,7 @@ export function GlobalSearch() {
       setResults({ users, wishlists });
     } catch (error) {
       console.error('Error during search:', error);
+      // Firebase'in konsolunda, eksik indeksler için oluşturma linki içeren net hatalar görürsünüz.
       setResults({ users: [], wishlists: [] });
     } finally {
       setLoading(false);
