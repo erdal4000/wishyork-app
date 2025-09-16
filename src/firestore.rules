@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -6,16 +7,18 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth.uid != null;
     }
-    
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
     
     // --- COLLECTION GROUP & BROAD READ RULES ---
-
+    
     match /{path=**}/posts/{postId} {
       allow list, get: if isSignedIn();
+      // Allow create if the user is the author of the new document.
       allow create: if isOwner(request.resource.data.authorId);
+      // Allow update/delete if the user is the owner of the existing document.
       allow update, delete: if isOwner(resource.data.authorId);
     }
 

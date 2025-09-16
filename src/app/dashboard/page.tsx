@@ -2,8 +2,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where } from 'firebase/firestore';
+import { db, auth, storage } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/context/auth-context';
 import {
   Card,
@@ -14,16 +14,18 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { Progress as ProgressBar } from '@/components/ui/progress';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { useImageUpload } from '@/hooks/useImageUpload';
+import { useToast } from '@/hooks/use-toast';
 
 interface FeedItem extends DocumentData {
   id: string;
@@ -129,7 +131,7 @@ function PostCard({ item }: { item: FeedItem }) {
                         <span>{item.progress || 0}% complete</span>
                         <span>{item.itemCount || 0} items</span>
                     </div>
-                    <Progress value={item.progress || 0} className="h-2" />
+                    <ProgressBar value={item.progress || 0} className="h-2" />
                 </div>
             </div>
         )}
@@ -208,9 +210,78 @@ function PostCard({ item }: { item: FeedItem }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [postContent, setPostContent] = useState('');
+  const [postImageFile, setPostImageFile] = useState<File | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const imageUpload = useImageUpload();
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPostImageFile(file);
+      setPostImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removeImage = () => {
+    setPostImageFile(null);
+    setPostImagePreview(null);
+  };
+
+  const handleCreatePost = async () => {
+    if (!user || (!postContent.trim() && !postImageFile)) {
+      toast({ title: "Cannot post", description: "Please write something or add an image.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingPost(true);
+    let imageUrl: string | null = null;
+    let aiHint: string | null = null;
+
+    try {
+      if (postImageFile) {
+        const path = `post-images/${user.uid}/${Date.now()}_${postImageFile.name}`;
+        imageUrl = await imageUpload.uploadImage(postImageFile, path);
+        aiHint = postContent.split(' ').slice(0, 2).join(' ') || 'user post';
+      }
+
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+
+      await addDoc(collection(db, 'posts'), {
+        authorId: user.uid,
+        authorName: userData?.name || user.displayName,
+        authorUsername: userData?.username || 'user',
+        authorAvatar: userData?.photoURL || user.photoURL,
+        content: postContent,
+        imageUrl: imageUrl,
+        aiHint: aiHint,
+        createdAt: serverTimestamp(),
+        type: 'post',
+        likes: 0,
+        likedBy: [],
+        commentCount: 0,
+      });
+      
+      setPostContent('');
+      removeImage();
+      toast({ title: "Success!", description: "Your post has been published." });
+
+    } catch (error) {
+      console.error("Error creating post:", error);
+      toast({ title: "Error", description: "Could not create post. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSubmittingPost(false);
+    }
+  };
+
 
   useEffect(() => {
     if (!user) {
@@ -224,7 +295,6 @@ export default function DashboardPage() {
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         const userData = userDoc.data();
-        // Include the current user's ID in the list to show their own content
         const following = [...(userData?.following || []), user.uid];
 
         if (following.length === 0) {
@@ -233,8 +303,6 @@ export default function DashboardPage() {
             return;
         }
 
-        // CollectionGroup queries for 'in' operator are limited to 30 items in the array.
-        // For a real app, this would need pagination or a different data model.
         const followedIds = following.slice(0, 30);
 
         const postsQuery = query(
@@ -246,7 +314,7 @@ export default function DashboardPage() {
         const wishlistsQuery = query(
             collectionGroup(db, 'wishlists'), 
             where('authorId', 'in', followedIds),
-            where('privacy', '==', 'public'), // <-- THIS IS THE CRUCIAL FIX
+            where('privacy', '==', 'public'),
             orderBy('createdAt', 'desc')
         );
 
@@ -257,7 +325,7 @@ export default function DashboardPage() {
                 setFeedItems(currentItems => {
                     const otherItems = currentItems.filter(item => item.type !== 'post');
                     const allItems = [...postsData, ...otherItems];
-                    return allItems.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                    return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
                 });
 
                 setLoading(false);
@@ -277,14 +345,12 @@ export default function DashboardPage() {
                 setFeedItems(currentItems => {
                     const otherItems = currentItems.filter(item => item.type !== 'wishlist');
                     const allItems = [...wishlistsData, ...otherItems];
-                    return allItems.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                    return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
                 });
-
-                // Do not set loading to false here, as posts might still be loading
             },
             (err) => {
                 console.error("Error fetching wishlists:", err);
-                // Don't set a global error, as posts might still load
+                // Do not set a global error, as posts might still load
             }
         );
 
@@ -308,15 +374,44 @@ export default function DashboardPage() {
           </Avatar>
           <div className="w-full">
             <Textarea
-              name="postContent"
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
               placeholder="What's on your mind? Share a wish or a success story!"
               className="border-0 bg-secondary/50 focus-visible:ring-0 focus-visible:ring-offset-0"
               rows={3}
+              disabled={isSubmittingPost}
             />
+            {postImagePreview && (
+              <div className="relative mt-4">
+                <Image src={postImagePreview} alt="Image preview" width={500} height={281} className="w-full h-auto rounded-lg" />
+                <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={removeImage} disabled={isSubmittingPost}>
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+             {imageUpload.uploading && (
+                 <div className="mt-2">
+                    <ProgressBar value={imageUpload.progress} className="h-2" />
+                    <p className="text-xs text-muted-foreground mt-1">Uploading image...</p>
+                </div>
+            )}
           </div>
         </CardHeader>
-        <CardFooter className="flex justify-end p-4 pt-0">
-          <Button type="submit">Post</Button>
+        <CardFooter className="flex justify-between items-center p-4 pt-0">
+          <div>
+            <label htmlFor="image-upload" className="cursor-pointer">
+              <Button variant="ghost" size="icon" asChild>
+                <span>
+                  <ImageIcon className="text-muted-foreground" />
+                  <input id="image-upload" type="file" className="sr-only" accept="image/png, image/jpeg, image/webp" onChange={handleImageSelect} disabled={isSubmittingPost} />
+                </span>
+              </Button>
+            </label>
+          </div>
+          <Button onClick={handleCreatePost} disabled={isSubmittingPost || (!postContent.trim() && !postImageFile)}>
+            {isSubmittingPost && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Post
+          </Button>
         </CardFooter>
       </Card>
       
@@ -350,3 +445,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
