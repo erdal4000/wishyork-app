@@ -52,7 +52,6 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, DocumentData, Timestamp, deleteDoc, doc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
 
 
@@ -164,8 +163,7 @@ export default function WishlistPage() {
         console.error("Error deleting wishlist: ", error);
         toast({ title: "Error", description: "Could not delete the wishlist. Please try again.", variant: "destructive" });
     }
-  }
-
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -328,5 +326,3 @@ export default function WishlistPage() {
     </div>
   );
 }
-
-    
