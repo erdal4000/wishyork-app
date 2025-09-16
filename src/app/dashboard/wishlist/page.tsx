@@ -68,7 +68,7 @@ interface Wishlist extends DocumentData {
   unitsFulfilled: number;
   totalUnits: number;
   likes: number;
-  comments: number;
+  commentCount: number;
   saves: number;
   createdAt: Timestamp;
 }
@@ -238,7 +238,7 @@ export default function WishlistPage() {
                       </Button>
                       <Button variant="ghost" size="sm" className="px-2">
                         <MessageCircle className="mr-1.5 h-4 w-4" />
-                        <span className="font-medium">{list.comments || 0}</span>
+                        <span className="font-medium">{list.commentCount || 0}</span>
                       </Button>
                        <Button variant="ghost" size="sm" className="px-2">
                         <Bookmark className="mr-1.5 h-4 w-4" />
