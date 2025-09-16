@@ -1,37 +1,21 @@
 rules_version = '2';
 
+// By default, deny all reads and writes
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Helper function to check if a user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Helper function to check if the user is the owner of the resource
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // User Images: Profile and Cover photos
-    // Path: /user-images/{userId}/{'avatar' or 'cover'}/{fileName}
-    match /user-images/{userId}/{imageType}/{fileName} {
-      // Only the owner of the folder can upload images
-      allow write: if isOwner(userId) && (imageType == 'avatar' || imageType == 'cover');
-      
-      // Anyone can read user images
+    // Allow anyone to read any file. This is necessary so that images
+    // in posts or wishlists can be displayed to all users.
+    match /{allPaths=**} {
       allow read;
     }
-
-    // Item Images: Images for items within a wishlist
-    // Path: /item-images/{wishlistId}/{fileName}
-    match /item-images/{wishlistId}/{fileName} {
-      // Allow write if the authenticated user is the author of the wishlist.
-      // This requires reading the wishlist document from Firestore, which is now permitted by firestore.rules.
-      allow write: if isAuthenticated() && firestore.get(/databases/(default)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
-      
-      // Anyone can read item images
-      allow read;
+    
+    // Allow a user to write to a path only if it's within a folder
+    // that matches their own user ID. This prevents users from uploading
+    // files into other users' directories.
+    // Example valid path: /post-images/USER_ID_123/my_image.jpg
+    match /{imageType}/{userId}/{allPaths=**} {
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
