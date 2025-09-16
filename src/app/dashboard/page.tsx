@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, auth, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
   Card,
@@ -14,7 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getInitials } from '@/lib/utils';
@@ -24,6 +25,24 @@ import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
 
@@ -90,12 +109,44 @@ const getPrivacyLabel = (privacy?: string) => {
 
 function PostCard({ item }: { item: FeedItem }) {
   const { user } = useAuth();
-  // Assuming usePostInteraction can work with any document that has likes, etc.
+  const { toast } = useToast();
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
   const itemDate = item.createdAt?.toDate();
   const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
+
+  const isOwnPost = user?.uid === item.authorId;
+
+  const handleDeletePost = async () => {
+    if (!isOwnPost || item.type !== 'post') return;
+    setIsDeleting(true);
+
+    try {
+        // Delete the Firestore document
+        await deleteDoc(doc(db, 'posts', item.id));
+
+        // If there's an image, delete it from Storage
+        if (item.imageUrl) {
+            const imageRef = ref(storage, item.imageUrl);
+            await deleteObject(imageRef);
+        }
+
+        toast({ title: "Post Deleted", description: "Your post has been successfully removed." });
+    } catch (error: any) {
+        console.error("Error deleting post:", error);
+        // Handle cases where the file might not exist in storage anymore
+        if (error.code === 'storage/object-not-found') {
+             toast({ title: "Post Deleted", description: "The post text was removed, but the associated image was not found in storage." });
+        } else {
+            toast({ title: "Error", description: "Could not delete the post. Please try again.", variant: "destructive" });
+        }
+    } finally {
+        setIsDeleting(false);
+    }
+  };
+
 
   return (
     <Card>
@@ -110,9 +161,44 @@ function PostCard({ item }: { item: FeedItem }) {
             <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link> · {timeAgo}
           </p>
         </div>
-        <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-5 w-5" />
-        </Button>
+         <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" disabled={isDeleting}>
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                 {isOwnPost && item.type === 'post' && (
+                    <>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete Post
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete your post.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDeletePost} className="bg-destructive hover:bg-destructive/90">
+                                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                        <DropdownMenuSeparator />
+                    </>
+                 )}
+                 <DropdownMenuItem>Report</DropdownMenuItem>
+            </DropdownMenuContent>
+         </DropdownMenu>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         {item.type === 'post' && <p className="whitespace-pre-wrap">{item.content}</p>}
@@ -232,6 +318,11 @@ export default function DashboardPage() {
   const removeImage = () => {
     setPostImageFile(null);
     setPostImagePreview(null);
+    // Also reset the file input
+    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
+    if (fileInput) {
+        fileInput.value = "";
+    }
   };
 
   const handleCreatePost = async () => {
@@ -446,3 +537,4 @@ export default function DashboardPage() {
   );
 }
 
+    
