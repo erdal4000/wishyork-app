@@ -38,9 +38,8 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from './ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from "@/components/ui/label";
-
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -79,6 +78,10 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
 
     setIsSubmitting(true);
     try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
             title: values.wishlistName,
