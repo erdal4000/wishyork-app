@@ -307,7 +307,7 @@ export default function WishlistDetailPage() {
     }
     const success = await updateItemAndWishlist(itemId, {
         status: 'reserved',
-        reservedBy: user.displayName,
+        reservedBy: user.displayName || undefined,
     }, {});
     if (success) {
       toast({ title: "Success", description: "Item has been reserved!" });
