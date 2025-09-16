@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, FormEvent, useMemo } from 'react';
@@ -77,6 +76,11 @@ interface CommentWithReplies extends Comment {
     replies: CommentWithReplies[];
 }
 
+interface UserProfile extends DocumentData {
+  photoURL?: string;
+  name?: string;
+}
+
 const COMMENT_MAX_LENGTH = 300;
 
 // #region Reply Dialog
@@ -93,6 +97,19 @@ function ReplyDialog({ parentComment, docId, collectionType, open, onOpenChange 
   const { toast } = useToast();
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setUserProfile(doc.data() as UserProfile);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
 
   const handleAddReply = async (e: FormEvent) => {
     e.preventDefault();
@@ -157,8 +174,8 @@ function ReplyDialog({ parentComment, docId, collectionType, open, onOpenChange 
           <form onSubmit={handleAddReply}>
             <div className="flex items-start gap-2 sm:gap-4">
               <Avatar className="hidden h-9 w-9 sm:flex">
-                <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
-                <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                <AvatarImage src={userProfile?.photoURL || user.photoURL || undefined} alt={user.displayName || 'You'} />
+                <AvatarFallback>{getInitials(userProfile?.name || user.displayName)}</AvatarFallback>
               </Avatar>
               <div className="flex-1">
                 <Textarea
@@ -211,6 +228,19 @@ function CommentForm({
   const { toast } = useToast();
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setUserProfile(doc.data() as UserProfile);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
 
   const handleAddComment = async (e: FormEvent) => {
     e.preventDefault();
@@ -265,8 +295,8 @@ function CommentForm({
     <form onSubmit={handleAddComment}>
       <div className="flex items-start gap-2 sm:gap-4 my-4">
         <Avatar className="hidden h-9 w-9 sm:flex">
-          <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'You'} />
-          <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+          <AvatarImage src={userProfile?.photoURL || user.photoURL || undefined} alt={user.displayName || 'You'} />
+          <AvatarFallback>{getInitials(userProfile?.name || user.displayName)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <Textarea

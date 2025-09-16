@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -67,6 +66,11 @@ interface FeedItem extends DocumentData {
   aiHint: string | null;
   likes: number;
   commentCount: number;
+}
+
+interface UserProfile extends DocumentData {
+  photoURL?: string;
+  name?: string;
 }
 
 function FeedCardSkeleton() {
@@ -339,6 +343,19 @@ export default function DashboardPage() {
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const imageUpload = useImageUpload();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setUserProfile(doc.data() as UserProfile);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -492,8 +509,8 @@ export default function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
           <Avatar>
-            <AvatarImage src={user?.photoURL || undefined} />
-            <AvatarFallback>{user ? getInitials(user.displayName) : '??'}</AvatarFallback>
+            <AvatarImage src={userProfile?.photoURL || user?.photoURL || undefined} />
+            <AvatarFallback>{user ? getInitials(userProfile?.name || user.displayName) : '??'}</AvatarFallback>
           </Avatar>
           <div className="w-full">
             <Textarea
