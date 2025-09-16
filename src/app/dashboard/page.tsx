@@ -41,7 +41,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
@@ -129,19 +128,22 @@ function PostCard({ item }: { item: FeedItem }) {
 
         // If there's an image, delete it from Storage
         if (item.imageUrl) {
-            const imageRef = ref(storage, item.imageUrl);
-            await deleteObject(imageRef);
+            try {
+                const imageRef = ref(storage, item.imageUrl);
+                await deleteObject(imageRef);
+            } catch (storageError: any) {
+                // If the image doesn't exist in storage (e.g., already deleted), don't fail the whole operation.
+                if (storageError.code !== 'storage/object-not-found') {
+                    throw storageError; // Re-throw other storage errors
+                }
+                console.warn("Storage object not found during delete, but proceeding:", item.imageUrl);
+            }
         }
 
         toast({ title: "Post Deleted", description: "Your post has been successfully removed." });
     } catch (error: any) {
         console.error("Error deleting post:", error);
-        // Handle cases where the file might not exist in storage anymore
-        if (error.code === 'storage/object-not-found') {
-             toast({ title: "Post Deleted", description: "The post text was removed, but the associated image was not found in storage." });
-        } else {
-            toast({ title: "Error", description: "Could not delete the post. Please try again.", variant: "destructive" });
-        }
+        toast({ title: "Error", description: "Could not delete the post. Please try again.", variant: "destructive" });
     } finally {
         setIsDeleting(false);
     }
@@ -168,7 +170,7 @@ function PostCard({ item }: { item: FeedItem }) {
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-                 {isOwnPost && item.type === 'post' && (
+                 {isOwnPost ? (
                     <>
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -193,10 +195,12 @@ function PostCard({ item }: { item: FeedItem }) {
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <DropdownMenuSeparator />
                     </>
+                 ) : (
+                    <DropdownMenuItem>
+                        Report
+                    </DropdownMenuItem>
                  )}
-                 <DropdownMenuItem>Report</DropdownMenuItem>
             </DropdownMenuContent>
          </DropdownMenu>
       </CardHeader>
