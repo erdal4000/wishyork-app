@@ -8,66 +8,68 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
-    // --- USER & USERNAME RULES ---
-
-    match /users/{userId} {
-      // Any authenticated user can list users for searching.
-      allow list: if isSignedIn();
-      // A user can read, update, and delete their own document.
-      allow get, update, delete: if isOwner(userId);
-      // Any authenticated user can create their user document upon signup.
-      allow create: if isSignedIn();
-    }
-
-    match /usernames/{username} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isOwner(request.resource.data.uid);
-    }
-    
-    // --- COLLECTION GROUP RULES (For Feed & Search) ---
+    // --- COLLECTION GROUP & BROAD READ RULES ---
 
     match /{path=**}/posts/{postId} {
-      // Allow feed queries (list) and search queries (list).
       allow list: if isSignedIn();
-      // Allow reading a single post directly.
-      allow get: if isSignedIn();
-      // Allow creating a post.
-      allow create: if isOwner(request.resource.data.authorId);
-       // Allow updating/deleting only by the author.
-      allow update, delete: if isOwner(resource.data.authorId);
     }
 
     match /{path=**}/wishlists/{wishlistId} {
-      // Allow feed and search queries (list).
       allow list: if isSignedIn();
-      // Allow reading a single wishlist if it's public or the user is the owner.
-      allow get: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
-      // Allow creating a wishlist.
-      allow create: if isOwner(request.resource.data.authorId);
-       // Allow updating/deleting only by the author.
-      allow update, delete: if isOwner(resource.data.authorId);
     }
+    
+    // Allow any signed-in user to search/list users for the search bar.
+    match /users/{userId} {
+       allow list: if isSignedIn();
+       allow get: if isSignedIn();
+       allow create: if isSignedIn() && isOwner(userId);
+       allow update, delete: if isOwner(userId);
+    }
+    
+
+    // --- SINGLE DOCUMENT & WRITE RULES ---
+
+    match /users/{userId} {
+      // These are redefined for clarity on single-document access.
+      // A user can read any single profile, but only write to their own.
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update, delete: if isOwner(userId);
+    }
+
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+    }
+
+    match /posts/{postId} {
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
+    }
+
+    match /wishlists/{wishlistId} {
+      allow get: if resource.data.privacy == 'public' || (isSignedIn() && isOwner(resource.data.authorId));
+      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
+    }
+
 
     // --- SUB-COLLECTION RULES ---
 
     match /wishlists/{wishlistId}/items/{itemId} {
       allow read, write: if isSignedIn();
     }
-    
+
     match /wishlists/{wishlistId}/comments/{commentId} {
       allow read, write: if isSignedIn();
     }
-    
+
     match /posts/{postId}/comments/{commentId} {
       allow read, write: if isSignedIn();
-    }
-
-    // Default deny all other access
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 }
