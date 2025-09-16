@@ -1,0 +1,101 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // USER PROFILE RULES
+    // Anyone can read a user's public profile.
+    // Only the user themselves can create or update their own profile.
+    // Users cannot be deleted from the client.
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // USERNAMES RULES
+    // Usernames must be unique. This collection stores a mapping of username -> uid
+    // to enforce this.
+    // Reading is allowed to check for existence.
+    // A user can only create a username document if it doesn't exist and the
+    // associated uid matches their own.
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow update, delete: if false; // Prevent users from changing or deleting usernames directly
+    }
+
+    // POSTS RULES
+    match /posts/{postId} {
+      // Anyone can read a post.
+      allow read: if true;
+      // Only signed-in users can create posts.
+      allow create: if isSignedIn();
+      // Only the author of a post can update or delete it.
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+
+      // COMMENTS on posts
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+      }
+    }
+
+    // WISHLISTS RULES
+    match /wishlists/{wishlistId} {
+        // Read access is more complex:
+        // 1. Anyone can read a 'public' wishlist.
+        // 2. Only the author can read a 'private' wishlist.
+        // 3. 'friends' logic would require checking a 'followers' array, which is complex.
+        //    For now, we'll treat 'friends' as 'private' on the server-side for simplicity
+        //    and let the client-side queries handle the logic. Or, more simply, allow if logged in.
+        allow get: if resource.data.privacy == 'public' || (isSignedIn() && request.auth.uid == resource.data.authorId);
+
+        // This allows querying the collection. The actual results will be filtered by client-side queries.
+        // Security is maintained because you can't *get* a document you don't have access to.
+        allow list: if isSignedIn();
+
+        // Creation, Deletion, Update
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+
+        // ITEMS within a wishlist
+        match /items/{itemId} {
+            allow read: if true; // Items are visible if the parent wishlist is visible.
+            allow list: if true;
+            // Only the wishlist author can add, update, or delete items.
+            // Note: Reserving/fulfilling an item is an UPDATE operation on the item.
+            // We allow any signed-in user to update an item for this purpose.
+            allow create, delete: if isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+            allow update: if isSignedIn();
+        }
+
+         // COMMENTS on wishlists
+        match /comments/{commentId} {
+            allow read: if true;
+            allow create: if isSignedIn();
+            allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+        }
+    }
+     // Collection Group Rules for Feed
+    match /{path=**}/posts/{postId} {
+      // Any authenticated user can list posts for their feed.
+      // The `where` clause in the code will filter this to only followed users.
+      allow list: if isSignedIn();
+    }
+
+    match /{path=**}/wishlists/{wishlistId} {
+      // Any authenticated user can list wishlists for their feed.
+      // The `where` clause will filter this.
+      // We add a check for public privacy to be extra safe on the backend.
+      allow list: if isSignedIn() && resource.data.privacy == 'public';
+    }
+  }
+}

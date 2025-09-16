@@ -1,8 +1,9 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where } from 'firebase/firestore';
 import { useAuth } from '@/context/auth-context';
 import {
   Card,
@@ -13,10 +14,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, Package, AlertTriangle, Globe, Users, Lock } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Suspense } from 'react';
 import { getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -25,21 +25,30 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
-interface Post extends DocumentData {
+interface FeedItem extends DocumentData {
   id: string;
+  type: 'post' | 'wishlist';
   authorId: string;
   authorName: string;
   authorUsername: string;
   authorAvatar: string;
-  content: string;
+  createdAt: Timestamp;
+  // Post specific
+  content?: string;
+  // Wishlist specific
+  title?: string;
+  category?: string;
+  privacy?: 'public' | 'private' | 'friends';
+  progress?: number;
+  itemCount?: number;
+  // Common
   imageUrl: string | null;
   aiHint: string | null;
-  createdAt: Timestamp;
   likes: number;
   commentCount: number;
 }
 
-function PostCardSkeleton() {
+function FeedCardSkeleton() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-4 p-4">
@@ -63,25 +72,40 @@ function PostCardSkeleton() {
   );
 }
 
-function PostCard({ post }: { post: Post }) {
-  const { user } = useAuth();
-  const { hasLiked, isLiking, toggleLike } = usePostInteraction(post.id);
+const getPrivacyIcon = (privacy?: string) => {
+    switch (privacy) {
+      case 'public': return <Globe className="h-4 w-4" />;
+      case 'friends': return <Users className="h-4 w-4" />;
+      case 'private': return <Lock className="h-4 w-4" />;
+      default: return null;
+    }
+};
+  
+const getPrivacyLabel = (privacy?: string) => {
+    if (!privacy) return 'Public';
+    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+}
 
-  const authorPhoto = post.authorAvatar || `https://picsum.photos/seed/${post.authorId}/200/200`;
-  const postDate = post.createdAt?.toDate();
-  const timeAgo = postDate ? formatDistanceToNow(postDate, { addSuffix: true }) : 'just now';
+function PostCard({ item }: { item: FeedItem }) {
+  const { user } = useAuth();
+  // Assuming usePostInteraction can work with any document that has likes, etc.
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
+
+  const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
+  const itemDate = item.createdAt?.toDate();
+  const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage src={authorPhoto} alt={post.authorName} />
-          <AvatarFallback>{getInitials(post.authorName)}</AvatarFallback>
+          <AvatarImage src={authorPhoto} alt={item.authorName} />
+          <AvatarFallback>{getInitials(item.authorName)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <p className="font-bold">{post.authorName}</p>
+          <p className="font-bold">{item.authorName}</p>
           <p className="text-sm text-muted-foreground">
-            <Link href={`/dashboard/profile/${post.authorUsername}`}>@{post.authorUsername}</Link> · {timeAgo}
+            <Link href={`/dashboard/profile/${item.authorUsername}`}>@{item.authorUsername}</Link> · {timeAgo}
           </p>
         </div>
         <Button variant="ghost" size="icon">
@@ -89,16 +113,36 @@ function PostCard({ post }: { post: Post }) {
         </Button>
       </CardHeader>
       <CardContent className="px-4 pb-4">
-        <p className="whitespace-pre-wrap">{post.content}</p>
-        {post.imageUrl && (
-          <Link href={`/dashboard/post/${post.id}`} className="mt-4 block">
+        {item.type === 'post' && <p className="whitespace-pre-wrap">{item.content}</p>}
+        {item.type === 'wishlist' && (
+            <div className='space-y-3'>
+                <h3 className="font-bold text-lg">{item.title}</h3>
+                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <Badge variant="secondary">{item.category}</Badge>
+                    <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5">
+                        {getPrivacyIcon(item.privacy)}
+                        <span>{getPrivacyLabel(item.privacy)}</span>
+                    </Badge>
+                 </div>
+                 <div className="pt-2">
+                    <div className="mb-1 flex justify-between text-sm text-muted-foreground">
+                        <span>{item.progress || 0}% complete</span>
+                        <span>{item.itemCount || 0} items</span>
+                    </div>
+                    <Progress value={item.progress || 0} className="h-2" />
+                </div>
+            </div>
+        )}
+
+        {item.imageUrl && (
+          <Link href={item.type === 'post' ? `/dashboard/post/${item.id}` : `/dashboard/wishlist/${item.id}`} className="mt-4 block">
             <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-xl border">
               <Image
-                src={post.imageUrl}
-                alt={`Post image by ${post.authorName}`}
+                src={item.imageUrl}
+                alt={`Image for ${item.type}`}
                 fill
                 className="object-cover"
-                data-ai-hint={post.aiHint ?? ''}
+                data-ai-hint={item.aiHint ?? ''}
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
             </div>
@@ -116,7 +160,7 @@ function PostCard({ post }: { post: Post }) {
               </TooltipTrigger>
               <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
             </Tooltip>
-            <span className="text-sm pr-2">{post.commentCount ?? 0}</span>
+            <span className="text-sm pr-2">{item.commentCount ?? 0}</span>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -135,7 +179,7 @@ function PostCard({ post }: { post: Post }) {
               </TooltipTrigger>
               <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
             </Tooltip>
-            <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{post.likes ?? 0}</span>
+            <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{item.likes ?? 0}</span>
           </div>
 
           <div className="flex items-center text-muted-foreground">
@@ -164,30 +208,94 @@ function PostCard({ post }: { post: Post }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(q, 
-      (querySnapshot) => {
-        const postsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-        setPosts(postsData);
-        setLoading(false);
-        setError(null);
-      }, 
-      (err) => {
-        console.error("Error fetching posts:", err);
-        setError("Failed to load feed. Please try again later.");
-        setLoading(false);
-      }
-    );
+    const fetchFeed = async () => {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
+        // Include the current user's ID in the list to show their own content
+        const following = [...(userData?.following || []), user.uid];
 
-    return () => unsubscribe();
-  }, []);
+        if (following.length === 0) {
+            setLoading(false);
+            setFeedItems([]);
+            return;
+        }
+
+        // CollectionGroup queries for 'in' operator are limited to 30 items in the array.
+        // For a real app, this would need pagination or a different data model.
+        const followedIds = following.slice(0, 30);
+
+        const postsQuery = query(
+            collectionGroup(db, 'posts'), 
+            where('authorId', 'in', followedIds)
+        );
+
+        const wishlistsQuery = query(
+            collectionGroup(db, 'wishlists'), 
+            where('authorId', 'in', followedIds),
+            where('privacy', '==', 'public') // Only show public wishlists in the feed
+        );
+
+        const unsubscribePosts = onSnapshot(postsQuery, 
+            (querySnapshot) => {
+                const postsData = querySnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
+                
+                setFeedItems(currentItems => {
+                    const otherItems = currentItems.filter(item => item.type !== 'post');
+                    const allItems = [...postsData, ...otherItems];
+                    return allItems.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                });
+
+                setLoading(false);
+                setError(null);
+            }, 
+            (err) => {
+                console.error("Error fetching posts:", err);
+                setError("Failed to load posts. Please try again later.");
+                setLoading(false);
+            }
+        );
+
+        const unsubscribeWishlists = onSnapshot(wishlistsQuery,
+             (querySnapshot) => {
+                const wishlistsData = querySnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as FeedItem));
+                
+                setFeedItems(currentItems => {
+                    const otherItems = currentItems.filter(item => item.type !== 'wishlist');
+                    const allItems = [...wishlistsData, ...otherItems];
+                    return allItems.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                });
+
+                setLoading(false);
+                setError(null);
+            },
+            (err) => {
+                console.error("Error fetching wishlists:", err);
+                // Don't set a global error, as posts might still load
+            }
+        );
+
+        return () => {
+            unsubscribePosts();
+            unsubscribeWishlists();
+        };
+    }
+
+    fetchFeed();
+
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -213,8 +321,8 @@ export default function DashboardPage() {
       
       {loading && (
         <div className="space-y-6">
-          <PostCardSkeleton />
-          <PostCardSkeleton />
+          <FeedCardSkeleton />
+          <FeedCardSkeleton />
         </div>
       )}
 
@@ -228,8 +336,8 @@ export default function DashboardPage() {
 
       {!loading && !error && (
         <div className="space-y-6">
-          {posts.length > 0 ? (
-            posts.map(post => <PostCard key={post.id} post={post} />)
+          {feedItems.length > 0 ? (
+            feedItems.map(item => <PostCard key={`${item.type}-${item.id}`} item={item} />)
           ) : (
             <Card className="p-8 text-center text-muted-foreground">
               <h3 className="text-lg font-semibold">It's quiet in here...</h3>
