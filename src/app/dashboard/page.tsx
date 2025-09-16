@@ -239,13 +239,15 @@ export default function DashboardPage() {
 
         const postsQuery = query(
             collectionGroup(db, 'posts'), 
-            where('authorId', 'in', followedIds)
+            where('authorId', 'in', followedIds),
+            orderBy('createdAt', 'desc')
         );
 
         const wishlistsQuery = query(
             collectionGroup(db, 'wishlists'), 
             where('authorId', 'in', followedIds),
-            where('privacy', '==', 'public') // Only show public wishlists in the feed
+            where('privacy', '==', 'public'), // <-- THIS IS THE CRUCIAL FIX
+            orderBy('createdAt', 'desc')
         );
 
         const unsubscribePosts = onSnapshot(postsQuery, 
@@ -278,8 +280,7 @@ export default function DashboardPage() {
                     return allItems.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
                 });
 
-                setLoading(false);
-                setError(null);
+                // Do not set loading to false here, as posts might still be loading
             },
             (err) => {
                 console.error("Error fetching wishlists:", err);
