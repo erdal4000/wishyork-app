@@ -122,12 +122,11 @@ export default function WishlistPage() {
         return;
     };
 
+    setLoading(true);
     const q = query(collection(db, "wishlists"), where("authorId", "==", user.uid));
     
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        setLoading(true);
         const lists = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
-        
         setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
         setLoading(false);
     }, (error) => {
