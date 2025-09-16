@@ -7,17 +7,17 @@ import { db } from '@/lib/firebase';
 import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
-export const usePostInteraction = (postId: string) => {
+export const usePostInteraction = (itemId: string, itemType: 'post' | 'wishlist') => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [hasLiked, setHasLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
 
   useEffect(() => {
-    if (!postId || !user) return;
+    if (!itemId || !user) return;
 
-    const postRef = doc(db, 'posts', postId);
-    const unsubscribe = onSnapshot(postRef, (docSnap) => {
+    const itemRef = doc(db, `${itemType}s`, itemId);
+    const unsubscribe = onSnapshot(itemRef, (docSnap) => {
       if (docSnap.exists()) {
         const postData = docSnap.data();
         const likedBy = postData.likedBy || [];
@@ -26,13 +26,13 @@ export const usePostInteraction = (postId: string) => {
     });
 
     return () => unsubscribe();
-  }, [postId, user]);
+  }, [itemId, itemType, user]);
 
   const toggleLike = async () => {
     if (!user) {
       toast({
         title: "Login Required",
-        description: "You must be logged in to like a post.",
+        description: "You must be logged in to like an item.",
         variant: "destructive",
       });
       return;
@@ -41,18 +41,18 @@ export const usePostInteraction = (postId: string) => {
 
     setIsLiking(true);
 
-    const postRef = doc(db, 'posts', postId);
+    const itemRef = doc(db, `${itemType}s`, itemId);
 
     try {
       if (hasLiked) {
         // Unlike
-        await updateDoc(postRef, {
+        await updateDoc(itemRef, {
           likedBy: arrayRemove(user.uid),
           likes: increment(-1),
         });
       } else {
         // Like
-        await updateDoc(postRef, {
+        await updateDoc(itemRef, {
           likedBy: arrayUnion(user.uid),
           likes: increment(1),
         });

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, auth, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -110,32 +110,29 @@ const getPrivacyLabel = (privacy?: string) => {
 function PostCard({ item }: { item: FeedItem }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id);
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const authorPhoto = item.authorAvatar || `https://picsum.photos/seed/${item.authorId}/200/200`;
   const itemDate = item.createdAt?.toDate();
   const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
 
-  const isOwnPost = user?.uid === item.authorId;
+  const isOwnItem = user?.uid === item.authorId;
 
   const handleDeletePost = async () => {
-    if (!isOwnPost || item.type !== 'post') return;
+    if (!isOwnItem || item.type !== 'post') return;
     setIsDeleting(true);
 
     try {
-        // Delete the Firestore document
         await deleteDoc(doc(db, 'posts', item.id));
 
-        // If there's an image, delete it from Storage
         if (item.imageUrl) {
             try {
                 const imageRef = ref(storage, item.imageUrl);
                 await deleteObject(imageRef);
             } catch (storageError: any) {
-                // If the image doesn't exist in storage (e.g., already deleted), don't fail the whole operation.
                 if (storageError.code !== 'storage/object-not-found') {
-                    throw storageError; // Re-throw other storage errors
+                    throw storageError; 
                 }
                 console.warn("Storage object not found during delete, but proceeding:", item.imageUrl);
             }
@@ -149,6 +146,35 @@ function PostCard({ item }: { item: FeedItem }) {
         setIsDeleting(false);
     }
   };
+
+  const handleDeleteWishlist = async () => {
+    if (!isOwnItem || item.type !== 'wishlist') return;
+    setIsDeleting(true);
+
+    try {
+        const wishlistRef = doc(db, 'wishlists', item.id);
+        
+        // Batch delete items in subcollection
+        const itemsRef = collection(wishlistRef, 'items');
+        const itemsSnapshot = await getDocs(itemsRef);
+        const batch = writeBatch(db);
+        itemsSnapshot.forEach(itemDoc => {
+            batch.delete(itemDoc.ref);
+        });
+
+        // Delete the wishlist document itself
+        batch.delete(wishlistRef);
+
+        await batch.commit();
+
+        toast({ title: "Wishlist Deleted", description: "Your wishlist and all its items have been removed." });
+    } catch (error) {
+        console.error("Error deleting wishlist:", error);
+        toast({ title: "Error", description: "Could not delete the wishlist. Please try again.", variant: "destructive" });
+    } finally {
+        setIsDeleting(false);
+    }
+  }
 
 
   return (
@@ -171,24 +197,27 @@ function PostCard({ item }: { item: FeedItem }) {
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-                 {isOwnPost ? (
+                 {isOwnItem ? (
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Post
+                                Delete {item.type === 'post' ? 'Post' : 'Wishlist'}
                             </DropdownMenuItem>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete your post.
+                                    This action cannot be undone. This will permanently delete this {item.type}.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeletePost} className="bg-destructive hover:bg-destructive/90">
+                                <AlertDialogAction 
+                                    onClick={item.type === 'post' ? handleDeletePost : handleDeleteWishlist} 
+                                    className="bg-destructive hover:bg-destructive/90"
+                                >
                                     {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                     Delete
                                 </AlertDialogAction>
@@ -197,6 +226,7 @@ function PostCard({ item }: { item: FeedItem }) {
                     </AlertDialog>
                  ) : (
                     <DropdownMenuItem>
+                       <AlertTriangle className="mr-2 h-4 w-4" />
                         Report
                     </DropdownMenuItem>
                  )}
@@ -321,7 +351,6 @@ export default function DashboardPage() {
   const removeImage = () => {
     setPostImageFile(null);
     setPostImagePreview(null);
-    // Also reset the file input
     const fileInput = document.getElementById('image-upload') as HTMLInputElement;
     if (fileInput) {
         fileInput.value = "";
