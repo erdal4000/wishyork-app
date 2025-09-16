@@ -56,11 +56,12 @@ export function GlobalSearch() {
     }
 
     setLoading(true);
+    setPopoverOpen(true);
     
     const lowerCaseQuery = trimmedQuery.toLowerCase();
 
     try {
-      // --- Users Query using prefix search ---
+      // --- Users Query ---
       const usersQuery = query(
         collection(db, 'users'),
         orderBy('username_lowercase'),
@@ -69,7 +70,7 @@ export function GlobalSearch() {
         limit(5)
       );
       
-      // --- Wishlists Query using prefix search ---
+      // --- Wishlists Query ---
       const wishlistsQuery = query(
         collectionGroup(db, 'wishlists'),
         where('privacy', '==', 'public'),
@@ -79,6 +80,7 @@ export function GlobalSearch() {
         limit(5)
       );
 
+      // We run queries in parallel for better performance
       const [userSnap, wishlistSnap] = await Promise.all([
         getDocs(usersQuery),
         getDocs(wishlistsQuery),
@@ -88,15 +90,17 @@ export function GlobalSearch() {
       const wishlists = wishlistSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       setResults({ users, wishlists });
+
     } catch (error) {
-      console.error('Error during search:', error);
-      // Firebase'in konsolunda, eksik indeksler için oluşturma linki içeren net hatalar görürsünüz.
+      console.error('SEARCH ERROR:', error);
+      // This error will appear in the developer console with a link to create the index.
       setResults({ users: [], wishlists: [] });
     } finally {
       setLoading(false);
     }
   };
 
+  // Debounce the search function to avoid sending too many requests
   const debouncedSearch = useCallback(debounce(performSearch, 300), []);
 
   useEffect(() => {
@@ -121,15 +125,10 @@ export function GlobalSearch() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const query = e.target.value;
       setSearchQuery(query);
-      if (query.trim().length > 0) {
-          setPopoverOpen(true);
-      } else {
-          setPopoverOpen(false);
-      }
   }
 
   const handleBlur = () => {
-    // We delay closing the popover slightly to allow click events on items to register
+    // Delay closing the popover to allow click events on items to register
     setTimeout(() => {
         if (!inputRef.current?.matches(':focus-within')) {
            setPopoverOpen(false);
@@ -141,71 +140,71 @@ export function GlobalSearch() {
 
   return (
     <div onBlur={handleBlur}>
-    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <PopoverAnchor asChild>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={inputRef}
-            placeholder="Search users, wishlists..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={handleInputChange}
-            onFocus={handleFocus}
-          />
-        </div>
-      </PopoverAnchor>
-      {popoverOpen && (
-        <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-0"
-          align="start"
-          onOpenAutoFocus={(e) => e.preventDefault()} // Prevents focus stealing
-        >
-          <Command shouldFilter={false}>
-            <CommandList>
-              {loading ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : !hasResults && searchQuery ? (
-                <CommandEmpty>No results found for "{searchQuery}".</CommandEmpty>
-              ) : null}
-              
-              {results.users.length > 0 && (
-                <CommandGroup heading="People">
-                  {results.users.map((user) => (
-                    <CommandItem key={user.id} onSelect={() => handleSelect(`/dashboard/profile/${user.username}`)} value={`user-${user.username}`}>
-                      <Avatar className="mr-2 h-6 w-6">
-                        <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`} alt={user.name} />
-                        <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-                      </Avatar>
-                      <span>{user.name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">@{user.username}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
+      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <PopoverAnchor asChild>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={inputRef}
+              placeholder="Search users, wishlists..."
+              className="pl-10"
+              value={searchQuery}
+              onChange={handleInputChange}
+              onFocus={handleFocus}
+            />
+          </div>
+        </PopoverAnchor>
+        {popoverOpen && (
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] p-0"
+            align="start"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <Command shouldFilter={false}>
+              <CommandList>
+                {loading ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : !hasResults && searchQuery ? (
+                  <CommandEmpty>No results found for "{searchQuery}".</CommandEmpty>
+                ) : null}
+                
+                {results.users.length > 0 && (
+                  <CommandGroup heading="People">
+                    {results.users.map((user) => (
+                      <CommandItem key={user.id} onSelect={() => handleSelect(`/dashboard/profile/${user.username}`)} value={`user-${user.username}`}>
+                        <Avatar className="mr-2 h-6 w-6">
+                          <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`} alt={user.name} />
+                          <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                        </Avatar>
+                        <span>{user.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">@{user.username}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
 
-              {hasResults && results.users.length > 0 && results.wishlists.length > 0 && <CommandSeparator />}
+                {hasResults && results.users.length > 0 && results.wishlists.length > 0 && <CommandSeparator />}
 
-              {results.wishlists.length > 0 && (
-                <CommandGroup heading="Wishlists">
-                  {results.wishlists.map((wishlist) => (
-                    <CommandItem key={wishlist.id} onSelect={() => handleSelect(`/dashboard/wishlist/${wishlist.id}`)} value={`wishlist-${wishlist.title}`}>
-                      <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-sm bg-secondary">
-                        <List className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <span>{wishlist.title}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">by @{wishlist.authorUsername}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      )}
-    </Popover>
+                {results.wishlists.length > 0 && (
+                  <CommandGroup heading="Wishlists">
+                    {results.wishlists.map((wishlist) => (
+                      <CommandItem key={wishlist.id} onSelect={() => handleSelect(`/dashboard/wishlist/${wishlist.id}`)} value={`wishlist-${wishlist.title}`}>
+                        <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-sm bg-secondary">
+                          <List className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <span>{wishlist.title}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">by @{wishlist.authorUsername}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        )}
+      </Popover>
     </div>
   );
 }
