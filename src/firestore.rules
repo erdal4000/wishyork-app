@@ -7,61 +7,71 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    // --- COLLECTION GROUP RULES ---
-    // These rules are essential for the main feed to work.
-    // They allow signed-in users to perform 'list' queries across all users'
-    // posts and wishlists collections. The actual data returned is still
-    // filtered by the query in the application code.
-    
+
+    // Helper function to check if the user is the owner of the document being created
+    function isOwner(authorId) {
+      return request.auth.uid == authorId;
+    }
+
+    // --- COLLECTION GROUP & DIRECT ACCESS RULES ---
+
     match /{path=**}/posts/{postId} {
-      // Allow reading multiple documents (feed query) if signed in.
+      // Allow signed-in users to list documents for the feed
       allow list: if isSignedIn();
-      // Allow reading or writing a single document if the user is the author.
-      allow get, create, update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+
+      // Allow anyone to get a post if it's public (assuming a 'privacy' field exists)
+      // If not, restrict to signed-in users or authors
+      allow get: if isSignedIn();
+
+      // Allow creation if the new document's authorId matches the user's ID
+      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+      
+      // Allow updates/deletes only by the author
+      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
     }
 
     match /{path=**}/wishlists/{wishlistId} {
-      // Allow reading multiple documents (feed query) if signed in.
+      // Allow signed-in users to list documents for the feed
       allow list: if isSignedIn();
-       // Allow reading a single document if it's public or the user is the author.
-      allow get: if (resource.data.privacy == 'public') || (isSignedIn() && request.auth.uid == resource.data.authorId);
-      // Allow writing a single document if the user is the author.
-      allow create, update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+
+      // Allow get if the wishlist is public, or the user is the author
+      allow get: if (resource.data.privacy == 'public') || (isSignedIn() && isOwner(resource.data.authorId));
+
+      // Allow creation if the new document's authorId matches the user's ID
+      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+
+      // Allow updates/deletes only by the author
+      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
     }
     
-
     // --- USER-SPECIFIC DOCUMENT RULES ---
 
     match /users/{userId} {
       // Allow a user to read, update, and delete their own user document.
       allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
       // Allow any signed-in user to create their user document.
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /usernames/{username} {
       // Allow any signed-in user to check if a username exists.
       allow read: if isSignedIn();
       // Only allow creation if the UID in the document matches the user's UID.
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow create: if isSignedIn() && isOwner(request.resource.data.uid);
     }
-
-
+    
     // --- SUB-COLLECTION RULES for direct access ---
 
     match /wishlists/{wishlistId}/items/{itemId} {
-      // Allow the author of the wishlist to manage items.
-      // Allow any signed-in user to read items (for reserving/fulfilling).
       allow read, write: if isSignedIn();
     }
     
     match /wishlists/{wishlistId}/comments/{commentId} {
-        allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
     
     match /posts/{postId}/comments/{commentId} {
-        allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
   }
 }
