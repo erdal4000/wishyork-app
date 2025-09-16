@@ -59,6 +59,7 @@ export function GlobalSearch() {
     setPopoverOpen(true);
     
     const lowerCaseQuery = trimmedQuery.toLowerCase();
+    const endOfQuery = lowerCaseQuery + '\uf8ff';
 
     try {
       // --- Users Query ---
@@ -66,7 +67,7 @@ export function GlobalSearch() {
         collection(db, 'users'),
         orderBy('username_lowercase'),
         where('username_lowercase', '>=', lowerCaseQuery),
-        where('username_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
+        where('username_lowercase', '<=', endOfQuery),
         limit(5)
       );
       
@@ -76,7 +77,7 @@ export function GlobalSearch() {
         where('privacy', '==', 'public'),
         orderBy('title_lowercase'),
         where('title_lowercase', '>=', lowerCaseQuery),
-        where('title_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
+        where('title_lowercase', '<=', endOfQuery),
         limit(5)
       );
 

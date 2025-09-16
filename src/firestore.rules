@@ -7,71 +7,59 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-
-    // Helper function to check if the user is the owner of the document being created
-    function isOwner(authorId) {
-      return request.auth.uid == authorId;
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
 
-    // --- COLLECTION GROUP & DIRECT ACCESS RULES ---
-
+    // --- COLLECTION GROUP RULES (For Feed & Search) ---
     match /{path=**}/posts/{postId} {
-      // Allow signed-in users to list documents for the feed
       allow list: if isSignedIn();
-
-      // Allow anyone to get a post if it's public (assuming a 'privacy' field exists)
-      // If not, restrict to signed-in users or authors
-      allow get: if isSignedIn();
-
-      // Allow creation if the new document's authorId matches the user's ID
-      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
-      
-      // Allow updates/deletes only by the author
-      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
     }
 
     match /{path=**}/wishlists/{wishlistId} {
-      // Allow signed-in users to list documents for the feed
       allow list: if isSignedIn();
-
-      // Allow get if the wishlist is public, or the user is the author
-      allow get: if (resource.data.privacy == 'public') || (isSignedIn() && isOwner(resource.data.authorId));
-
-      // Allow creation if the new document's authorId matches the user's ID
-      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
-
-      // Allow updates/deletes only by the author
-      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
     }
     
-    // --- USER-SPECIFIC DOCUMENT RULES ---
 
+    // --- COLLECTION-SPECIFIC RULES ---
+    
     match /users/{userId} {
-      // Allow a user to read, update, and delete their own user document.
-      allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
-      // Allow any signed-in user to create their user document.
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Any signed-in user can search/list users for the search bar.
+      allow list: if isSignedIn();
+      allow get, update: if isOwner(userId);
+      allow create: if isSignedIn();
+      allow delete: if false; // Generally, don't allow users to delete their accounts this way.
     }
 
     match /usernames/{username} {
-      // Allow any signed-in user to check if a username exists.
       allow read: if isSignedIn();
-      // Only allow creation if the UID in the document matches the user's UID.
       allow create: if isSignedIn() && isOwner(request.resource.data.uid);
     }
     
-    // --- SUB-COLLECTION RULES for direct access ---
+    match /posts/{postId} {
+        allow get: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+        allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
+    }
 
+    match /wishlists/{wishlistId} {
+      allow get: if (resource.data.privacy == 'public') || (isSignedIn() && isOwner(resource.data.authorId));
+      allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
+    }
+    
+    // Sub-collections
     match /wishlists/{wishlistId}/items/{itemId} {
       allow read, write: if isSignedIn();
     }
     
     match /wishlists/{wishlistId}/comments/{commentId} {
-      allow read, write: if isSignedIn();
+        allow read, write: if isSignedIn();
     }
     
     match /posts/{postId}/comments/{commentId} {
-      allow read, write: if isSignedIn();
+        allow read, write: if isSignedIn();
     }
   }
 }
