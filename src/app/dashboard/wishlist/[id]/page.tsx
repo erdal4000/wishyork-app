@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -378,12 +378,11 @@ export default function WishlistDetailPage() {
         const itemsRef = collection(wishlistRef, 'items');
         const itemsSnapshot = await getDocs(itemsRef);
         
-        const batch = runTransaction(db, async t => {
-            itemsSnapshot.forEach(itemDoc => t.delete(itemDoc.ref));
-            t.delete(wishlistRef);
-        });
+        const batch = writeBatch(db); // Use writeBatch instead of runTransaction for deletes
+        itemsSnapshot.forEach(itemDoc => batch.delete(itemDoc.ref));
+        batch.delete(wishlistRef);
 
-        await batch;
+        await batch.commit();
         toast({ title: "Success", description: "Wishlist and all its items have been deleted." });
         router.push('/dashboard/wishlist');
     } catch (error) {
@@ -673,7 +672,7 @@ export default function WishlistDetailPage() {
                       </div>
                       {item.description && <p className="whitespace-pre-wrap break-words">{item.description}</p>}
                       {item.price && <p className="font-bold">{item.price}</p>}
-                      {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" className="text-primary hover:underline">View Product</Link>}
+                      {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View Product</Link>}
                     </CardContent>
 
                     {!isOwnWishlist && (
