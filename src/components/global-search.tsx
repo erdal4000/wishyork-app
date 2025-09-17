@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -194,8 +195,12 @@ export function GlobalSearch() {
                         <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-sm bg-secondary">
                           <List className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <span>{wishlist.title}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">by @{wishlist.authorUsername}</span>
+                        <div className="flex flex-col">
+                            <span>{wishlist.title}</span>
+                            {wishlist.authorUsername && (
+                                <span className="text-xs text-muted-foreground">by @{wishlist.authorUsername}</span>
+                            )}
+                        </div>
                       </CommandItem>
                     ))}
                   </CommandGroup>

@@ -1,3 +1,4 @@
+
 'use server';
 
 import {
@@ -14,12 +15,13 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { getAdminApp } from '@/lib/firebase-admin';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { WishlistAuthor } from '@/components/wishlist-author';
 
 interface Wishlist {
   id: string;
   title: string;
   authorId: string;
+  authorUsername: string;
+  authorName: string;
   category: string;
   progress: number;
   imageUrl: string;
@@ -36,13 +38,18 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
     const q = wishlistsRef
       .where('privacy', '==', 'public')
       .orderBy('createdAt', 'desc')
-      .limit(12); // Fetch the 12 most recent public wishlists
+      .limit(12);
 
     const querySnapshot = await q.get();
 
     if (querySnapshot.empty) {
       return [];
     }
+    
+    // Fetch author names in a batch for efficiency
+    const authorIds = [...new Set(querySnapshot.docs.map(doc => doc.data().authorId))];
+    const authorDocs = await adminDb.collection('users').where('uid', 'in', authorIds).get();
+    const authorMap = new Map(authorDocs.docs.map(doc => [doc.id, doc.data().name]));
 
     const wishlists = querySnapshot.docs.map((doc) => {
       const data = doc.data();
@@ -50,6 +57,8 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
         id: doc.id,
         title: data.title,
         authorId: data.authorId,
+        authorUsername: data.authorUsername,
+        authorName: authorMap.get(data.authorId) || data.authorUsername,
         category: data.category,
         progress: data.progress || 0,
         imageUrl: data.imageUrl,
@@ -61,8 +70,6 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
     return wishlists;
   } catch (error) {
     console.error('Error fetching public wishlists:', error);
-    // In case of an error (e.g., missing index), return an empty array
-    // to prevent the page from crashing. The error will be logged server-side.
     return [];
   }
 }
@@ -99,7 +106,12 @@ export default async function DashboardExplorePage() {
                     {cause.title}
                   </h3>
                   
-                  <WishlistAuthor authorId={cause.authorId} />
+                   <p className="mb-4 text-sm text-muted-foreground">
+                      by{' '}
+                      <span className="font-semibold text-primary hover:underline">
+                        {cause.authorName}
+                      </span>
+                    </p>
 
                   <div className="mb-1 mt-4 flex justify-between text-sm text-muted-foreground">
                     <span>Progress</span>

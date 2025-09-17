@@ -81,9 +81,11 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         const userData = userDoc.data();
+        const authorUsername = userData?.username || 'anonymous';
 
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
+            authorUsername: authorUsername,
             title: values.wishlistName,
             title_lowercase: values.wishlistName.toLowerCase(),
             description: values.description,
@@ -259,4 +261,3 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
     </Dialog>
   );
 }
-
