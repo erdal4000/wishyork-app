@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Fetches and parses product information from a given URL using an AI model.
@@ -61,6 +62,9 @@ const fetchProductDetailsFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    return output!;
+    if (!output || !output.name) {
+      throw new Error("AI model could not extract product name. The URL may not be a valid product page.");
+    }
+    return output;
   }
 );

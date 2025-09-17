@@ -510,5 +510,3 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
-
-    
