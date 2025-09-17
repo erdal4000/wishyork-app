@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { useBookmark } from '@/hooks/use-bookmark';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface BookmarkedItem {
   id: string;
@@ -106,9 +107,18 @@ function BookmarkCard({ bookmark }: { bookmark: BookmarkedItem }) {
                         </Button>
                         <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{bookmark.content.likes ?? 0}</span>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={toggleBookmark} disabled={isTogglingBookmark}>
-                        <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
-                    </Button>
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                 <Button variant="ghost" size="icon" onClick={toggleBookmark} disabled={isTogglingBookmark}>
+                                    <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+                                </Button>
+                            </TooltipTrigger>
+                             <TooltipContent>
+                                <p>Remove from Bookmarks</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </CardFooter>
             </Card>
         )
@@ -117,11 +127,20 @@ function BookmarkCard({ bookmark }: { bookmark: BookmarkedItem }) {
     if (bookmark.type === 'cause') {
         return (
             <Card className="group relative flex flex-col overflow-hidden rounded-2xl shadow-lg">
-                 <div className="absolute top-3 right-3 z-20">
-                    <Button variant="secondary" size="icon" className="h-9 w-9 rounded-full" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isTogglingBookmark}>
-                        <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
-                    </Button>
-                </div>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="absolute top-3 right-3 z-20">
+                                <Button variant="secondary" size="icon" className="h-9 w-9 rounded-full" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isTogglingBookmark}>
+                                    <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+                                </Button>
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Remove from Bookmarks</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 <Link href={`/dashboard/wishlist/${bookmark.refId}`}>
                     <CardHeader className="relative p-0">
                     <Badge className="absolute left-3 top-3 z-10">{bookmark.content.category}</Badge>
@@ -168,11 +187,9 @@ export default function BookmarksPage() {
           try {
             const collectionName = bookmark.type === 'cause' 
                 ? 'wishlists' 
-                : bookmark.type === 'post' 
-                ? 'posts' 
-                : null;
+                : 'posts';
             
-            if (!collectionName || !bookmark.refId) {
+            if (!bookmark.refId) {
                 return null;
             }
 
