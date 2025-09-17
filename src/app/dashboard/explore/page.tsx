@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { getAdminApp } from '@/lib/firebase-admin';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { WishlistAuthor } from '@/components/wishlist-author';
 
 
 interface Wishlist {
@@ -60,7 +59,7 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
         title: data.title,
         authorId: data.authorId,
         authorUsername: data.authorUsername,
-        authorName: authorMap.get(data.authorId) || data.authorUsername,
+        authorName: authorMap.get(data.authorId) || data.authorUsername || 'Unknown User',
         category: data.category,
         progress: data.progress || 0,
         imageUrl: data.imageUrl,
