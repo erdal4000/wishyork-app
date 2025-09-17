@@ -482,7 +482,6 @@ export default function DashboardPage() {
         const userData = userDoc.data();
         const following = userData?.following || [];
   
-        // Helper function to process snapshots and update state
         const processSnapshot = (snapshot: DocumentData[], type: 'post' | 'wishlist') => {
           const newItems = snapshot.map(doc => ({ id: doc.id, type, ...doc.data() } as FeedItem));
           setFeedItems(currentItems => {
@@ -507,11 +506,11 @@ export default function DashboardPage() {
           const followedIds = following.slice(0, 30); // Firestore 'in' query limit
   
           // Following Posts
-          const followingPostsQuery = query(collectionGroup(db, 'posts'), where('authorId', 'in', followedIds));
+          const followingPostsQuery = query(collection(db, 'posts'), where('authorId', 'in', followedIds));
           const unsubFollowingPosts = onSnapshot(followingPostsQuery, (snap) => processSnapshot(snap.docs, 'post'));
           
           // Following Wishlists (Public or Friends)
-          const followingWishlistsQuery = query(collectionGroup(db, 'wishlists'), where('authorId', 'in', followedIds), where('privacy', 'in', ['public', 'friends']));
+          const followingWishlistsQuery = query(collection(db, 'wishlists'), where('authorId', 'in', followedIds), where('privacy', 'in', ['public', 'friends']));
           const unsubFollowingWishlists = onSnapshot(followingWishlistsQuery, (snap) => processSnapshot(snap.docs, 'wishlist'));
   
           combinedUnsubscribes.push(unsubFollowingPosts, unsubFollowingWishlists);
