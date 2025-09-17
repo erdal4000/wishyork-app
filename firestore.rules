@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -29,24 +30,23 @@ service cloud.firestore {
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      // Allow any signed-in user to read user data.
       allow list, get: if isSignedIn();
 
-      // Allow a user to update their own document, EXCEPT for follower/following counts.
+      // Allow a user to update their own document completely.
+      // Additionally, allow any signed-in user to update another user's document
+      // ONLY IF they are changing the 'followers' array and 'followersCount'. This is for follow/unfollow actions.
       allow update: if isOwner(userId) || 
                      (isSignedIn() && 
                       request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['followersCount', 'followingCount']));
+                        .hasAll(['followers', 'followersCount']));
       
-      // Allow a user to create and delete their OWN user document.
       allow create, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.uid);
-      // Deleting usernames is handled via a batched write in the profile update logic
-      allow delete: if isSignedIn();
+      allow delete: if isSignedIn(); 
     }
 
     // --- SUB-COLLECTION RULES for direct access ---

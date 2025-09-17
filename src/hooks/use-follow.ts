@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, increment, writeBatch, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, increment, writeBatch, onSnapshot, getDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
 export const useFollow = (profileUserId?: string) => {
@@ -50,6 +50,11 @@ export const useFollow = (profileUserId?: string) => {
     const batch = writeBatch(db);
 
     try {
+        const currentUserDoc = await getDoc(currentUserRef);
+        const profileUserDoc = await getDoc(profileUserRef);
+        const currentUserData = currentUserDoc.data() || {};
+        const profileUserData = profileUserDoc.data() || {};
+
         if (isFollowing) {
             // Unfollow logic
             batch.update(currentUserRef, { 
@@ -64,23 +69,26 @@ export const useFollow = (profileUserId?: string) => {
 
         } else {
             // Follow logic
+            const currentFollowingCount = currentUserData.followingCount || 0;
+            const profileFollowersCount = profileUserData.followersCount || 0;
+
             batch.update(currentUserRef, { 
                 following: arrayUnion(profileUserId),
-                followingCount: increment(1) 
+                followingCount: currentFollowingCount === 0 ? 1 : increment(1)
             });
             batch.update(profileUserRef, { 
                 followers: arrayUnion(currentUser.uid),
-                followersCount: increment(1)
+                followersCount: profileFollowersCount === 0 ? 1 : increment(1)
             });
             toast({ title: "Followed!", description: "You are now following this user." });
         }
         await batch.commit();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling follow:", error);
       toast({
         title: "Error",
-        description: "Could not perform the follow action. Please try again.",
+        description: `Could not perform the follow action. Please try again. Error: ${error.code}`,
         variant: "destructive",
       });
     } finally {
@@ -90,5 +98,3 @@ export const useFollow = (profileUserId?: string) => {
 
   return { isFollowing, isTogglingFollow, toggleFollow };
 };
-
-    
