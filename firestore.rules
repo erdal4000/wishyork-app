@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,6 +11,10 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isFollower(userId) {
+      return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.followers;
+    }
+
     // --- COLLECTION GROUP & BROAD READ RULES ---
 
     match /{path=**}/posts/{postId} {
@@ -22,7 +25,10 @@ service cloud.firestore {
 
     match /{path=**}/wishlists/{wishlistId} {
       allow list: if isSignedIn();
-      allow get: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
+      // Allow get if public, if owner, OR if it's a friends list and the requester is a follower.
+      allow get: if resource.data.privacy == 'public' || 
+                    isOwner(resource.data.authorId) ||
+                    (resource.data.privacy == 'friends' && isFollower(resource.data.authorId));
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
@@ -30,23 +36,28 @@ service cloud.firestore {
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
+      // Allow any signed-in user to read user data.
       allow list, get: if isSignedIn();
 
-      // Allow a user to update their own document completely.
-      // Additionally, allow any signed-in user to update another user's document
-      // ONLY IF they are changing the 'followers' array and 'followersCount'. This is for follow/unfollow actions.
+      // Allow a user to update their own document.
+      // Additionally, allow any signed-in user to modify fields related to following.
       allow update: if isOwner(userId) || 
                      (isSignedIn() && 
                       request.resource.data.diff(resource.data).affectedKeys()
-                        .hasAll(['followers', 'followersCount']));
+                        .hasAll(['followers', 'followersCount'])) ||
+                     (isSignedIn() &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAll(['following', 'followingCount']));
       
+      // Allow a user to create and delete their OWN user document.
       allow create, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.uid);
-      allow delete: if isSignedIn(); 
+      // Deleting usernames is handled via a batched write in the profile update logic
+      allow delete: if isSignedIn();
     }
 
     // --- SUB-COLLECTION RULES for direct access ---
