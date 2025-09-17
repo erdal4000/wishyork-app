@@ -5,45 +5,45 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth.uid != null;
     }
-    
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
-    // --- COLLECTION GROUP RULES ---
-    // These rules allow the feed to query across all users' subcollections.
-    
-    // Allow signed-in users to LIST posts for the feed.
+
+    // --- COLLECTION GROUP & BROAD READ RULES ---
+
     match /{path=**}/posts/{postId} {
       allow list, get: if isSignedIn();
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
 
-    // Allow signed-in users to LIST wishlists for the feed.
-    // The client-side code MUST filter by privacy: 'public' to make this query work.
     match /{path=**}/wishlists/{wishlistId} {
       allow list: if isSignedIn();
       allow get: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
-    
+
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      allow create: if isSignedIn();
-      allow read, update, delete: if isOwner(userId);
+      allow list, get: if isSignedIn();
+      allow create, update, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.uid);
     }
-    
+
     // --- SUB-COLLECTION RULES for direct access ---
+
+    match /users/{userId}/bookmarks/{bookmarkId} {
+        allow read, delete: if isOwner(userId);
+    }
 
     match /wishlists/{wishlistId}/items/{itemId} {
       allow read: if isSignedIn();
