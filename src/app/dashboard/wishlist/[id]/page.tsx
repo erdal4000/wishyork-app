@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -49,7 +50,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -64,7 +64,8 @@ import { useAuth } from '@/context/auth-context';
 import { CommentSection } from '@/components/comment-section';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getInitials } from '@/lib/utils';
-
+import { useBookmark } from '@/hooks/use-bookmark';
+import { usePostInteraction } from '@/hooks/use-post-interaction';
 
 interface Wishlist extends DocumentData {
     id: string;
@@ -194,6 +195,8 @@ export default function WishlistDetailPage() {
   const [isUpdatingItem, setIsUpdatingItem] = useState<string | null>(null);
 
   const { authorProfile, loadingProfile } = useAuthorProfile(wishlist?.authorId);
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(id, 'cause');
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
    useEffect(() => {
     if (!id) return;
@@ -507,24 +510,24 @@ export default function WishlistDetailPage() {
 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9">
-                            <Heart className="h-5 w-5" />
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}>
+                            <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
                 </Tooltip>
-                <span className="text-sm pr-2">{wishlist.likes ?? 0}</span>
+                <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{wishlist.likes ?? 0}</span>
             </div>
 
             <div className="flex items-center text-muted-foreground">
                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9">
-                            <Bookmark className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
-                </Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleBookmark} disabled={isTogglingBookmark || !user}>
+                    <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+              </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-9 w-9">

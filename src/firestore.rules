@@ -11,14 +11,12 @@ service cloud.firestore {
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
+
     // --- COLLECTION GROUP & BROAD READ RULES ---
-    
+
     match /{path=**}/posts/{postId} {
       allow list, get: if isSignedIn();
-      // Allow create if the user is the author of the new document.
       allow create: if isOwner(request.resource.data.authorId);
-      // Allow update/delete if the user is the owner of the existing document.
       allow update, delete: if isOwner(resource.data.authorId);
     }
 
@@ -28,35 +26,36 @@ service cloud.firestore {
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
-    
+
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      // Allow any signed-in user to LIST users for search functionality.
-      // Allow any signed-in user to GET a single user's profile data.
       allow list, get: if isSignedIn();
-      
-      // Allow a user to create, update, and delete their OWN user document.
       allow create, update, delete: if isOwner(userId);
+    }
+    
+    match /users/{userId}/bookmarks/{bookmarkId} {
+        // A user can read, create, and delete their own bookmarks.
+        allow read, create, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.uid);
     }
-    
+
     // --- SUB-COLLECTION RULES for direct access ---
 
     match /wishlists/{wishlistId}/items/{itemId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
     }
-    
+
     match /wishlists/{wishlistId}/comments/{commentId} {
       allow read, create: if isSignedIn();
       allow update, delete: if isOwner(resource.data.authorId);
     }
-    
+
     match /posts/{postId}/comments/{commentId} {
       allow read, create: if isSignedIn();
       allow update, delete: if isOwner(resource.data.authorId);

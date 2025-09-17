@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -39,20 +40,16 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
+import { useBookmark } from '@/hooks/use-bookmark';
 
 interface FeedItem extends DocumentData {
   id: string;
   type: 'post' | 'wishlist';
   authorId: string;
   createdAt: Timestamp;
-  // Denormalized fields (now we will fetch them in real-time)
-  // authorName: string;
-  // authorUsername: string;
-  // authorAvatar: string;
   content?: string;
   title?: string;
   category?: string;
@@ -151,6 +148,7 @@ function PostCard({ item }: { item: FeedItem }) {
   const { toast } = useToast();
   const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(item.id, item.type === 'wishlist' ? 'cause' : 'post');
   const [isDeleting, setIsDeleting] = useState(false);
 
   const itemDate = item.createdAt?.toDate();
@@ -351,8 +349,8 @@ function PostCard({ item }: { item: FeedItem }) {
           <div className="flex items-center text-muted-foreground">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9">
-                  <Bookmark className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleBookmark} disabled={isTogglingBookmark || !user}>
+                  <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>

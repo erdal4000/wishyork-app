@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -18,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CommentSection } from '@/components/comment-section';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBookmark } from '@/hooks/use-bookmark';
 
 interface Post extends DocumentData {
   id: string;
@@ -108,6 +110,7 @@ export default function PostDetailPage() {
 
   const { authorProfile, loadingProfile } = useAuthorProfile(post?.authorId);
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'post');
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(id, 'post');
 
   useEffect(() => {
     if (!id) return;
@@ -228,8 +231,8 @@ export default function PostDetailPage() {
             <div className="flex items-center text-muted-foreground">
                 <Tooltip>
                 <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                        <Bookmark className="h-5 w-5" />
+                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleBookmark} disabled={isTogglingBookmark || !user}>
+                        <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
