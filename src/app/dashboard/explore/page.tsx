@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { getAdminApp } from '@/lib/firebase-admin';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { WishlistAuthor } from '@/components/wishlist-author';
+
 
 interface Wishlist {
   id: string;
