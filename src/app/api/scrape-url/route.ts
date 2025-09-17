@@ -3,7 +3,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
-// Define a type for the scraped data for clarity and type safety
 interface ScrapedData {
   name: string | null;
   description: string | null;
@@ -11,10 +10,33 @@ interface ScrapedData {
   price: string | null;
 }
 
-// Function to fetch and parse metadata from HTML
 const getMetaData = ($, property: string) => {
   return $(`meta[property="${property}"]`).attr('content') || $(`meta[name="${property}"]`).attr('content');
 };
+
+const getPriceFromCommonSelectors = ($: cheerio.CheerioAPI): string | null => {
+  const priceSelectors = [
+    '[class*="price"]',
+    '[id*="price"]',
+    '.a-price-whole',
+    '.a-price-fraction',
+    '.prc-slg',
+    '.product-price',
+    '.price-tag',
+  ];
+
+  for (const selector of priceSelectors) {
+    let priceText = $(selector).first().text().trim();
+    if (priceText) {
+      // Extract numbers and currency symbols
+      const match = priceText.match(/[\d.,]+[.,\d]*\s*[€$₺TL]?/);
+      if (match) {
+        return match[0].replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +46,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL is required and must be a string.' }, { status: 400 });
     }
 
-    // Use a realistic user-agent to avoid being blocked by some sites
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -41,31 +62,59 @@ export async function POST(request: NextRequest) {
       price: null,
     };
 
-    // 1. Try to get data from Open Graph (OG) meta tags (most reliable)
-    scrapedData.name = getMetaData($, 'og:title');
-    scrapedData.description = getMetaData($, 'og:description');
-    scrapedData.imageUrl = getMetaData($, 'og:image');
-    scrapedData.price = getMetaData($, 'og:price:amount') || getMetaData($, 'product:price:amount');
+    // 1. Try to get data from JSON-LD (Schema.org) - Most reliable
+    const jsonLdScript = $('script[type="application/ld+json"]').html();
+    if (jsonLdScript) {
+        try {
+            const jsonData = JSON.parse(jsonLdScript);
+            const productSchema = jsonData['@graph'] ? jsonData['@graph'].find((item: any) => item['@type'] === 'Product') : (jsonData['@type'] === 'Product' ? jsonData : null);
+            if (productSchema) {
+                scrapedData.name = productSchema.name;
+                scrapedData.description = productSchema.description;
+                if (productSchema.image) {
+                   scrapedData.imageUrl = Array.isArray(productSchema.image) ? productSchema.image[0] : productSchema.image;
+                }
+                if (productSchema.offers) {
+                    const offer = Array.isArray(productSchema.offers) ? productSchema.offers[0] : productSchema.offers;
+                    scrapedData.price = `${offer.priceCurrency} ${offer.price}`;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not parse JSON-LD script:", e);
+        }
+    }
 
-    // 2. If OG tags fail, fall back to standard HTML tags
-    if (!scrapedData.name) {
-      scrapedData.name = $('title').text() || $('h1').first().text();
-    }
-    if (!scrapedData.description) {
-      scrapedData.description = $('meta[name="description"]').attr('content') || $('p').first().text();
-    }
+    // 2. Fallback to Open Graph (OG) meta tags
+    if (!scrapedData.name) scrapedData.name = getMetaData($, 'og:title');
+    if (!scrapedData.description) scrapedData.description = getMetaData($, 'og:description');
+    if (!scrapedData.imageUrl) scrapedData.imageUrl = getMetaData($, 'og:image');
+    if (!scrapedData.price) scrapedData.price = getMetaData($, 'og:price:amount') || getMetaData($, 'product:price:amount');
+    
+    // 3. Fallback to standard HTML tags if still missing
+    if (!scrapedData.name) scrapedData.name = $('title').text() || $('h1').first().text();
+    if (!scrapedData.description) scrapedData.description = $('meta[name="description"]').attr('content') || $('p').first().text();
     if (!scrapedData.imageUrl) {
-      // Look for the most prominent image
-      const firstImgSrc = $('img').first().attr('src');
-      if (firstImgSrc) {
-        // Ensure the URL is absolute
-        scrapedData.imageUrl = new URL(firstImgSrc, url).href;
-      }
+        let largestImage: { src: string | undefined, area: number} = { src: undefined, area: 0 };
+        $('img').each((_, el) => {
+            const width = Number($(el).attr('width')) || Number(el.attribs.width) || 0;
+            const height = Number($(el).attr('height')) || Number(el.attribs.height) || 0;
+            const area = width * height;
+            if(area > largestImage.area) {
+                largestImage = { src: $(el).attr('src'), area };
+            }
+        });
+        const firstImgSrc = largestImage.src || $('img').first().attr('src');
+        if (firstImgSrc) {
+            scrapedData.imageUrl = new URL(firstImgSrc, url).href;
+        }
+    }
+    if (!scrapedData.price) {
+        scrapedData.price = getPriceFromCommonSelectors($);
     }
     
     // Clean up results
     scrapedData.name = scrapedData.name?.trim() || null;
-    scrapedData.description = scrapedData.description?.trim().substring(0, 250) || null; // Limit description length
+    scrapedData.description = scrapedData.description?.trim().substring(0, 250) || null;
     
     if (!scrapedData.name) {
       return NextResponse.json({ error: 'Could not automatically determine the product name from the URL.' }, { status: 422 });

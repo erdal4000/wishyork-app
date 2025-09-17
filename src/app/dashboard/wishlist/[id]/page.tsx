@@ -671,7 +671,7 @@ export default function WishlistDetailPage() {
                             </Badge>
                          )}
                       </div>
-                      {item.description && <p>{item.description}</p>}
+                      {item.description && <p className="whitespace-pre-wrap break-words">{item.description}</p>}
                       {item.price && <p className="font-bold">{item.price}</p>}
                       {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" className="text-primary hover:underline">View Product</Link>}
                     </CardContent>
