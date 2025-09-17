@@ -53,7 +53,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
-import { fetchProductDetails } from '@/ai/flows/fetch-product-details-flow';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const formSchema = z.object({
@@ -119,28 +118,35 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
       return;
     }
     
-    // Clear previous errors/data
     form.clearErrors('fetchUrl');
     setFetchError(null);
     setIsFetchingUrl(true);
 
     try {
-      const result = await fetchProductDetails({ productUrl: url });
+      const response = await fetch('/api/scrape-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'An unknown error occurred during scraping.');
+      }
       
-      // Populate form fields with the fetched data
       if (result.name) form.setValue('itemName', result.name, { shouldValidate: true });
       if (result.description) form.setValue('notes', result.description, { shouldValidate: true });
       if (result.price) form.setValue('price', result.price, { shouldValidate: true });
       if (result.imageUrl) setImageUrl(result.imageUrl);
       
-      // Also set the purchase URL to the fetched URL
       form.setValue('purchaseUrl', url, { shouldValidate: true });
 
       toast({ title: 'Success', description: 'Product details have been fetched!' });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching product details:", error);
-      const errorMessage = "Could not fetch details from this URL. The page might be protected or not a standard product page. Please enter details manually.";
+      const errorMessage = error.message || "Could not fetch details. The site may be protected. Please enter details manually.";
       setFetchError(errorMessage);
       toast({ title: 'Fetch Failed', description: errorMessage, variant: 'destructive' });
     } finally {
