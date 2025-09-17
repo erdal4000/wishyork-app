@@ -29,12 +29,18 @@ service cloud.firestore {
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      // Allow any signed-in user to LIST users for search functionality.
-      // Allow any signed-in user to GET a single user's profile data.
+      // Allow any signed-in user to read user data.
       allow list, get: if isSignedIn();
+
+      // Allow a user to update their own document, EXCEPT for the follower/following counts,
+      // which can be modified by any signed-in user (as part of a follow/unfollow action).
+      allow update: if isOwner(userId) || (isSignedIn() && (
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['followersCount', 'followingCount'])
+                    ));
       
-      // Allow a user to create, update, and delete their OWN user document.
-      allow create, update, delete: if isOwner(userId);
+      // Allow a user to create and delete their OWN user document.
+      allow create, delete: if isOwner(userId);
     }
 
     match /usernames/{username} {
@@ -44,7 +50,6 @@ service cloud.firestore {
 
     // --- SUB-COLLECTION RULES for direct access ---
 
-    // RULE FIX: Allow users to read, create, and delete their own bookmarks.
     match /users/{userId}/bookmarks/{bookmarkId} {
         allow read, create, delete: if isOwner(userId);
     }
