@@ -469,79 +469,68 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-
+  
     setLoading(true);
-
+    setError(null);
+  
+    let combinedUnsubscribes: (() => void)[] = [];
+  
     const fetchFeed = async () => {
+      try {
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         const userData = userDoc.data();
-        const following = [...(userData?.following || []), user.uid];
-
-        if (following.length === 0) {
-            setLoading(false);
-            setFeedItems([]);
-            return;
-        }
-
-        const followedIds = following.slice(0, 30);
-
-        const postsQuery = query(
-            collectionGroup(db, 'posts'), 
-            where('authorId', 'in', followedIds),
-            orderBy('createdAt', 'desc')
-        );
-
-        const wishlistsQuery = query(
-            collectionGroup(db, 'wishlists'), 
-            where('authorId', 'in', followedIds),
-            where('privacy', '==', 'public'),
-            orderBy('createdAt', 'desc')
-        );
-
-        const unsubscribePosts = onSnapshot(postsQuery, 
-            (querySnapshot) => {
-                const postsData = querySnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
-                
-                setFeedItems(currentItems => {
-                    const otherItems = currentItems.filter(item => item.type !== 'post');
-                    const allItems = [...postsData, ...otherItems];
-                    return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-                });
-
-                setLoading(false);
-                setError(null);
-            }, 
-            (err) => {
-                console.error("Error fetching posts:", err);
-                setError("Failed to load posts. Please try again later.");
-                setLoading(false);
-            }
-        );
-
-        const unsubscribeWishlists = onSnapshot(wishlistsQuery,
-             (querySnapshot) => {
-                const wishlistsData = querySnapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as FeedItem));
-                
-                setFeedItems(currentItems => {
-                    const otherItems = currentItems.filter(item => item.type !== 'wishlist');
-                    const allItems = [...wishlistsData, ...otherItems];
-                    return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-                });
-            },
-            (err) => {
-                console.error("Error fetching wishlists:", err);
-            }
-        );
-
-        return () => {
-            unsubscribePosts();
-            unsubscribeWishlists();
+        const following = userData?.following || [];
+  
+        // Helper function to process snapshots and update state
+        const processSnapshot = (snapshot: DocumentData[], type: 'post' | 'wishlist') => {
+          const newItems = snapshot.map(doc => ({ id: doc.id, type, ...doc.data() } as FeedItem));
+          setFeedItems(currentItems => {
+            const itemMap = new Map(currentItems.map(item => [`${item.type}-${item.id}`, item]));
+            newItems.forEach(item => itemMap.set(`${item.type}-${item.id}`, item));
+            const allItems = Array.from(itemMap.values());
+            return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+          });
+          setLoading(false);
         };
-    }
-
+  
+        // 1. Own Content (Posts and All Wishlists)
+        const ownPostsQuery = query(collection(db, 'posts'), where('authorId', '==', user.uid));
+        const ownWishlistsQuery = query(collection(db, 'wishlists'), where('authorId', '==', user.uid));
+        
+        const unsubOwnPosts = onSnapshot(ownPostsQuery, (snap) => processSnapshot(snap.docs, 'post'));
+        const unsubOwnWishlists = onSnapshot(ownWishlistsQuery, (snap) => processSnapshot(snap.docs, 'wishlist'));
+        combinedUnsubscribes.push(unsubOwnPosts, unsubOwnWishlists);
+  
+        // 2. Following Content (Posts and Public/Friends Wishlists)
+        if (following.length > 0) {
+          const followedIds = following.slice(0, 30); // Firestore 'in' query limit
+  
+          // Following Posts
+          const followingPostsQuery = query(collectionGroup(db, 'posts'), where('authorId', 'in', followedIds));
+          const unsubFollowingPosts = onSnapshot(followingPostsQuery, (snap) => processSnapshot(snap.docs, 'post'));
+          
+          // Following Wishlists (Public or Friends)
+          const followingWishlistsQuery = query(collectionGroup(db, 'wishlists'), where('authorId', 'in', followedIds), where('privacy', 'in', ['public', 'friends']));
+          const unsubFollowingWishlists = onSnapshot(followingWishlistsQuery, (snap) => processSnapshot(snap.docs, 'wishlist'));
+  
+          combinedUnsubscribes.push(unsubFollowingPosts, unsubFollowingWishlists);
+        } else {
+            setLoading(false);
+        }
+  
+      } catch (err) {
+        console.error("Error setting up feed listeners:", err);
+        setError("Failed to load feed. Please try again later.");
+        setLoading(false);
+      }
+    };
+  
     fetchFeed();
-
+  
+    return () => {
+      combinedUnsubscribes.forEach(unsub => unsub());
+    };
   }, [user]);
 
   return (
