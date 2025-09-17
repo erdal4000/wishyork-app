@@ -254,17 +254,24 @@ export function ProfilePageClient({
             }));
         }
     });
-
+    
     // Base wishlists query
     let wishlistsQuery: Query<DocumentData> = query(
       collection(db, 'wishlists'),
       where('authorId', '==', profileUser.uid)
     );
 
-    // If not the owner's profile, add the privacy filter.
+    // Dynamically adjust privacy filter based on ownership and follow status
     if (!isOwnProfile) {
-        wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
+        if (isFollowing) {
+            // If following, show public AND friends lists
+            wishlistsQuery = query(wishlistsQuery, where('privacy', 'in', ['public', 'friends']));
+        } else {
+            // If not following, show only public lists
+            wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
+        }
     }
+    // If it's the own profile, no privacy filter is added, so all are shown.
 
     const unsubscribeWishlists = onSnapshot(
       wishlistsQuery,
@@ -310,7 +317,7 @@ export function ProfilePageClient({
       unsubscribeWishlists();
       unsubscribePosts();
     };
-  }, [profileUser.uid, isOwnProfile]);
+  }, [profileUser.uid, isOwnProfile, isFollowing]);
 
 
   if (!profileUser) {
@@ -485,5 +492,3 @@ export function ProfilePageClient({
     </div>
   );
 }
-
-    
