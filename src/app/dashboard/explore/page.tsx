@@ -30,12 +30,13 @@ interface Wishlist {
   createdAt: Timestamp;
 }
 
+// This function is now simplified to ensure Firestore throws a visible error for a missing index.
 async function getPublicWishlists(): Promise<Wishlist[]> {
-  try {
     const adminApp = getAdminApp();
     const adminDb = getFirestore(adminApp);
 
     const wishlistsRef = adminDb.collection('wishlists');
+    // This query requires a composite index. If it's missing, Firestore will error out.
     const q = wishlistsRef
       .where('privacy', '==', 'public')
       .orderBy('createdAt', 'desc')
@@ -47,19 +48,23 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
       return [];
     }
     
-    // Fetch author names in a batch for efficiency
     const authorIds = [...new Set(querySnapshot.docs.map(doc => doc.data().authorId))];
-    const authorDocs = await adminDb.collection('users').where('uid', 'in', authorIds).get();
-    const authorMap = new Map(authorDocs.docs.map(doc => [doc.id, doc.data().name]));
+    if (authorIds.length === 0) {
+        return [];
+    }
+
+    const authorDocsSnapshot = await adminDb.collection('users').where('uid', 'in', authorIds).get();
+    const authorMap = new Map(authorDocsSnapshot.docs.map(doc => [doc.id, doc.data()]));
 
     const wishlists = querySnapshot.docs.map((doc) => {
       const data = doc.data();
+      const authorData = authorMap.get(data.authorId);
       return {
         id: doc.id,
         title: data.title,
         authorId: data.authorId,
         authorUsername: data.authorUsername,
-        authorName: authorMap.get(data.authorId) || data.authorUsername || 'Unknown User',
+        authorName: authorData?.name || data.authorUsername || 'Unknown User',
         category: data.category,
         progress: data.progress || 0,
         imageUrl: data.imageUrl,
@@ -69,10 +74,6 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
     });
 
     return wishlists;
-  } catch (error) {
-    console.error('Error fetching public wishlists:', error);
-    return [];
-  }
 }
 
 export default async function DashboardExplorePage() {
@@ -82,7 +83,7 @@ export default async function DashboardExplorePage() {
     <div>
       <h1 className="mb-6 text-3xl font-bold tracking-tight">Explore Causes</h1>
       {causes.length > 0 ? (
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-2">
           {causes.map((cause) => (
             <Card
               key={cause.id}
@@ -114,7 +115,7 @@ export default async function DashboardExplorePage() {
                       </span>
                     </p>
 
-                  <div className="mb-1 mt-4 flex justify-between text-sm text-muted-foreground">
+                  <div className="mb-1 mt-auto flex justify-between text-sm text-muted-foreground">
                     <span>Progress</span>
                     <span className="font-semibold text-foreground">
                       {cause.progress}%
