@@ -144,32 +144,35 @@ export default function BookmarksPage() {
       const populatedBookmarks = await Promise.all(
         bookmarksData.map(async (bookmark) => {
           try {
-            const collectionName = bookmark.type === 'cause' ? 'wishlists' : (bookmark.type === 'item' ? 'items' : `${bookmark.type}s`);
-            
-            let contentRef;
-            if (bookmark.type === 'item') {
-                // This is a simplification. A real implementation needs to know the wishlist ID.
-                // Assuming items are bookmarked with their parent wishlist id for now.
-                // This part will need revision based on how items are actually bookmarked.
-                // For now, let's assume item bookmarks are not fully supported to avoid complex queries.
-                return bookmark;
-            } else {
-                 contentRef = doc(db, collectionName, bookmark.refId);
+            // Correctly map 'cause' to 'wishlists' and 'post' to 'posts'
+            const collectionName = bookmark.type === 'cause' 
+                ? 'wishlists' 
+                : bookmark.type === 'post' 
+                ? 'posts' 
+                : null;
+
+            // Skip if the bookmark type is not supported (e.g., 'item' for now)
+            if (!collectionName) {
+                return null;
             }
 
+            const contentRef = doc(db, collectionName, bookmark.refId);
             const contentSnap = await getDoc(contentRef);
+
             if (contentSnap.exists()) {
               bookmark.content = contentSnap.data();
+              return bookmark;
             }
-            return bookmark;
+            return null; // Return null if the bookmarked content doesn't exist anymore
           } catch (e) {
             console.error(`Error fetching content for bookmark ${bookmark.refId}:`, e);
-            return bookmark;
+            return null; // Return null on error
           }
         })
       );
       
-      setBookmarks(populatedBookmarks.filter(b => b.content)); // Only show bookmarks where content was found
+      // Filter out any null values from the array (non-existent content, unsupported types, errors)
+      setBookmarks(populatedBookmarks.filter((b): b is BookmarkedItem => b !== null && b.content !== undefined));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching bookmarks:", error);
@@ -193,7 +196,7 @@ export default function BookmarksPage() {
   
   const savedPosts = bookmarks.filter(b => b.type === 'post');
   const savedCauses = bookmarks.filter(b => b.type === 'cause');
-  const savedItems = bookmarks.filter(b => b.type === 'item');
+  const savedItems = bookmarks.filter(b => b.type === 'item'); // Will be empty for now
 
   const renderSkeleton = (count: number, type: 'post' | 'cause' | 'item') => {
     if (type === 'post') {
