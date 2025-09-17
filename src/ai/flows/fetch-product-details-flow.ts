@@ -10,6 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { googleSearch } from '@genkit-ai/googleai';
+
 
 const FetchProductDetailsInputSchema = z.object({
   productUrl: z.string().url().describe('The URL of the product page.'),
@@ -40,12 +42,13 @@ const prompt = ai.definePrompt({
   name: 'productDetailFetcherPrompt',
   input: {schema: FetchProductDetailsInputSchema},
   output: {schema: FetchProductDetailsOutputSchema},
+  tools: [googleSearch],
   prompt: `You are an expert web scraper and data extractor specializing in e-commerce product pages.
-Your task is to visit the provided URL, analyze its content, and extract key product information.
+Your task is to analyze the content of the provided URL using your tools and extract key product information.
 
 Product URL: {{{productUrl}}}
 
-Please extract the following details and return them in the specified JSON format:
+Use the googleSearch tool to fetch the content of the URL. Then, from that content, please extract the following details and return them in the specified JSON format:
 - Product Name
 - A concise and appealing product description (max 2-3 sentences)
 - The price, including the currency symbol if available.
@@ -63,7 +66,7 @@ const fetchProductDetailsFlow = ai.defineFlow(
   async input => {
     const {output} = await prompt(input);
     if (!output || !output.name) {
-      throw new Error("AI model could not extract product name. The URL may not be a valid product page.");
+      throw new Error("AI model could not extract product name. The URL may not be a valid product page or may be inaccessible.");
     }
     return output;
   }
