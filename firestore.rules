@@ -44,9 +44,9 @@ service cloud.firestore {
 
     // --- SUB-COLLECTION RULES for direct access ---
 
-    // NEW RULE: Allow users to read and delete their own bookmarks.
+    // RULE FIX: Allow users to read, create, and delete their own bookmarks.
     match /users/{userId}/bookmarks/{bookmarkId} {
-        allow read, delete: if isOwner(userId);
+        allow read, create, delete: if isOwner(userId);
     }
 
     match /wishlists/{wishlistId}/items/{itemId} {
