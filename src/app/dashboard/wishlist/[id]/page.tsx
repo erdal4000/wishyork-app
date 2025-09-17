@@ -50,6 +50,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -195,7 +196,13 @@ export default function WishlistDetailPage() {
   const [isUpdatingItem, setIsUpdatingItem] = useState<string | null>(null);
 
   const { authorProfile, loadingProfile } = useAuthorProfile(wishlist?.authorId);
-  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(id, 'cause');
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
+    refId: id,
+    type: 'cause',
+    title: wishlist?.title,
+    imageUrl: wishlist?.imageUrl,
+    authorName: authorProfile?.name,
+  });
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
    useEffect(() => {
@@ -310,7 +317,7 @@ export default function WishlistDetailPage() {
     }
     const success = await updateItemAndWishlist(itemId, {
         status: 'reserved',
-        reservedBy: user.displayName || undefined,
+        reservedBy: user.displayName || 'Anonymous',
     }, {});
     if (success) {
       toast({ title: "Success", description: "Item has been reserved!" });

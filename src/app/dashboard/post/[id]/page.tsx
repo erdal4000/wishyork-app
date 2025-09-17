@@ -110,7 +110,13 @@ export default function PostDetailPage() {
 
   const { authorProfile, loadingProfile } = useAuthorProfile(post?.authorId);
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'post');
-  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(id, 'post');
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
+    refId: id,
+    type: 'post',
+    title: post?.content,
+    imageUrl: post?.imageUrl,
+    authorName: authorProfile?.name,
+  });
 
   useEffect(() => {
     if (!id) return;

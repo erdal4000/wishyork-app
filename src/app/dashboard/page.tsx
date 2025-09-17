@@ -149,7 +149,13 @@ function PostCard({ item }: { item: FeedItem }) {
   const { toast } = useToast();
   const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
-  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark(item.id, item.type === 'wishlist' ? 'cause' : 'post');
+  const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
+    refId: item.id,
+    type: item.type === 'wishlist' ? 'cause' : 'post',
+    title: item.title || item.content,
+    imageUrl: item.imageUrl,
+    authorName: authorProfile?.name,
+  });
   const [isDeleting, setIsDeleting] = useState(false);
 
   const itemDate = item.createdAt?.toDate();
