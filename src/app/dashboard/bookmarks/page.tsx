@@ -29,6 +29,9 @@ interface BookmarkedItem {
   addedAt: any;
   content?: DocumentData;
   author?: DocumentData;
+  authorName?: string;
+  imageUrl?: string;
+  title?: string;
 }
 
 const useAuthorProfile = (authorId?: string) => {
