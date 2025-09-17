@@ -152,7 +152,7 @@ function PostCard({ item }: { item: FeedItem }) {
   const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
     refId: item.id,
     type: item.type === 'wishlist' ? 'cause' : 'post',
-    title: item.title || item.content,
+    title: item.title || item.content?.substring(0, 50),
     imageUrl: item.imageUrl,
     authorName: authorProfile?.name,
   });
@@ -356,7 +356,7 @@ function PostCard({ item }: { item: FeedItem }) {
           <div className="flex items-center text-muted-foreground">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleBookmark} disabled={isTogglingBookmark || !user}>
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isTogglingBookmark || !user}>
                   <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
                 </Button>
               </TooltipTrigger>
@@ -625,3 +625,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

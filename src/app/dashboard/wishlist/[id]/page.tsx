@@ -529,7 +529,7 @@ export default function WishlistDetailPage() {
             <div className="flex items-center text-muted-foreground">
                 <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleBookmark} disabled={isTogglingBookmark || !user}>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isTogglingBookmark || !user}>
                     <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
                   </Button>
                 </TooltipTrigger>
@@ -735,3 +735,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    

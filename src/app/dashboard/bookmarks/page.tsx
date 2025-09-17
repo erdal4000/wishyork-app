@@ -11,13 +11,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Trash2 } from 'lucide-react';
+import { ArrowRight, Bookmark, Heart, MessageCircle, Repeat2, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
+import { usePostInteraction } from '@/hooks/use-post-interaction';
+import { useBookmark } from '@/hooks/use-bookmark';
 
 interface BookmarkedItem {
   id: string;
@@ -52,6 +54,14 @@ const useAuthorProfile = (authorId?: string) => {
 
 function BookmarkCard({ bookmark, onRemove }: { bookmark: BookmarkedItem; onRemove: (id: string) => void }) {
     const author = useAuthorProfile(bookmark.content?.authorId);
+    const { hasLiked, isLiking, toggleLike } = usePostInteraction(bookmark.refId, bookmark.type === 'cause' ? 'wishlist' : 'post');
+    const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
+        refId: bookmark.refId,
+        type: bookmark.type,
+        title: bookmark.content?.title || bookmark.content?.content,
+        imageUrl: bookmark.content?.imageUrl,
+        authorName: author?.name,
+    });
 
     if (!bookmark.content) return null;
 
@@ -70,13 +80,36 @@ function BookmarkCard({ bookmark, onRemove }: { bookmark: BookmarkedItem; onRemo
                     {bookmark.content.createdAt && ` · ${formatDistanceToNow(bookmark.content.createdAt.toDate(), { addSuffix: true })}`}
                   </p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => onRemove(bookmark.id)}>
-                  <Trash2 className="h-5 w-5 text-destructive" />
-                </Button>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <p className="whitespace-pre-wrap">{bookmark.content.content}</p>
+                {bookmark.content.imageUrl && (
+                  <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-xl border">
+                    <Image
+                      src={bookmark.content.imageUrl}
+                      alt={`Image for post`}
+                      fill
+                      className="object-cover"
+                      data-ai-hint={bookmark.content.aiHint ?? ''}
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                    />
+                  </div>
+                )}
               </CardContent>
+               <CardFooter className="flex justify-between p-2">
+                    <div className="flex items-center text-muted-foreground">
+                        <Button variant="ghost" size="icon"><MessageCircle className="h-5 w-5" /></Button>
+                        <span className="text-sm pr-2">{bookmark.content.commentCount ?? 0}</span>
+                        <Button variant="ghost" size="icon"><Repeat2 className="h-5 w-5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={toggleLike} disabled={isLiking}>
+                            <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                        </Button>
+                        <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{bookmark.content.likes ?? 0}</span>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={toggleBookmark} disabled={isTogglingBookmark}>
+                        <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+                    </Button>
+                </CardFooter>
             </Card>
         )
     }
@@ -144,15 +177,13 @@ export default function BookmarksPage() {
       const populatedBookmarks = await Promise.all(
         bookmarksData.map(async (bookmark) => {
           try {
-            // Correctly map 'cause' to 'wishlists' and 'post' to 'posts'
             const collectionName = bookmark.type === 'cause' 
                 ? 'wishlists' 
                 : bookmark.type === 'post' 
                 ? 'posts' 
                 : null;
-
-            // Skip if the bookmark type is not supported (e.g., 'item' for now)
-            if (!collectionName) {
+            
+            if (!collectionName || !bookmark.refId) {
                 return null;
             }
 
@@ -163,15 +194,14 @@ export default function BookmarksPage() {
               bookmark.content = contentSnap.data();
               return bookmark;
             }
-            return null; // Return null if the bookmarked content doesn't exist anymore
+            return null; 
           } catch (e) {
             console.error(`Error fetching content for bookmark ${bookmark.refId}:`, e);
-            return null; // Return null on error
+            return null;
           }
         })
       );
       
-      // Filter out any null values from the array (non-existent content, unsupported types, errors)
       setBookmarks(populatedBookmarks.filter((b): b is BookmarkedItem => b !== null && b.content !== undefined));
       setLoading(false);
     }, (error) => {
@@ -196,7 +226,7 @@ export default function BookmarksPage() {
   
   const savedPosts = bookmarks.filter(b => b.type === 'post');
   const savedCauses = bookmarks.filter(b => b.type === 'cause');
-  const savedItems = bookmarks.filter(b => b.type === 'item'); // Will be empty for now
+  const savedItems = bookmarks.filter(b => b.type === 'item'); 
 
   const renderSkeleton = (count: number, type: 'post' | 'cause' | 'item') => {
     if (type === 'post') {
@@ -275,3 +305,5 @@ export default function BookmarksPage() {
     </div>
   );
 }
+
+    

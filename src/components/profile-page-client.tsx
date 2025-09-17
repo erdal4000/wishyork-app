@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -68,6 +67,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { EditProfileDialog } from './edit-profile-dialog';
+import { useBookmark } from '@/hooks/use-bookmark';
 
 // Data types
 interface UserProfile extends DocumentData {
@@ -106,6 +106,113 @@ interface Wishlist extends DocumentData {
   totalUnits: number;
 }
 
+function WishlistCard({ list, isOwnProfile, onEdit, onDelete }: { list: Wishlist, isOwnProfile: boolean, onEdit: (list: Wishlist) => void, onDelete: (id: string) => void }) {
+    const { user } = useAuth();
+    const { isBookmarked, isToggling, toggleBookmark } = useBookmark({
+      refId: list.id,
+      type: 'cause',
+      title: list.title,
+      imageUrl: list.imageUrl,
+      authorName: user?.displayName,
+    });
+    
+    const getPrivacyIcon = (privacy: string) => {
+        switch (privacy) {
+            case 'public': return <Globe className="h-4 w-4" />;
+            case 'friends': return <Users className="h-4 w-4" />;
+            case 'private': return <Lock className="h-4 w-4" />;
+            default: return null;
+        }
+    };
+
+    const getPrivacyLabel = (privacy: string) => {
+        if (!privacy) return 'Public';
+        return privacy.charAt(0).toUpperCase() + privacy.slice(1);
+    };
+
+    return (
+        <div key={list.id} className="group relative block">
+            <Link href={`/dashboard/wishlist/${list.id}`}>
+            <Card className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl">
+                <CardHeader className="relative h-48 w-full p-0">
+                <Image
+                    src={list.imageUrl}
+                    alt={list.title}
+                    data-ai-hint={list.aiHint}
+                    fill
+                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                />
+                <Badge variant="secondary" className="absolute left-3 top-3 z-10">{list.category}</Badge>
+                </CardHeader>
+                <CardContent className="p-4">
+                <h3 className="font-headline text-lg font-bold">{list.title}</h3>
+                <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    <span>{list.itemCount || 0} items</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                    {getPrivacyIcon(list.privacy)}
+                    <span>{getPrivacyLabel(list.privacy)}</span>
+                    </div>
+                </div>
+                <div className="mt-4">
+                    <div className="mb-1 flex justify-between text-sm text-muted-foreground">
+                    <span>{list.progress || 0}% complete</span>
+                    </div>
+                    <Progress value={list.progress || 0} className="h-2" />
+                </div>
+                </CardContent>
+                <Separator />
+                <div className="flex justify-between p-2 text-sm text-muted-foreground">
+                <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="px-2">
+                    <Heart className="mr-1.5 h-4 w-4" />
+                    <span className="font-medium">{list.likes || 0}</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="px-2">
+                    <MessageCircle className="mr-1.5 h-4 w-4" />
+                    <span className="font-medium">{list.comments || 0}</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="px-2" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isToggling}>
+                        <Bookmark className={`mr-1.5 h-4 w-4 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+                    <span className="font-medium">{list.saves || 0}</span>
+                    </Button>
+                </div>
+                <Button variant="ghost" size="sm" onClick={(e) => e.preventDefault()}><Repeat2 className="mr-1.5 h-4 w-4" /> Repost</Button>
+                </div>
+            </Card>
+            </Link>
+            {isOwnProfile && (<div className="absolute right-3 top-3 z-20">
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full" onClick={(e) => e.preventDefault()}><MoreHorizontal className="h-5 w-5" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
+                    <DropdownMenuItem onSelect={() => {/* Share logic here */}}><Share2 className="mr-2 h-4 w-4" /> Share</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onEdit(list)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                    <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => onDelete(list.id)} className="bg-destructive hover:bg-destructive/90">Yes, delete wishlist</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                    </AlertDialog>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </div>)}
+        </div>
+    );
+}
 
 // The Client Component now receives the initial user data as a prop.
 export function ProfilePageClient({
@@ -215,20 +322,6 @@ export function ProfilePageClient({
     return name.split(' ').map((n) => n[0]).join('');
   };
 
-  const getPrivacyIcon = (privacy: string) => {
-    switch (privacy) {
-      case 'public': return <Globe className="h-4 w-4" />;
-      case 'friends': return <Users className="h-4 w-4" />;
-      case 'private': return <Lock className="h-4 w-4" />;
-      default: return null;
-    }
-  };
-
-  const getPrivacyLabel = (privacy: string) => {
-    if (!privacy) return 'Public';
-    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
-  };
-
   const handleDeleteWishlist = async (wishlistId: string) => {
     try {
       await deleteDoc(doc(db, 'wishlists', wishlistId));
@@ -328,86 +421,13 @@ export function ProfilePageClient({
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     {wishlists.length > 0 ? (
                     wishlists.map((list) => (
-                        <div key={list.id} className="group relative block">
-                        <Link href={`/dashboard/wishlist/${list.id}`}>
-                            <Card className="w-full overflow-hidden rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl">
-                            <CardHeader className="relative h-48 w-full p-0">
-                                <Image
-                                src={list.imageUrl}
-                                alt={list.title}
-                                data-ai-hint={list.aiHint}
-                                fill
-                                className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                                />
-                                <Badge variant="secondary" className="absolute left-3 top-3 z-10">{list.category}</Badge>
-                            </CardHeader>
-                            <CardContent className="p-4">
-                                <h3 className="font-headline text-lg font-bold">{list.title}</h3>
-                                <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
-                                <div className="flex items-center gap-2">
-                                    <Package className="h-4 w-4" />
-                                    <span>{list.itemCount || 0} items</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    {getPrivacyIcon(list.privacy)}
-                                    <span>{getPrivacyLabel(list.privacy)}</span>
-                                </div>
-                                </div>
-                                <div className="mt-4">
-                                <div className="mb-1 flex justify-between text-sm text-muted-foreground">
-                                    <span>{list.progress || 0}% complete</span>
-                                </div>
-                                <Progress value={list.progress || 0} className="h-2" />
-                                </div>
-                            </CardContent>
-                            <Separator />
-                            <div className="flex justify-between p-2 text-sm text-muted-foreground">
-                                <div className="flex gap-2">
-                                <Button variant="ghost" size="sm" className="px-2">
-                                    <Heart className="mr-1.5 h-4 w-4" />
-                                    <span className="font-medium">{list.likes || 0}</span>
-                                </Button>
-                                <Button variant="ghost" size="sm" className="px-2">
-                                    <MessageCircle className="mr-1.5 h-4 w-4" />
-                                    <span className="font-medium">{list.comments || 0}</span>
-                                </Button>
-                                <Button variant="ghost" size="sm" className="px-2">
-                                    <Bookmark className="mr-1.5 h-4 w-4" />
-                                    <span className="font-medium">{list.saves || 0}</span>
-                                </Button>
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={(e) => e.preventDefault()}><Repeat2 className="mr-1.5 h-4 w-4" /> Repost</Button>
-                            </div>
-                            </Card>
-                        </Link>
-                        {isOwnProfile && (<div className="absolute right-3 top-3 z-20">
-                            <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full" onClick={(e) => e.preventDefault()}><MoreHorizontal className="h-5 w-5" /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
-                                <DropdownMenuItem onSelect={() => {}}><Share2 className="mr-2 h-4 w-4" /> Share</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setEditingWishlist(list)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteWishlist(list.id)} className="bg-destructive hover:bg-destructive/90">Yes, delete wishlist</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                                </AlertDialog>
-                            </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>)}
-                        </div>
+                        <WishlistCard 
+                            key={list.id} 
+                            list={list} 
+                            isOwnProfile={isOwnProfile} 
+                            onEdit={setEditingWishlist} 
+                            onDelete={handleDeleteWishlist} 
+                        />
                     ))
                     ) : (
                     <div className="col-span-1 flex items-center justify-center rounded-lg border-2 border-dashed py-12 text-center sm:col-span-2">
