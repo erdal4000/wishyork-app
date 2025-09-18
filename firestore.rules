@@ -10,9 +10,9 @@ service cloud.firestore {
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-
+    
     function isFollower(userId) {
-      return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.followers;
+      return exists(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid));
     }
 
     // --- COLLECTION GROUP & BROAD READ RULES ---
@@ -25,10 +25,10 @@ service cloud.firestore {
 
     match /{path=**}/wishlists/{wishlistId} {
       allow list: if isSignedIn();
-      // Allow get if public, if owner, OR if it's a friends list and the requester is a follower.
-      allow get: if resource.data.privacy == 'public' || 
-                    isOwner(resource.data.authorId) ||
-                    (resource.data.privacy == 'friends' && isFollower(resource.data.authorId));
+      allow get: if resource.data.privacy == 'public' 
+                   || isOwner(resource.data.authorId) 
+                   || (resource.data.privacy == 'friends' && isFollower(resource.data.authorId));
+
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
@@ -36,39 +36,35 @@ service cloud.firestore {
     // --- DIRECT DOCUMENT RULES ---
 
     match /users/{userId} {
-      // Allow any signed-in user to read user data.
       allow list, get: if isSignedIn();
-
-      // Allow a user to update their own document.
-      // Additionally, allow any signed-in user to modify fields related to following.
+      allow create, delete: if isOwner(userId);
       allow update: if isOwner(userId) || 
                      (isSignedIn() && 
-                      request.resource.data.diff(resource.data).affectedKeys()
-                        .hasAll(['followers', 'followersCount'])) ||
-                     (isSignedIn() &&
-                      request.resource.data.diff(resource.data).affectedKeys()
-                        .hasAll(['following', 'followingCount']));
-      
-      // Allow a user to create and delete their OWN user document.
-      allow create, delete: if isOwner(userId);
+                      (request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAll(['followers', 'followersCount']) ||
+                       request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAll(['following', 'followingCount']))
+                      );
     }
 
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data.uid);
-      // Deleting usernames is handled via a batched write in the profile update logic
       allow delete: if isSignedIn();
     }
 
     // --- SUB-COLLECTION RULES for direct access ---
 
     match /users/{userId}/bookmarks/{bookmarkId} {
-        allow read, create, delete: if isOwner(userId);
+        allow read, write: if isOwner(userId);
     }
 
     match /wishlists/{wishlistId}/items/{itemId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+      allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+      // Allow item updates by owner OR by any signed-in user if they are only reserving/unreserving
+      allow update: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId) ||
+                     (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy']));
     }
 
     match /wishlists/{wishlistId}/comments/{commentId} {
