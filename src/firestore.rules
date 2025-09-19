@@ -1,64 +1,89 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() {
-      return request.auth.uid != null;
+      return request.auth != null;
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-
-    // --- COLLECTION GROUP & BROAD READ RULES ---
-
-    match /{path=**}/posts/{postId} {
-      allow list, get: if isSignedIn();
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-    }
-
-    match /{path=**}/wishlists/{wishlistId} {
-      allow list: if isSignedIn();
-      allow get: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-    }
-
-    // --- DIRECT DOCUMENT RULES ---
-
-    match /users/{userId} {
-      allow list, get: if isSignedIn();
-      allow create, update, delete: if isOwner(userId);
+    
+    function isFollower(authorId) {
+      return exists(/databases/$(database)/documents/users/$(authorId)) && request.auth.uid in get(/databases/$(database)/documents/users/$(authorId)).data.followers;
     }
     
-    match /users/{userId}/bookmarks/{bookmarkId} {
-        // A user can read, create, and delete their own bookmarks.
-        allow read, create, delete: if isOwner(userId);
+    function isUpdatingAllowedCounters(wishlist) {
+        let allowedKeys = ['unitsFulfilled', 'progress', 'itemCount', 'totalUnits', 'likes', 'commentCount', 'saves'];
+        return request.resource.data.diff(wishlist).affectedKeys().hasOnly(allowedKeys);
+    }
+    
+    function isReservingItem() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy']);
     }
 
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      
+      match /bookmarks/{bookmarkId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
     match /usernames/{username} {
+        allow read;
+        allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+        allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isOwner(request.resource.data.uid);
-    }
-
-    // --- SUB-COLLECTION RULES for direct access ---
-
-    match /wishlists/{wishlistId}/items/{itemId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-    }
-
-    match /wishlists/{wishlistId}/comments/{commentId} {
-      allow read, create: if isSignedIn();
+      allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
+      
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isOwner(request.resource.data.authorId);
+        allow delete: if isOwner(request.resource.data.authorId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId);
+      }
     }
 
-    match /posts/{postId}/comments/{commentId} {
-      allow read, create: if isSignedIn();
-      allow update, delete: if isOwner(resource.data.authorId);
+    match /wishlists/{wishlistId} {
+      // Allow general queries for public wishlists (FIXES SEARCH)
+      allow list: if request.query.get('privacy') == 'public';
+
+      // Allow direct reads under specific privacy conditions (FIXES BOOKMARKS & PROFILE PAGES)
+      allow get: if resource.data.privacy == 'public' 
+              || isOwner(resource.data.authorId) 
+              || (resource.data.privacy == 'friends' && isFollower(resource.data.authorId));
+
+      allow create: if isOwner(request.resource.data.authorId);
+      
+      // Allow updates if owner OR if a signed-in user is updating counters (FIXES LIKE/RESERVE)
+      allow update: if isOwner(resource.data.authorId)
+              || (isSignedIn() && isUpdatingAllowedCounters(resource.data));
+
+      allow delete: if isOwner(resource.data.authorId);
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isOwner(request.resource.data.authorId);
+        allow delete: if isOwner(request.resource.data.authorId) || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+      }
+      
+      match /items/{itemId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+        // Allow updates if owner OR if a signed-in user is just reserving/unreserving (FIXES RESERVE)
+        allow update: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId)
+              || (isSignedIn() && isReservingItem());
+      }
     }
   }
 }
