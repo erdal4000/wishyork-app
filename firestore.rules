@@ -1,102 +1,99 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- HELPER FUNCTIONS ---
-
+    
+    // --- Helper Functions ---
     function isSignedIn() {
-      return request.auth != null && request.auth.uid != null;
+      return request.auth != null;
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
     
-    function isFollower(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid));
-    }
-    
-    function isUpdatingAllowedWishlistCounters() {
-      let allowedKeys = ['unitsFulfilled', 'progress', 'itemCount', 'totalUnits', 'likes', 'commentCount', 'saves'];
-      return isSignedIn() && request.resource.data.keys().hasOnly(allowedKeys);
-    }
-    
-    function isReservationUpdate() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy']);
+    // CORRECTED: 'in' operator must be used to check for presence in an array.
+    function isFollowing(profileUserId) {
+      return profileUserId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.following;
     }
 
-    // --- COLLECTION GROUP & BROAD READ RULES ---
-
-    match /{path=**}/posts/{postId} {
-      allow list, get: if isSignedIn();
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-    }
-    
-    // --- DIRECT DOCUMENT RULES ---
-    
+    // --- Collection: users ---
     match /users/{userId} {
-      allow list, get: if isSignedIn();
-      allow create, delete: if isOwner(userId);
-      allow update: if isOwner(userId) || 
-                     (isSignedIn() && 
-                      request.resource.data.diff(resource.data).affectedKeys()
-                        .hasAll(['followers', 'followersCount'])) ||
-                     (isSignedIn() && 
-                      request.resource.data.diff(resource.data).affectedKeys()
-                        .hasAll(['following', 'followingCount']));
+      allow read: if true;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false; // Users should not be deletable for now
+      
+      match /bookmarks/{bookmarkId} {
+        allow read, write, delete: if isOwner(userId);
+      }
     }
 
+    // --- Collection: usernames (for uniqueness check) ---
     match /usernames/{username} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(request.resource.data.uid);
-      allow delete: if isSignedIn(); // Deletion is handled by a batch write in profile update.
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow delete: if isOwner(get(/databases/$(database)/documents/usernames/$(username)).data.uid);
     }
-    
-    match /wishlists/{wishlistId} {
-      allow list: if isSignedIn(); // 'list' queries are filtered on the client-side.
-      allow get: if resource.data.privacy == 'public' || 
-                    isOwner(resource.data.authorId) ||
-                    (resource.data.privacy == 'friends' && isFollower(resource.data.authorId));
 
-      allow create: if isOwner(request.resource.data.authorId);
+    // --- Collection Group: wishlists ---
+    match /{path=**}/wishlists/{wishlistId} {
+      // General read rule for direct access to a document.
+      // This is what makes profile pages, home feed, etc. work.
+      allow get: if 
+          resource.data.privacy == 'public' || 
+          isOwner(resource.data.authorId) ||
+          (resource.data.privacy == 'friends' && isFollowing(resource.data.authorId));
+
+      // General list rule for queries (like global search).
+      allow list: if isSignedIn() && request.query.offset == 0 && request.query.limit <= 10;
+      
+      allow create: if isSignedIn();
+
+      allow update: if 
+          isOwner(resource.data.authorId) || 
+          (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'saves']));
+          
       allow delete: if isOwner(resource.data.authorId);
 
-      // A user can update a wishlist if:
-      // 1. They are the owner.
-      // OR
-      // 2. They are signed in AND they are only changing the allowed counter fields
-      //    (e.g., as part of marking an item purchased).
-      allow update: if isOwner(resource.data.authorId) || isUpdatingAllowedWishlistCounters();
+      // --- Subcollection: items ---
+      match /items/{itemId} {
+        allow read, list: if 
+          get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' ||
+          isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId) ||
+          (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'friends' && isFollowing(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId));
+        
+        allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+        
+        allow update: if 
+            isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId) ||
+            (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy']));
+      }
+
+      // --- Subcollection: comments ---
+      match /comments/{commentId} {
+        allow read, list: if 
+          get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' ||
+          isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId) ||
+          (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'friends' && isFollowing(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId));
+
+        allow create: if isSignedIn();
+        allow update, delete: if isOwner(resource.data.authorId);
+      }
     }
     
-    // --- SUB-COLLECTION RULES for direct access ---
+     // --- Collection Group: posts ---
+    match /{path=**}/posts/{postId} {
+        allow read, list: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(request.resource.data.authorId);
+        allow update, delete: if isSignedIn() && isOwner(resource.data.authorId);
 
-    match /users/{userId}/bookmarks/{bookmarkId} {
-        allow read, write: if isOwner(userId);
-    }
-    
-    match /wishlists/{wishlistId}/items/{itemId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-      // Allow update if user is the owner OR if they are just reserving/unreserving the item.
-      allow update: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId) || 
-                       (isSignedIn() && isReservationUpdate());
-    }
-
-    match /posts/{postId}/comments/{commentId} {
-      allow read, create: if isSignedIn();
-      allow update, delete: if isOwner(resource.data.authorId);
-    }
-
-    match /wishlists/{wishlistId}/comments/{commentId} {
-      allow read, create: if isSignedIn();
-      allow update, delete: if isOwner(resource.data.authorId);
-    }
-    
-    match /users/{userId}/followers/{followerId} {
-        allow read, write: if isOwner(userId) || isOwner(followerId);
+        match /comments/{commentId} {
+            allow read, list: if isSignedIn();
+            allow create: if isSignedIn();
+            allow update, delete: if isOwner(resource.data.authorId);
+        }
     }
   }
 }
