@@ -76,9 +76,9 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
 
     return wishlists;
   } catch (error) {
-    console.error("Error in getPublicWishlists (explore-causes page):", error);
-    // Return an empty array to prevent the page from crashing.
-    // The error will be logged on the server.
+    console.error("CRITICAL: getPublicWishlists (explore-causes page) fonksiyonunda bir hata oluştu:", error);
+    // Hata durumunda sayfanın donmasını engellemek için boş bir dizi döndür.
+    // Bu, terminalde hatayı görmemizi sağlar.
     return [];
   }
 }
