@@ -10,22 +10,6 @@
       ]
     },
     {
-      "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "authorId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "privacy", "order": "ASCENDING" },
-        { "fieldPath": "title_lowercase", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
@@ -36,8 +20,8 @@
       "collectionGroup": "wishlists",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "privacy", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        { "fieldPath": "authorId", "order": "ASCENDING" },
+        { "fieldPath": "privacy", "order": "ASCENDING" }
       ]
     },
     {
@@ -45,7 +29,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "authorId", "order": "ASCENDING" },
-        { "fieldPath": "privacy", "order": "ASCENDING" }
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wishlists",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "authorId", "order": "ASCENDING" },
+        { "fieldPath": "privacy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+     {
+      "collectionGroup": "wishlists",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "privacy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
   ],
