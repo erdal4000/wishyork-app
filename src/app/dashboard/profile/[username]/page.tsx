@@ -22,7 +22,7 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
   if (!username) return null;
 
   try {
-    const adminApp = await getAdminApp();
+    const adminApp = getAdminApp();
     const adminDb = getFirestore(adminApp);
     
     const usersRef = adminDb.collection('users');
@@ -54,9 +54,10 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
     return profileData;
 
   } catch (error) {
-      console.error("Error fetching user by username on server:", error);
-      // We throw the original error to see the real cause.
-      throw error;
+      console.error("Error in getUserByUsername:", error);
+      // We return null to prevent the page from hanging, and the `notFound()`
+      // function will be called below, which is a safe fallback.
+      return null;
   }
 }
 
@@ -81,5 +82,3 @@ export default async function ProfilePage({
   // This separates the server-side data fetching from the client-side interactivity.
   return <ProfilePageClient initialProfileUser={profileUser} />;
 }
-
-    

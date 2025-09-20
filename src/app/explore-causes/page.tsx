@@ -33,47 +33,54 @@ interface Wishlist {
 }
 
 async function getPublicWishlists(): Promise<Wishlist[]> {
-  const adminApp = getAdminApp();
-  const adminDb = getFirestore(adminApp);
+  try {
+    const adminApp = getAdminApp();
+    const adminDb = getFirestore(adminApp);
 
-  const wishlistsRef = adminDb.collection('wishlists');
-  const q = wishlistsRef
-    .where('privacy', '==', 'public')
-    .orderBy('createdAt', 'desc')
-    .limit(12);
+    const wishlistsRef = adminDb.collection('wishlists');
+    const q = wishlistsRef
+      .where('privacy', '==', 'public')
+      .orderBy('createdAt', 'desc')
+      .limit(12);
 
-  const querySnapshot = await q.get();
+    const querySnapshot = await q.get();
 
-  if (querySnapshot.empty) {
+    if (querySnapshot.empty) {
+      return [];
+    }
+
+    const authorIds = [...new Set(querySnapshot.docs.map(doc => doc.data().authorId))];
+    if (authorIds.length === 0) {
+        return [];
+    }
+
+    const authorDocsSnapshot = await adminDb.collection('users').where('uid', 'in', authorIds).get();
+    const authorMap = new Map(authorDocsSnapshot.docs.map(doc => [doc.id, doc.data()]));
+
+    const wishlists = querySnapshot.docs.map((doc) => {
+      const data = doc.data();
+      const authorData = authorMap.get(data.authorId);
+      return {
+        id: doc.id,
+        title: data.title,
+        authorId: data.authorId,
+        authorUsername: data.authorUsername,
+        authorName: authorData?.name || data.authorUsername || 'Unknown User',
+        category: data.category,
+        progress: data.progress || 0,
+        imageUrl: data.imageUrl,
+        aiHint: data.aiHint,
+        createdAt: data.createdAt,
+      } as Wishlist;
+    });
+
+    return wishlists;
+  } catch (error) {
+    console.error("Error in getPublicWishlists (explore-causes page):", error);
+    // Return an empty array to prevent the page from crashing.
+    // The error will be logged on the server.
     return [];
   }
-
-  const authorIds = [...new Set(querySnapshot.docs.map(doc => doc.data().authorId))];
-  if (authorIds.length === 0) {
-      return [];
-  }
-
-  const authorDocsSnapshot = await adminDb.collection('users').where('uid', 'in', authorIds).get();
-  const authorMap = new Map(authorDocsSnapshot.docs.map(doc => [doc.id, doc.data()]));
-
-  const wishlists = querySnapshot.docs.map((doc) => {
-    const data = doc.data();
-    const authorData = authorMap.get(data.authorId);
-    return {
-      id: doc.id,
-      title: data.title,
-      authorId: data.authorId,
-      authorUsername: data.authorUsername,
-      authorName: authorData?.name || data.authorUsername || 'Unknown User',
-      category: data.category,
-      progress: data.progress || 0,
-      imageUrl: data.imageUrl,
-      aiHint: data.aiHint,
-      createdAt: data.createdAt,
-    } as Wishlist;
-  });
-
-  return wishlists;
 }
 
 

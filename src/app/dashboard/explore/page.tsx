@@ -32,6 +32,7 @@ interface Wishlist {
 
 // This function is now simplified to ensure Firestore throws a visible error for a missing index.
 async function getPublicWishlists(): Promise<Wishlist[]> {
+  try {
     const adminApp = getAdminApp();
     const adminDb = getFirestore(adminApp);
 
@@ -74,6 +75,12 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
     });
 
     return wishlists;
+  } catch (error) {
+    console.error("Error in getPublicWishlists:", error);
+    // Return an empty array to prevent the page from crashing.
+    // The error will be logged on the server.
+    return [];
+  }
 }
 
 export default async function DashboardExplorePage() {
