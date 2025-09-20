@@ -76,7 +76,7 @@ async function getPublicWishlists(): Promise<Wishlist[]> {
 
     return wishlists;
   } catch (error) {
-    console.error("CRITICAL: getPublicWishlists fonksiyonunda bir hata oluştu:", error);
+    console.error("CRITICAL: getPublicWishlists (dashboard/explore) fonksiyonunda bir hata oluştu:", error);
     // Hata durumunda sayfanın donmasını engellemek için boş bir dizi döndür.
     // Bu, terminalde hatayı görmemizi sağlar.
     return [];

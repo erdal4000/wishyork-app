@@ -54,7 +54,7 @@ async function getUserByUsername(username: string): Promise<UserProfile | null> 
     return profileData;
 
   } catch (error) {
-      console.error("Error in getUserByUsername:", error);
+      console.error("CRITICAL: getUserByUsername fonksiyonunda bir hata oluştu:", error);
       // We return null to prevent the page from hanging, and the `notFound()`
       // function will be called below, which is a safe fallback.
       return null;
