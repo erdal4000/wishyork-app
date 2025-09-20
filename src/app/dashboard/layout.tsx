@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -98,6 +99,7 @@ export default function DashboardLayout({
 }) {
   const { user, loading } = useAuth();
   const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = React.useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -116,20 +118,31 @@ export default function DashboardLayout({
         } else {
           setUserProfile(null);
         }
+        setProfileLoading(false);
+      }, () => {
+        setProfileLoading(false);
       });
       return () => unsubscribe();
+    } else if (!loading) {
+        setProfileLoading(false);
     }
-  }, [user]);
+  }, [user, loading]);
 
-  if (loading || !user) {
+  if (loading || profileLoading) {
     return <FullPageLoader />;
+  }
+  
+  if (!user) {
+      // This case should be caught by the redirect effect,
+      // but as a fallback, we show a loader to prevent rendering children without a user.
+      return <FullPageLoader />;
   }
 
   const userProfilePath = userProfile?.username ? `/dashboard/profile/${userProfile.username}` : '#';
 
   const handleLogout = async () => {
     await auth.signOut();
-    // No need to push, AuthProvider will handle redirect via useEffect
+    // AuthProvider will handle redirect
   };
   
   const displayName = userProfile?.name || user.displayName;

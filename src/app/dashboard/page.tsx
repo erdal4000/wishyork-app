@@ -518,9 +518,9 @@ export default function DashboardPage() {
             setLoading(false);
         }
   
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
-        setError("Failed to load feed. Please try again later.");
+        setError("Failed to load feed. Please try again later. " + err.message);
         setLoading(false);
       }
     };
