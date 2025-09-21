@@ -20,6 +20,7 @@ import {
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { ScrollToTop } from '@/components/ui/scroll-to-top';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 export default function Home() {
   const features = [
@@ -91,7 +92,7 @@ export default function Home() {
           </div>
           <div className="relative h-64 w-full overflow-hidden rounded-2xl shadow-2xl md:h-auto md:aspect-square">
             <Image
-              src="https://picsum.photos/800/800"
+              src={placeholderImages.home.hero}
               alt="Community of people celebrating"
               data-ai-hint="community celebration"
               fill
@@ -189,7 +190,7 @@ export default function Home() {
               </div>
               <div className="relative h-64 w-full overflow-hidden rounded-xl">
                 <Image
-                  src="https://picsum.photos/600/400"
+                  src={placeholderImages.home.aiFeature}
                   alt="AI suggestions"
                   data-ai-hint="futuristic technology"
                   fill

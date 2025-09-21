@@ -7,6 +7,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { OAuth2Client } from 'google-auth-library';
 import { cookies } from 'next/headers';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 export async function GET(request: NextRequest) {
   let adminApp;
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
 
       const batch = adminDb.batch();
 
-      const photoURL = picture || `https://picsum.photos/seed/${uid}/200/200`;
+      const photoURL = picture || placeholderImages.profile.avatar.replace('{{id}}', uid);
 
       batch.set(userDocRef, {
         uid: uid,
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
         username_lowercase: usernameLowercase,
         createdAt: Timestamp.now(),
         photoURL: photoURL,
+        coverURL: placeholderImages.profile.cover.replace('{{id}}', uid),
       });
 
       batch.set(usernameDocRef, { uid: uid });

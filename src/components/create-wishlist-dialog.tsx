@@ -40,6 +40,7 @@ import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/fires
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Label } from "@/components/ui/label";
+import placeholderImages from '@/lib/placeholder-images.json';
 
 const formSchema = z.object({
   wishlistName: z.string().min(1, "Wishlist name is required."),
@@ -83,6 +84,8 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
         const userData = userDoc.data();
         const authorUsername = userData?.username || 'anonymous';
 
+        const wishlistSeed = values.wishlistName.replace(/\s/g, '-');
+
         await addDoc(collection(db, 'wishlists'), {
             authorId: user.uid,
             authorUsername: authorUsername,
@@ -94,7 +97,7 @@ export function CreateWishlistDialog({ children }: { children: React.ReactNode }
             createdAt: serverTimestamp(),
             // Default values for new wishlists
             itemCount: 0,
-            imageUrl: `https://picsum.photos/seed/${values.wishlistName.replace(/\s/g, '-')}/1200/400`,
+            imageUrl: placeholderImages.wishlist.cover.replace('{{seed}}', wishlistSeed),
             aiHint: values.category.toLowerCase(),
             progress: 0,
             unitsFulfilled: 0,

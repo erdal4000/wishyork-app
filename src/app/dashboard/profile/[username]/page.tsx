@@ -71,6 +71,7 @@ import { useBookmark } from '@/hooks/use-bookmark';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { getInitials } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 interface UserProfile extends DocumentData {
   uid: string;
@@ -433,8 +434,8 @@ export default function ProfilePage() {
         }
     };
 
-    const profilePhoto = profileUser.photoURL || `https://picsum.photos/seed/${profileUser.uid}/200/200`;
-    const coverPhoto = profileUser.coverURL || `https://picsum.photos/seed/${profileUser.uid}/1200/400`;
+    const profilePhoto = profileUser.photoURL || placeholderImages.profile.avatar.replace('{{id}}', profileUser.uid);
+    const coverPhoto = profileUser.coverURL || placeholderImages.profile.cover.replace('{{id}}', profileUser.uid);
 
     const FollowButton = () => {
         if (isTogglingFollow) {
@@ -555,5 +556,3 @@ export default function ProfilePage() {
         </div>
     );
 }
-
-    

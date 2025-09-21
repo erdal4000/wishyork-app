@@ -35,6 +35,7 @@ import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from "firebase/fires
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
+import placeholderImages from '@/lib/placeholder-images.json';
 
 
 const passwordChecks = {
@@ -204,7 +205,7 @@ export function IndividualSignupForm() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      const photoURL = `https://picsum.photos/seed/${user.uid}/200/200`;
+      const photoURL = placeholderImages.profile.avatar.replace('{{id}}', user.uid);
       
       await updateProfile(user, { 
           displayName: name,
@@ -222,6 +223,7 @@ export function IndividualSignupForm() {
           username_lowercase: formattedUsername,
           createdAt: serverTimestamp(),
           photoURL: photoURL,
+          coverURL: placeholderImages.profile.cover.replace('{{id}}', user.uid),
           followers: [],
           following: [],
           followersCount: 0,
@@ -494,9 +496,3 @@ export function IndividualSignupForm() {
     </Form>
   );
 }
-
-    
-
-    
-
-    

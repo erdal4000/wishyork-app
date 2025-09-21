@@ -32,6 +32,7 @@ import {
 import debounce from 'lodash.debounce';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/lib/utils';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 interface SearchResult {
   users: DocumentData[];
@@ -176,7 +177,7 @@ export function GlobalSearch() {
                     {results.users.map((user) => (
                       <CommandItem key={user.id} onSelect={() => handleSelect(`/dashboard/profile/${user.username}`)} value={`user-${user.username}`}>
                         <Avatar className="mr-2 h-6 w-6">
-                          <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`} alt={user.name} />
+                          <AvatarImage src={user.photoURL || placeholderImages.profile.avatar.replace('{{id}}', user.uid)} alt={user.name} />
                           <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                         </Avatar>
                         <span>{user.name}</span>

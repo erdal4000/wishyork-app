@@ -54,6 +54,7 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 const formSchema = z.object({
   fetchUrl: z.string().url("Please enter a valid URL.").optional().or(z.literal('')),
@@ -212,7 +213,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                 status: 'available',
                 addedAt: serverTimestamp(),
                 addedBy: user.uid,
-                imageUrl: imageUrl || `https://picsum.photos/seed/${values.itemName.replace(/\s/g, '-')}/200/200`,
+                imageUrl: imageUrl || placeholderImages.item.default.replace('{{seed}}', values.itemName.replace(/\s/g, '-')),
                 aiHint: values.itemName.split(' ').slice(0,2).join(' '),
             };
     

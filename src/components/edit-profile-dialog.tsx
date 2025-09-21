@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -38,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { Progress } from './ui/progress';
 import { Label } from './ui/label';
+import placeholderImages from '@/lib/placeholder-images.json';
 
 interface EditProfileDialogProps {
   open: boolean;
@@ -145,8 +147,8 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
             bio: data.bio || '',
           });
           setOriginalUsername(data.username || '');
-          setPhotoUrl(data.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`);
-          setCoverUrl(data.coverURL || `https://picsum.photos/seed/${user.uid}/1200/400`);
+          setPhotoUrl(data.photoURL || placeholderImages.profile.avatar.replace('{{id}}', user.uid));
+          setCoverUrl(data.coverURL || placeholderImages.profile.cover.replace('{{id}}', user.uid));
         }
         setLoadingData(false);
       });
@@ -176,13 +178,13 @@ export function EditProfileDialog({ open, onOpenChange, onSuccess }: EditProfile
     if (!user) return;
     const newSeed = Date.now(); // To get a new random image
     if (type === 'avatar') {
-        setPhotoUrl(`https://picsum.photos/seed/${newSeed}/200/200`);
+        setPhotoUrl(placeholderImages.profile.avatar.replace('{{id}}', `${user.uid}-${newSeed}`));
         avatarUpload.reset();
     } else {
-        setCoverUrl(`https://picsum.photos/seed/${newSeed}/1200/400`);
+        setCoverUrl(placeholderImages.profile.cover.replace('{{id}}', `${user.uid}-${newSeed}`));
         coverUpload.reset();
     }
-    toast({ title: 'Image Removed', description: 'Your image will be reset to a default image upon saving.' });
+    toast({ title: 'Image Removed', description: 'A default image will be used upon saving.' });
   };
 
   const handleProfileSubmit = async (values: ProfileFormData) => {

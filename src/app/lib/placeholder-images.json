@@ -1,0 +1,16 @@
+{
+  "profile": {
+    "avatar": "https://picsum.photos/seed/{{id}}/200/200",
+    "cover": "https://picsum.photos/seed/{{id}}/1200/400"
+  },
+  "wishlist": {
+    "cover": "https://picsum.photos/seed/{{seed}}/1200/400"
+  },
+  "item": {
+    "default": "https://picsum.photos/seed/{{seed}}/200/200"
+  },
+  "home": {
+    "hero": "https://picsum.photos/seed/home-hero/800/800",
+    "aiFeature": "https://picsum.photos/seed/ai-feature/600/400"
+  }
+}
