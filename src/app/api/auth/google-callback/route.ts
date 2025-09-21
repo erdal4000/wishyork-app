@@ -106,6 +106,10 @@ export async function GET(request: NextRequest) {
         createdAt: Timestamp.now(),
         photoURL: photoURL,
         coverURL: placeholderImages.profile.cover.replace('{{id}}', uid),
+        followers: [],
+        following: [],
+        followersCount: 0,
+        followingCount: 0,
       });
 
       batch.set(usernameDocRef, { uid: uid });

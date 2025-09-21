@@ -318,7 +318,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                 <div className="relative h-40 w-full rounded-lg border-2 border-dashed flex items-center justify-center bg-muted/50">
                     {imageUrl ? (
                         <>
-                           <Image src={imageUrl} alt="Item image preview" layout="fill" objectFit="contain" className="rounded-lg p-2" />
+                           <Image src={imageUrl} alt="Item image preview" fill objectFit="contain" className="rounded-lg p-2" />
                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={handleRemoveImage} disabled={isBusy}>
                                 <XCircle className="h-4 w-4" />
                            </Button>

@@ -19,7 +19,10 @@ export function WishlistAuthor({ authorId }: { authorId: string }) {
   const [loading, setLoading] = useState(!authorCache[authorId]);
 
   useEffect(() => {
-    if (!authorId) return;
+    if (!authorId) {
+        setLoading(false);
+        return;
+    };
 
     if (authorCache[authorId]) {
       setAuthor(authorCache[authorId]);
@@ -29,14 +32,19 @@ export function WishlistAuthor({ authorId }: { authorId: string }) {
 
     const fetchAuthor = async () => {
       setLoading(true);
-      const userDocRef = doc(db, 'users', authorId);
-      const docSnap = await getDoc(userDocRef);
+      try {
+        const userDocRef = doc(db, 'users', authorId);
+        const docSnap = await getDoc(userDocRef);
 
-      if (docSnap.exists()) {
-        const authorData = docSnap.data() as AuthorProfile;
-        authorCache[authorId] = authorData; // Cache the result
-        setAuthor(authorData);
-      } else {
+        if (docSnap.exists()) {
+            const authorData = docSnap.data() as AuthorProfile;
+            authorCache[authorId] = authorData; // Cache the result
+            setAuthor(authorData);
+        } else {
+            setAuthor(null);
+        }
+      } catch (error) {
+        console.error("Error fetching author:", error);
         setAuthor(null);
       }
       setLoading(false);
@@ -51,7 +59,7 @@ export function WishlistAuthor({ authorId }: { authorId: string }) {
 
   if (!author) {
     return (
-      <p className="mb-4 text-sm text-muted-foreground">by an unknown author</p>
+      <p className="mb-4 text-sm text-muted-foreground">by an unknown user</p>
     );
   }
 
