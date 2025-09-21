@@ -49,7 +49,7 @@ import { Progress } from '@/components/ui/progress';
 import { CreateWishlistDialog } from '@/components/create-wishlist-dialog';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, DocumentData, Timestamp, deleteDoc, doc, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, DocumentData, Timestamp, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { EditWishlistDialog } from '@/components/edit-wishlist-dialog';
@@ -264,24 +264,20 @@ export default function WishlistPage() {
     };
 
     setLoading(true);
-    const q = query(collection(db, "wishlists"), where("authorId", "==", user.uid));
+    const q = query(
+        collection(db, "wishlists"), 
+        where("authorId", "==", user.uid),
+        orderBy("createdAt", "desc")
+    );
     
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const listsPromises = querySnapshot.docs.map(async (doc) => {
-            const listData = { id: doc.id, ...doc.data() } as Wishlist;
-            const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-            try {
-                const itemsSnapshot = await getCountFromServer(itemsColRef);
-                listData.itemCount = itemsSnapshot.data().count;
-            } catch (e) {
-                console.warn(`Could not get item count for wishlist ${doc.id}`, e);
-                listData.itemCount = listData.itemCount || 0;
-            }
-            return listData;
-        });
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const lists = querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data(),
+            itemCount: doc.data().itemCount || 0 // Directly use itemCount from the document
+        } as Wishlist));
 
-        const lists = await Promise.all(listsPromises);
-        setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
+        setWishlists(lists);
         setLoading(false);
     }, (error) => {
         console.error("Error fetching wishlists: ", error);
