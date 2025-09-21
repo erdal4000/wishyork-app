@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -273,8 +272,7 @@ export default function WishlistPage() {
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const lists = querySnapshot.docs.map(doc => ({ 
             id: doc.id, 
-            ...doc.data(),
-            itemCount: doc.data().itemCount || 0 // Directly use itemCount from the document
+            ...doc.data()
         } as Wishlist));
 
         setWishlists(lists);
@@ -351,5 +349,3 @@ export default function WishlistPage() {
     </div>
   );
 }
-
-    

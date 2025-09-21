@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -423,6 +422,7 @@ export default function DashboardPage() {
         const userData = userDoc.data();
         const following = userData.following || [];
         // Query for posts from the user and the people they follow.
+        // We limit to 10 authors in an 'in' query as a Firestore best practice.
         const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30);
   
         if (authorIdsToQuery.length === 0) {
