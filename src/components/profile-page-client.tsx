@@ -16,6 +16,7 @@ import {
   deleteDoc,
   doc,
   Query,
+  limit,
 } from 'firebase/firestore';
 import { useFollow } from '@/hooks/use-follow';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -68,6 +69,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { EditProfileDialog } from './edit-profile-dialog';
 import { useBookmark } from '@/hooks/use-bookmark';
+import { usePostInteraction } from '@/hooks/use-post-interaction';
+import { getInitials } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
 
 // Data types
 interface UserProfile extends DocumentData {
@@ -83,10 +87,13 @@ interface UserProfile extends DocumentData {
 
 interface Post extends DocumentData {
   id: string;
+  authorId: string;
   content: string;
   imageUrl: string | null;
   aiHint: string | null;
   createdAt: any;
+  likes: number;
+  commentCount: number;
 }
 
 interface Wishlist extends DocumentData {
@@ -99,12 +106,80 @@ interface Wishlist extends DocumentData {
   itemCount: number;
   privacy: 'public' | 'private' | 'friends';
   likes: number;
-  comments: number;
+  commentCount: number;
   saves: number;
   createdAt: any;
   unitsFulfilled: number;
   totalUnits: number;
 }
+
+function PostCard({ item, author }: { item: Post, author: UserProfile }) {
+    const { user } = useAuth();
+    const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, 'post');
+    const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
+      refId: item.id,
+      type: 'post',
+      title: item.content?.substring(0, 50),
+      imageUrl: item.imageUrl,
+      authorName: author.name,
+    });
+  
+    const itemDate = item.createdAt?.toDate();
+    const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
+  
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-4 p-4">
+          <Avatar>
+            <AvatarImage src={author.photoURL} alt={author.name} />
+            <AvatarFallback>{getInitials(author.name)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="font-bold">{author.name}</p>
+            <p className="text-sm text-muted-foreground">
+              <Link href={`/dashboard/profile/${author.username}`}>@{author.username}</Link> · {timeAgo}
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <p className="whitespace-pre-wrap">{item.content}</p>
+          {item.imageUrl && (
+            <Link href={`/dashboard/post/${item.id}`} className="mt-4 block">
+              <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-xl border">
+                <Image
+                  src={item.imageUrl}
+                  alt={`Image for post`}
+                  fill
+                  className="object-cover"
+                  data-ai-hint={item.aiHint ?? ''}
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                />
+              </div>
+            </Link>
+          )}
+        </CardContent>
+        <CardFooter className="flex justify-between p-2">
+            <div className="flex items-center text-muted-foreground">
+                <Button variant="ghost" size="icon"><MessageCircle className="h-5 w-5" /></Button>
+                <span className="text-sm pr-2">{item.commentCount ?? 0}</span>
+                <Button variant="ghost" size="icon"><Repeat2 className="h-5 w-5" /></Button>
+                <Button variant="ghost" size="icon" onClick={toggleLike} disabled={isLiking}>
+                    <Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} />
+                </Button>
+                <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{item.likes ?? 0}</span>
+            </div>
+            <div className="flex items-center text-muted-foreground">
+              <Button variant="ghost" size="icon" onClick={toggleBookmark} disabled={isTogglingBookmark}>
+                  <Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
+              </Button>
+              <Button variant="ghost" size="icon">
+                  <Share2 className="h-5 w-5" />
+              </Button>
+            </div>
+        </CardFooter>
+      </Card>
+    );
+  }
 
 function WishlistCard({ list, isOwnProfile, onEdit, onDelete }: { list: Wishlist, isOwnProfile: boolean, onEdit: (list: Wishlist) => void, onDelete: (id: string) => void }) {
     const { user } = useAuth();
@@ -173,14 +248,14 @@ function WishlistCard({ list, isOwnProfile, onEdit, onDelete }: { list: Wishlist
                     </Button>
                     <Button variant="ghost" size="sm" className="px-2">
                     <MessageCircle className="mr-1.5 h-4 w-4" />
-                    <span className="font-medium">{list.comments || 0}</span>
+                    <span className="font-medium">{list.commentCount || 0}</span>
                     </Button>
                     <Button variant="ghost" size="sm" className="px-2" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isToggling}>
                         <Bookmark className={`mr-1.5 h-4 w-4 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} />
                     <span className="font-medium">{list.saves || 0}</span>
                     </Button>
                 </div>
-                <Button variant="ghost" size="sm" onClick={(e) => e.preventDefault()}><Repeat2 className="mr-1.5 h-4 w-4" /> Repost</Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); }}><Repeat2 className="mr-1.5 h-4 w-4" /> Repost</Button>
                 </div>
             </Card>
             </Link>
@@ -238,6 +313,7 @@ export function ProfilePageClient({
 
     setLoadingExtras(true);
     
+    // --- Live User Profile Updates ---
     const userDocRef = doc(db, "users", profileUser.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
         if(doc.exists()){
@@ -255,51 +331,37 @@ export function ProfilePageClient({
         }
     });
     
-    // Base wishlists query
-    let wishlistsQuery: Query<DocumentData> = query(
-      collection(db, 'wishlists'),
-      where('authorId', '==', profileUser.uid)
-    );
+    // --- Wishlists Query ---
+    let wishlistsQuery: Query<DocumentData>;
+    const baseWishlistsQuery = query(collection(db, 'wishlists'), where('authorId', '==', profileUser.uid));
 
-    // Dynamically adjust privacy filter based on ownership and follow status
-    if (!isOwnProfile) {
-        if (isFollowing) {
-            // If following, show public AND friends lists
-            wishlistsQuery = query(wishlistsQuery, where('privacy', 'in', ['public', 'friends']));
-        } else {
-            // If not following, show only public lists
-            wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
-        }
+    if (isOwnProfile) {
+        wishlistsQuery = baseWishlistsQuery;
+    } else {
+        wishlistsQuery = query(baseWishlistsQuery, where('privacy', '==', 'public'));
+        // In a real app, you might add `where('privacy', 'in', ['public', 'friends'])` if `isFollowing`
     }
-    // If it's the own profile, no privacy filter is added, so all are shown.
-
-    const unsubscribeWishlists = onSnapshot(
-      wishlistsQuery,
-      async (snapshot) => {
+    
+    const unsubscribeWishlists = onSnapshot(wishlistsQuery, async (snapshot) => {
         const listsPromises = snapshot.docs.map(async (doc) => {
           const listData = { id: doc.id, ...doc.data() } as Wishlist;
-          const itemsColRef = collection(db, 'wishlists', doc.id, 'items');
-          const itemsSnapshot = await getCountFromServer(itemsColRef);
-          listData.itemCount = itemsSnapshot.data().count;
+          // You might not need to count items here if it's already on the wishlist doc
+          listData.itemCount = listData.itemCount || 0; 
           return listData;
         });
         const lists = await Promise.all(listsPromises);
-        setWishlists(
-          lists.sort(
-            (a, b) =>
-              (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)
-          )
-        );
+        setWishlists(lists.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
       }, (error) => {
         console.error("Error fetching wishlists:", error);
       }
     );
 
-    // Posts Fetching
+    // --- Posts Query ---
     const postsQuery = query(
       collection(db, 'posts'),
       where('authorId', '==', profileUser.uid),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(20)
     );
     const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
       const postsData = snapshot.docs.map(
@@ -317,17 +379,12 @@ export function ProfilePageClient({
       unsubscribeWishlists();
       unsubscribePosts();
     };
-  }, [profileUser.uid, isOwnProfile, isFollowing]);
+  }, [profileUser.uid, isOwnProfile]);
 
 
   if (!profileUser) {
     return notFound();
   }
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name.split(' ').map((n) => n[0]).join('');
-  };
 
   const handleDeleteWishlist = async (wishlistId: string) => {
     try {
@@ -356,8 +413,6 @@ export function ProfilePageClient({
     return <Button onClick={toggleFollow}><UserPlus className="mr-2 h-4 w-4" /> Follow</Button>;
   };
   
-  // No need for separate visibleWishlists, the query handles it now.
-
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
@@ -446,25 +501,9 @@ export function ProfilePageClient({
                 <TabsContent value="posts" className="mt-6">
                 <div className="space-y-6">
                     {posts.length > 0 ? (
-                    posts.map((post) => (
-                        <Card key={post.id}>
-                        <CardContent className="p-4">
-                            <p className="mb-4 whitespace-pre-wrap text-sm">{post.content}</p>
-                            {post.imageUrl && (
-                            <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-                                <Image
-                                src={post.imageUrl}
-                                alt="Post image"
-                                fill
-                                className="object-cover"
-                                data-ai-hint={post.aiHint ?? ''}
-                                sizes="(max-width: 768px) 100vw, 33vw"
-                                />
-                            </div>
-                            )}
-                        </CardContent>
-                        </Card>
-                    ))
+                        posts.map((post) => (
+                            <PostCard key={post.id} item={post} author={profileUser} />
+                        ))
                     ) : (
                     <div className="flex items-center justify-center rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
                         <p>{isOwnProfile ? "You haven't made any posts yet." : "This user hasn't made any posts yet."}</p>
@@ -492,3 +531,5 @@ export function ProfilePageClient({
     </div>
   );
 }
+
+    

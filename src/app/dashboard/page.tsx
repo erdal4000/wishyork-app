@@ -46,17 +46,13 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
 import { useBookmark } from '@/hooks/use-bookmark';
 
+// Simplified FeedItem to only represent posts for the main feed
 interface FeedItem extends DocumentData {
   id: string;
-  type: 'post' | 'wishlist';
+  type: 'post'; // Only posts will be in the main feed for now
   authorId: string;
   createdAt: Timestamp;
   content?: string;
-  title?: string;
-  category?: string;
-  privacy?: 'public' | 'private' | 'friends';
-  progress?: number;
-  itemCount?: number;
   imageUrl: string | null;
   aiHint: string | null;
   likes: number;
@@ -130,20 +126,6 @@ function FeedCardSkeleton() {
   );
 }
 
-const getPrivacyIcon = (privacy?: string) => {
-    switch (privacy) {
-      case 'public': return <Globe className="h-4 w-4" />;
-      case 'friends': return <Users className="h-4 w-4" />;
-      case 'private': return <Lock className="h-4 w-4" />;
-      default: return null;
-    }
-};
-  
-const getPrivacyLabel = (privacy?: string) => {
-    if (!privacy) return 'Public';
-    return privacy.charAt(0).toUpperCase() + privacy.slice(1);
-}
-
 function PostCard({ item }: { item: FeedItem }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -151,8 +133,8 @@ function PostCard({ item }: { item: FeedItem }) {
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
   const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
     refId: item.id,
-    type: item.type === 'wishlist' ? 'cause' : 'post',
-    title: item.title || item.content?.substring(0, 50),
+    type: 'post',
+    title: item.content?.substring(0, 50),
     imageUrl: item.imageUrl,
     authorName: authorProfile?.name,
   });
@@ -190,34 +172,7 @@ function PostCard({ item }: { item: FeedItem }) {
         setIsDeleting(false);
     }
   };
-
-  const handleDeleteWishlist = async () => {
-    if (!isOwnItem || item.type !== 'wishlist') return;
-    setIsDeleting(true);
-
-    try {
-        const wishlistRef = doc(db, 'wishlists', item.id);
-        
-        const itemsRef = collection(wishlistRef, 'items');
-        const itemsSnapshot = await getDocs(itemsRef);
-        const batch = writeBatch(db);
-        itemsSnapshot.forEach(itemDoc => {
-            batch.delete(itemDoc.ref);
-        });
-
-        batch.delete(wishlistRef);
-
-        await batch.commit();
-
-        toast({ title: "Wishlist Deleted", description: "Your wishlist and all its items have been removed." });
-    } catch (error) {
-        console.error("Error deleting wishlist:", error);
-        toast({ title: "Error", description: "Could not delete the wishlist. Please try again.", variant: "destructive" });
-    } finally {
-        setIsDeleting(false);
-    }
-  }
-
+  
   if (loadingProfile) {
       return <FeedCardSkeleton />;
   }
@@ -252,20 +207,20 @@ function PostCard({ item }: { item: FeedItem }) {
                         <AlertDialogTrigger asChild>
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete {item.type === 'post' ? 'Post' : 'Wishlist'}
+                                Delete Post
                             </DropdownMenuItem>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete this {item.type}.
+                                    This action cannot be undone. This will permanently delete this post.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction 
-                                    onClick={item.type === 'post' ? handleDeletePost : handleDeleteWishlist} 
+                                    onClick={handleDeletePost} 
                                     className="bg-destructive hover:bg-destructive/90"
                                 >
                                     {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -284,33 +239,14 @@ function PostCard({ item }: { item: FeedItem }) {
          </DropdownMenu>
       </CardHeader>
       <CardContent className="px-4 pb-4">
-        {item.type === 'post' && <p className="whitespace-pre-wrap">{item.content}</p>}
-        {item.type === 'wishlist' && (
-            <div className='space-y-3'>
-                <h3 className="font-bold text-lg">{item.title}</h3>
-                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <Badge variant="secondary">{item.category}</Badge>
-                    <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1.5">
-                        {getPrivacyIcon(item.privacy)}
-                        <span>{getPrivacyLabel(item.privacy)}</span>
-                    </Badge>
-                 </div>
-                 <div className="pt-2">
-                    <div className="mb-1 flex justify-between text-sm text-muted-foreground">
-                        <span>{item.progress || 0}% complete</span>
-                        <span>{item.itemCount || 0} items</span>
-                    </div>
-                    <ProgressBar value={item.progress || 0} className="h-2" />
-                </div>
-            </div>
-        )}
+        <p className="whitespace-pre-wrap">{item.content}</p>
 
         {item.imageUrl && (
-          <Link href={item.type === 'post' ? `/dashboard/post/${item.id}` : `/dashboard/wishlist/${item.id}`} className="mt-4 block">
+          <Link href={`/dashboard/post/${item.id}`} className="mt-4 block">
             <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-xl border">
               <Image
                 src={item.imageUrl}
-                alt={`Image for ${item.type}`}
+                alt={`Image for post`}
                 fill
                 className="object-cover"
                 data-ai-hint={item.aiHint ?? ''}
@@ -469,66 +405,61 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-  
+
     setLoading(true);
     setError(null);
-  
-    let combinedUnsubscribes: (() => void)[] = [];
-  
+
     const fetchFeed = async () => {
       try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        const userData = userDoc.data();
-        const following = userData?.following || [];
-  
-        const processSnapshot = (snapshot: DocumentData[], type: 'post' | 'wishlist') => {
-          const newItems = snapshot.map(doc => ({ id: doc.id, type, ...doc.data() } as FeedItem));
-          setFeedItems(currentItems => {
-            const itemMap = new Map(currentItems.map(item => [`${item.type}-${item.id}`, item]));
-            newItems.forEach(item => itemMap.set(`${item.type}-${item.id}`, item));
-            const allItems = Array.from(itemMap.values());
-            return allItems.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-          });
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
           setLoading(false);
-        };
-  
-        // 1. Own Content (Posts and All Wishlists)
-        const ownPostsQuery = query(collection(db, 'posts'), where('authorId', '==', user.uid));
-        const ownWishlistsQuery = query(collection(db, 'wishlists'), where('authorId', '==', user.uid));
-        
-        const unsubOwnPosts = onSnapshot(ownPostsQuery, (snap) => processSnapshot(snap.docs, 'post'));
-        const unsubOwnWishlists = onSnapshot(ownWishlistsQuery, (snap) => processSnapshot(snap.docs, 'wishlist'));
-        combinedUnsubscribes.push(unsubOwnPosts, unsubOwnWishlists);
-  
-        // 2. Following Content (Posts and Public/Friends Wishlists)
-        if (following.length > 0) {
-          const followedIds = following.slice(0, 30); // Firestore 'in' query limit
-  
-          // Following Posts
-          const followingPostsQuery = query(collection(db, 'posts'), where('authorId', 'in', followedIds));
-          const unsubFollowingPosts = onSnapshot(followingPostsQuery, (snap) => processSnapshot(snap.docs, 'post'));
-          
-          // Following Wishlists (Public or Friends)
-          const followingWishlistsQuery = query(collection(db, 'wishlists'), where('authorId', 'in', followedIds), where('privacy', 'in', ['public', 'friends']));
-          const unsubFollowingWishlists = onSnapshot(followingWishlistsQuery, (snap) => processSnapshot(snap.docs, 'wishlist'));
-  
-          combinedUnsubscribes.push(unsubFollowingPosts, unsubFollowingWishlists);
-        } else {
-            setLoading(false);
+          return;
         }
-  
+
+        const userData = userDoc.data();
+        const following = userData.following || [];
+        const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30); // Max 30 'in' query
+
+        if (authorIdsToQuery.length === 0) {
+            setLoading(false);
+            return;
+        }
+
+        const q = query(
+          collectionGroup(db, 'posts'),
+          where('authorId', 'in', authorIdsToQuery),
+          orderBy('createdAt', 'desc'),
+          limit(30)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const newPosts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
+          setFeedItems(newPosts);
+          setLoading(false);
+        }, (err) => {
+          console.error("Error fetching feed posts:", err);
+          setError("Failed to load feed posts.");
+          setLoading(false);
+        });
+
+        return unsubscribe;
+
       } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
-        setError("Failed to load feed. Please try again later. " + err.message);
+        setError("Failed to load feed. " + err.message);
         setLoading(false);
       }
     };
-  
-    fetchFeed();
-  
+
+    const unsubscribePromise = fetchFeed();
+
     return () => {
-      combinedUnsubscribes.forEach(unsub => unsub());
+      unsubscribePromise.then(unsub => {
+        if (unsub) {
+          unsub();
+        }
+      });
     };
   }, [user]);
 
