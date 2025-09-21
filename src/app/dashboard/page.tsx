@@ -1,8 +1,9 @@
+
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, writeBatch, deleteDoc, getDocs, limit } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { db, storage } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -14,12 +15,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, AlertTriangle, Globe, Users, Lock, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, AlertTriangle, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getInitials } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { Progress as ProgressBar } from '@/components/ui/progress';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePostInteraction } from '@/hooks/use-post-interaction';
@@ -39,16 +38,15 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
 import { useBookmark } from '@/hooks/use-bookmark';
+import { Progress as ProgressBar } from '@/components/ui/progress';
 
-// Simplified FeedItem to only represent posts for the main feed
 interface FeedItem extends DocumentData {
   id: string;
-  type: 'post'; // Only posts will be in the main feed for now
+  type: 'post'; 
   authorId: string;
   createdAt: Timestamp;
   content?: string;
@@ -83,7 +81,7 @@ const useAuthorProfile = (authorId: string) => {
         const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const profileData = docSnap.data() as UserProfile;
-                userProfilesCache[authorId] = profileData; // Cache the data
+                userProfilesCache[authorId] = profileData;
                 setAuthorProfile(profileData);
             } else {
                 setAuthorProfile(null);
@@ -129,7 +127,7 @@ function PostCard({ item }: { item: FeedItem }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
-  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, item.type);
+  const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, 'post');
   const { isBookmarked, isToggling: isTogglingBookmark, toggleBookmark } = useBookmark({
     refId: item.id,
     type: 'post',
@@ -145,7 +143,7 @@ function PostCard({ item }: { item: FeedItem }) {
   const isOwnItem = user?.uid === item.authorId;
 
   const handleDeletePost = async () => {
-    if (!isOwnItem || item.type !== 'post') return;
+    if (!isOwnItem) return;
     setIsDeleting(true);
 
     try {
@@ -177,7 +175,6 @@ function PostCard({ item }: { item: FeedItem }) {
   }
 
   if (!authorProfile) {
-      // This can happen if the user account was deleted
       return null;
   }
 
@@ -398,17 +395,15 @@ export default function DashboardPage() {
     }
   };
 
-
   useEffect(() => {
     if (!user) {
       setLoading(false);
       return;
     }
-  
+    
     setLoading(true);
     setError(null);
-  
-    // This will hold the unsubscribe function for the snapshot listener.
+    
     let unsubscribe: (() => void) | undefined;
   
     const fetchFeed = async () => {
@@ -418,11 +413,8 @@ export default function DashboardPage() {
           setLoading(false);
           return;
         }
-  
         const userData = userDoc.data();
         const following = userData.following || [];
-        // Query for posts from the user and the people they follow.
-        // We limit to 10 authors in an 'in' query as a Firestore best practice.
         const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30);
   
         if (authorIdsToQuery.length === 0) {
@@ -438,7 +430,6 @@ export default function DashboardPage() {
           limit(30)
         );
   
-        // Assign the returned unsubscribe function from onSnapshot to our variable.
         unsubscribe = onSnapshot(q, (snapshot) => {
           const newPosts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
           setFeedItems(newPosts);
@@ -458,7 +449,6 @@ export default function DashboardPage() {
   
     fetchFeed();
   
-    // The cleanup function is now synchronous.
     return () => {
       if (unsubscribe) {
         unsubscribe();
@@ -547,3 +537,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

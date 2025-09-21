@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -38,7 +39,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -263,27 +263,38 @@ export default function WishlistPage() {
     };
 
     setLoading(true);
-    const q = query(
-        collection(db, "wishlists"), 
-        where("authorId", "==", user.uid),
-        orderBy("createdAt", "desc")
-    );
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const lists = querySnapshot.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data()
-        } as Wishlist));
-
-        setWishlists(lists);
+    let unsubscribe: (() => void) | undefined;
+    try {
+        const q = query(
+            collection(db, "wishlists"), 
+            where("authorId", "==", user.uid),
+            orderBy("createdAt", "desc")
+        );
+        
+        unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const lists = querySnapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data()
+            } as Wishlist));
+            setWishlists(lists);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching wishlists: ", error);
+            toast({ title: "Error", description: "Could not fetch wishlists.", variant: "destructive" });
+            setLoading(false);
+        });
+    } catch(error) {
+        console.error("Error creating wishlist query: ", error);
+        toast({ title: "Error", description: "An error occurred while trying to fetch your wishlists.", variant: "destructive" });
         setLoading(false);
-    }, (error) => {
-        console.error("Error fetching wishlists: ", error);
-        toast({ title: "Error", description: "Could not fetch wishlists.", variant: "destructive" });
-        setLoading(false);
-    });
+    }
 
-    return () => unsubscribe();
+
+    return () => {
+        if(unsubscribe) {
+            unsubscribe();
+        }
+    };
   }, [user, toast]);
 
   const handleDeleteWishlist = async (wishlistId: string) => {
@@ -349,3 +360,5 @@ export default function WishlistPage() {
     </div>
   );
 }
+
+    

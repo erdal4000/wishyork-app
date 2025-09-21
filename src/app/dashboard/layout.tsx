@@ -103,22 +103,21 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Redirect if auth is done and there's no user
   React.useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
     }
   }, [user, authLoading, router]);
 
-  // Fetch user profile once we have a user
   React.useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
     if (user) {
+      setProfileLoading(true);
       const userDocRef = doc(db, 'users', user.uid);
-      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+      unsubscribe = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
           setUserProfile(doc.data() as UserProfile);
         } else {
-          // This case might happen if user document is not created yet after signup
           setUserProfile(null); 
         }
         setProfileLoading(false);
@@ -126,22 +125,22 @@ export default function DashboardLayout({
         console.error("Error fetching user profile:", error);
         setProfileLoading(false);
       });
-      return () => unsubscribe();
     } else if (!authLoading) {
-        // If auth is done and there's no user, profile loading is also done.
         setProfileLoading(false);
     }
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [user, authLoading]);
 
-  // Combined loading state check. We must wait for BOTH auth and profile to be checked.
   const isLoading = authLoading || profileLoading;
 
   if (isLoading) {
     return <FullPageLoader />;
   }
   
-  // After loading, if there's still no user, the redirect effect will handle it.
-  // We render a loader as a fallback to prevent rendering children without a user.
   if (!user) {
       return <FullPageLoader />;
   }
@@ -150,7 +149,6 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     await auth.signOut();
-    // AuthProvider will handle redirect
   };
   
   const displayName = userProfile?.name || user.displayName;

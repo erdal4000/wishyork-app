@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -62,7 +63,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -72,7 +72,6 @@ import { usePostInteraction } from '@/hooks/use-post-interaction';
 import { getInitials } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
-// Data types
 interface UserProfile extends DocumentData {
   uid: string;
   name: string;
@@ -103,7 +102,7 @@ interface Wishlist extends DocumentData {
   category: string;
   progress: number;
   itemCount: number;
-  privacy: 'public' | 'private' | 'friends';
+  privacy: 'public' | 'friends' | 'private';
   likes: number;
   commentCount: number;
   saves: number;
@@ -292,6 +291,7 @@ export default function ProfilePage() {
     const params = useParams();
     const username = params.username as string;
     const { user: currentUser } = useAuth();
+    const { toast } = useToast();
 
     const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
     const [wishlists, setWishlists] = useState<Wishlist[]>([]);
@@ -299,7 +299,6 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-    const { toast } = useToast();
 
     const { isFollowing, isTogglingFollow, toggleFollow } = useFollow(profileUser?.uid);
 
@@ -308,63 +307,80 @@ export default function ProfilePage() {
     useEffect(() => {
         if (!username) return;
 
-        setLoading(true);
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username_lowercase', '==', username.toLowerCase()), limit(1));
+        const fetchProfileData = async () => {
+            setLoading(true);
+            try {
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('username_lowercase', '==', username.toLowerCase()), limit(1));
+                const userSnapshot = await getDocs(q);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            if (snapshot.empty) {
-                setProfileUser(null);
+                if (userSnapshot.empty) {
+                    setProfileUser(null);
+                    setLoading(false);
+                    notFound();
+                    return;
+                }
+
+                const userDoc = userSnapshot.docs[0];
+                const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+                setProfileUser(userData);
+
+            } catch (error) {
+                console.error("Error fetching profile user:", error);
+                toast({ title: "Error", description: "Could not load profile.", variant: "destructive" });
                 setLoading(false);
-                notFound();
-                return;
             }
+        };
 
-            const userDoc = snapshot.docs[0];
-            const userData = { uid: userDoc.id, ...userDoc.data() } as UserProfile;
-            setProfileUser(userData);
+        fetchProfileData();
+    }, [username, toast]);
 
-            // Once we have the profile user, fetch their content
-            const postsQuery = query(
-                collection(db, 'posts'),
-                where('authorId', '==', userData.uid),
-                orderBy('createdAt', 'desc')
-            );
-            const unsubscribePosts = onSnapshot(postsQuery, (postSnapshot) => {
-                setPosts(postSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
-            });
+    useEffect(() => {
+        if (!profileUser) return;
 
-            let wishlistsQuery: Query<DocumentData>;
-            const baseWishlistsQuery = query(
-                collection(db, 'wishlists'),
-                where('authorId', '==', userData.uid),
-                orderBy('createdAt', 'desc')
-            );
-            
-            if (currentUser?.uid === userData.uid) {
-                wishlistsQuery = baseWishlistsQuery;
-            } else {
-                // In a real app, you might also check if currentUser is a friend for 'friends' privacy
-                wishlistsQuery = query(baseWishlistsQuery, where('privacy', '==', 'public'));
-            }
-
-            const unsubscribeWishlists = onSnapshot(wishlistsQuery, (wishlistSnapshot) => {
-                setWishlists(wishlistSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist)));
-            });
-
-            setLoading(false);
-
-            return () => {
-                unsubscribePosts();
-                unsubscribeWishlists();
-            };
+        // Listener for Posts
+        const postsQuery = query(
+            collection(db, 'posts'),
+            where('authorId', '==', profileUser.uid),
+            orderBy('createdAt', 'desc')
+        );
+        const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
+            setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
         }, (error) => {
-            console.error("Error fetching profile user:", error);
+            console.error("Error fetching posts:", error);
+            toast({ title: "Error", description: "Could not load posts.", variant: "destructive" });
+        });
+
+        // Listener for Wishlists
+        let wishlistsQuery: Query<DocumentData>;
+        const baseWishlistsQuery = query(
+            collection(db, 'wishlists'),
+            where('authorId', '==', profileUser.uid),
+            orderBy('createdAt', 'desc')
+        );
+        
+        if (isOwnProfile) {
+            wishlistsQuery = baseWishlistsQuery; // Owner sees all their lists
+        } else {
+            // Others see public lists. 'friends' logic can be added here if needed.
+            wishlistsQuery = query(baseWishlistsQuery, where('privacy', '==', 'public'));
+        }
+        
+        const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
+            setWishlists(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist)));
+            setLoading(false); // Set loading to false after wishlists (the primary content) are loaded
+        }, (error) => {
+            console.error("Error fetching wishlists:", error);
+            toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
             setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, [username, currentUser]);
+        return () => {
+            postsUnsubscribe();
+            wishlistsUnsubscribe();
+        };
+
+    }, [profileUser, isOwnProfile, toast]);
 
     if (loading) {
         return (
@@ -399,7 +415,8 @@ export default function ProfilePage() {
     }
 
     if (!profileUser) {
-        return notFound();
+        // This case should be handled by notFound() in the initial fetch.
+        return null;
     }
 
     const handleDeleteWishlist = async (wishlistId: string) => {
@@ -538,3 +555,5 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+    
