@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -13,80 +12,52 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    function isPublic() {
-      return resource.data.privacy == 'public';
+    function isPublic(doc) {
+      return doc.data.privacy == 'public';
     }
 
     // --- Collections ---
-
     match /users/{userId} {
-      // Profile data can be read by any signed-in user.
       allow get: if isSignedIn();
-      // A user can only list/update/delete their own document.
-      allow list, update, delete: if isOwner(userId);
-      // Anyone can create their own user document during sign-up.
-      allow create: if isOwner(userId);
-
-      // Sub-collections for a user
-      match /bookmarks/{bookmarkId} {
-        allow read, write: if isOwner(userId);
-      }
+      allow list, create, update: if isOwner(userId);
     }
 
     match /usernames/{username} {
-      // Usernames can be read to check for availability.
       allow get: if isSignedIn();
-      // A user can only create a username document for themselves.
       allow create: if isSignedIn();
     }
 
-    // --- Collection Groups for flexible queries ---
-
+    // --- Collection Groups ---
     match /{path=**}/wishlists/{wishlistId} {
-      // LIST: Any signed-in user can query the wishlists collection.
-      // Specific filtering (e.g., by authorId or privacy) happens in the code.
-      // This rule is required for the queries on Home, My Wishlist, and Profile pages to work.
       allow list: if isSignedIn();
-
-      // GET: A wishlist can be read if it's public, or if the reader is the owner.
-      allow get: if isPublic() || isOwner(resource.data.authorId);
-
-      // CREATE: A user can only create a wishlist for themselves.
+      allow get: if isPublic(resource) || isOwner(resource.data.authorId);
       allow create: if isOwner(request.resource.data.authorId);
       
-      // UPDATE: The owner can update anything.
-      // Other signed-in users can only update the 'likes', 'commentCount', and 'saves' fields.
       allow update: if isOwner(resource.data.authorId) || 
-                       (isSignedIn() && request.resource.data.keys().hasOnly(['likes', 'commentCount', 'saves', 'likedBy']));
-
-      // DELETE: Only the owner can delete a wishlist.
+                      (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'saves', 'likedBy']));
       allow delete: if isOwner(resource.data.authorId);
       
+      // DÜZELTİLDİ: Bu alt koleksiyon kuralı, /users/{uid}/wishlists/{id}/items gibi
+      // herhangi bir yoldaki 'items' koleksiyonunu hedefler.
       match /items/{itemId} {
-        // Items can be read if the parent wishlist can be read.
-        allow read: if (get(path.join(path, 'wishlists', wishlistId)).data.privacy == 'public') || isOwner(get(path.join(path, 'wishlists', wishlistId)).data.authorId);
-        // Only the owner of the wishlist can add or delete items.
-        allow create, delete: if isOwner(get(path.join(path, 'wishlists', wishlistId)).data.authorId);
-        // Owner can update everything. Others can only update status/reservation fields.
-        allow update: if isOwner(get(path.join(path, 'wishlists', wishlistId)).data.authorId) || 
-                         (isSignedIn() && request.resource.data.keys().hasOnly(['status', 'reservedBy']));
+        // Üst wishlist belgesini 'get' ile okur ve iznini kontrol eder.
+        allow read: if get(/databases/$(database)/documents/$(path[0])/$(path[1])/wishlists/$(wishlistId)).data.privacy == 'public' || isOwner(get(/databases/$(database)/documents/$(path[0])/$(path[1])/wishlists/$(wishlistId)).data.authorId);
+        
+        // Yazma işlemleri için sadece wishlist sahibine izin verilir.
+        allow write: if isOwner(get(/databases/$(database)/documents/$(path[0])/$(path[1])/wishlists/$(wishlistId)).data.authorId);
       }
     }
 
     match /{path=**}/posts/{postId} {
-      // LIST: Any signed-in user can query posts.
       allow list: if isSignedIn();
-      // GET: Allow reading any post.
-      allow get: if isSignedIn();
-      
+      allow get: if isPublic(resource) || isOwner(resource.data.authorId);
       allow create: if isOwner(request.resource.data.authorId);
       allow update, delete: if isOwner(resource.data.authorId);
     }
-    
-    // Comments are sub-collections of either 'posts' or 'wishlists'
+
+    // Yorumlar için genel kural
     match /{collection}/{docId}/comments/{commentId} {
-      allow read, list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow read, list, create: if isSignedIn();
       allow update, delete: if isOwner(resource.data.authorId);
     }
   }

@@ -405,10 +405,13 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-
+  
     setLoading(true);
     setError(null);
-
+  
+    // This will hold the unsubscribe function for the snapshot listener.
+    let unsubscribe: (() => void) | undefined;
+  
     const fetchFeed = async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -416,24 +419,27 @@ export default function DashboardPage() {
           setLoading(false);
           return;
         }
-
+  
         const userData = userDoc.data();
         const following = userData.following || [];
-        const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30); // Max 30 'in' query
-
+        // Query for posts from the user and the people they follow.
+        const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30);
+  
         if (authorIdsToQuery.length === 0) {
             setLoading(false);
+            setFeedItems([]);
             return;
         }
-
+  
         const q = query(
           collectionGroup(db, 'posts'),
           where('authorId', 'in', authorIdsToQuery),
           orderBy('createdAt', 'desc'),
           limit(30)
         );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+  
+        // Assign the returned unsubscribe function from onSnapshot to our variable.
+        unsubscribe = onSnapshot(q, (snapshot) => {
           const newPosts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
           setFeedItems(newPosts);
           setLoading(false);
@@ -442,24 +448,21 @@ export default function DashboardPage() {
           setError("Failed to load feed posts.");
           setLoading(false);
         });
-
-        return unsubscribe;
-
+  
       } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
         setError("Failed to load feed. " + err.message);
         setLoading(false);
       }
     };
-
-    const unsubscribePromise = fetchFeed();
-
+  
+    fetchFeed();
+  
+    // The cleanup function is now synchronous.
     return () => {
-      unsubscribePromise.then(unsub => {
-        if (unsub) {
-          unsub();
-        }
-      });
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [user]);
 

@@ -97,18 +97,20 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
+  // Redirect if auth is done and there's no user
   React.useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       router.push('/login');
     }
-  }, [user, loading, router]);
+  }, [user, authLoading, router]);
 
+  // Fetch user profile once we have a user
   React.useEffect(() => {
     if (user) {
       const userDocRef = doc(db, 'users', user.uid);
@@ -116,25 +118,31 @@ export default function DashboardLayout({
         if (doc.exists()) {
           setUserProfile(doc.data() as UserProfile);
         } else {
-          setUserProfile(null);
+          // This case might happen if user document is not created yet after signup
+          setUserProfile(null); 
         }
         setProfileLoading(false);
-      }, () => {
+      }, (error) => {
+        console.error("Error fetching user profile:", error);
         setProfileLoading(false);
       });
       return () => unsubscribe();
-    } else if (!loading) {
+    } else if (!authLoading) {
+        // If auth is done and there's no user, profile loading is also done.
         setProfileLoading(false);
     }
-  }, [user, loading]);
+  }, [user, authLoading]);
 
-  if (loading || profileLoading) {
+  // Combined loading state check. We must wait for BOTH auth and profile to be checked.
+  const isLoading = authLoading || profileLoading;
+
+  if (isLoading) {
     return <FullPageLoader />;
   }
   
+  // After loading, if there's still no user, the redirect effect will handle it.
+  // We render a loader as a fallback to prevent rendering children without a user.
   if (!user) {
-      // This case should be caught by the redirect effect,
-      // but as a fallback, we show a loader to prevent rendering children without a user.
       return <FullPageLoader />;
   }
 
