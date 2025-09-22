@@ -73,11 +73,11 @@ export default function Home() {
         {/* Hero Section */}
         <section className="container mx-auto grid max-w-screen-xl items-center gap-8 px-4 py-20 md:grid-cols-2 md:py-32">
           <div className="flex flex-col items-start gap-6">
-            <h1 className="text-4xl font-extrabold tracking-tighter md:text-5xl lg:text-6xl">
-              From Wishful Thinking to Reality.
+            <h1 className="font-headline text-4xl font-extrabold tracking-tighter md:text-5xl lg:text-6xl">
+              Turn Wishes into Reality.
             </h1>
             <p className="max-w-[600px] text-lg text-muted-foreground">
-              The social platform where personal dreams, group gifts, and community causes connect. Share your wishes, support others, and make a real impact.
+              WishYork is the social platform where personal dreams, group gifts, and community causes connect. Share your wishes, support others, and make a real impact, together.
             </p>
             <div className="flex flex-wrap gap-4">
               <Button size="lg" asChild>
@@ -107,7 +107,7 @@ export default function Home() {
         <section id="features" className="w-full bg-secondary py-20 md:py-24">
           <div className="container mx-auto max-w-screen-xl px-4">
             <div className="mb-12 text-center">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
+              <h2 className="font-headline text-3xl font-bold tracking-tighter sm:text-4xl">
                 A Platform for Every Dream
               </h2>
               <p className="mx-auto mt-4 max-w-[700px] text-muted-foreground md:text-xl">
@@ -141,7 +141,7 @@ export default function Home() {
         <section className="w-full py-20 md:py-24">
           <div className="container mx-auto max-w-screen-xl px-4">
             <div className="mb-12 text-center">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
+              <h2 className="font-headline text-3xl font-bold tracking-tighter sm:text-4xl">
                 Simple Steps to a Fulfilled Wish
               </h2>
               <p className="mx-auto mt-4 max-w-[700px] text-muted-foreground md:text-xl">
@@ -173,17 +173,16 @@ export default function Home() {
                 <div className="rounded-full bg-primary/10 p-3">
                   <Sparkles className="h-8 w-8 text-primary" />
                 </div>
-                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
+                <h2 className="font-headline text-3xl font-bold tracking-tighter sm:text-4xl">
                   Discover Your Next Wish
                 </h2>
                 <p className="text-muted-foreground md:text-lg">
-                  Our AI-powered suggestion engine helps you find new and
+                  Stuck for ideas? Our AI-powered Inspiration Box helps you find new and
                   exciting products based on your interests and current trends.
-                  Never run out of ideas again!
                 </p>
                 <Button variant="link" className="p-0 text-base" asChild>
                   <Link href="/dashboard/inspiration">
-                    Let's Discover <ArrowRight className="ml-2 h-4 w-4" />
+                    Get Inspired <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
               </div>
@@ -204,7 +203,7 @@ export default function Home() {
         {/* Quote Section */}
         <section className="w-full py-20 md:py-24">
           <div className="container mx-auto max-w-screen-md px-4 text-center">
-            <blockquote className="text-2xl font-medium italic text-foreground/80 md:text-3xl">
+            <blockquote className="font-headline text-2xl font-medium italic text-foreground/80 md:text-3xl">
               "The best way to find yourself is to lose yourself in the service
               of others."
             </blockquote>
