@@ -29,40 +29,40 @@ export default function Home() {
       icon: <User className="h-10 w-10 text-primary" />,
       title: 'For Individuals',
       description:
-        'Create personal wishlists for birthdays, weddings, or life goals. Share your dreams with friends and family effortlessly.',
+        'Create and share personal wishlists for any occasion. From birthdays to life goals, let your dreams be known and turn them into reality with the help of your community.',
     },
     {
       icon: <Users className="h-10 w-10 text-primary" />,
-      title: 'For Groups',
+      title: 'For Groups & Communities',
       description:
-        'Organize group gifts and events with shared lists. Perfect for friends, families, and communities pooling resources together.',
+        'Organize group gifts seamlessly. Pool resources with friends and family for a bigger impact, whether for a shared present or a community project.',
     },
     {
       icon: <HeartHandshake className="h-10 w-10 text-primary" />,
-      title: 'For NGOs',
+      title: 'For Causes & NGOs',
       description:
-        'Amplify your impact. Verified organizations can create campaigns, call for volunteers, and transparently track fulfilled needs.',
+        'Amplify your impact with transparent, item-based campaigns. Verified organizations can directly list their needs, ensuring every contribution is meaningful and direct.',
     },
   ];
 
   const howItWorks = [
     {
       icon: <ListPlus className="h-8 w-8 text-primary" />,
-      title: '1. Create a List',
+      title: '1. Create Your Wish',
       description:
-        'Build a wishlist for any occasion, from personal dreams to public causes. Add items from anywhere on the web.',
+        'Build a wishlist for any goal. Add items manually, or automatically fetch product details from any website just by pasting a link.',
     },
     {
       icon: <Share2 className="h-8 w-8 text-primary" />,
-      title: '2. Share Your Wish',
+      title: '2. Share with Your World',
       description:
-        'Easily share your list with friends, family, or the world through a unique link or on your social feed.',
+        'Easily share your list with a unique link. Control who sees it, from a private group of friends to the public.',
     },
     {
       icon: <Gift className="h-8 w-8 text-primary" />,
-      title: '3. Make it Happen',
+      title: '3. Receive & Give',
       description:
-        'Watch as your community comes together to fulfill wishes, making dreams a reality one gift at a time.',
+        'Watch your community come together to fulfill wishes. Contribute to public causes and make a tangible difference in the world.',
     },
   ];
 
@@ -74,16 +74,15 @@ export default function Home() {
         <section className="container mx-auto grid max-w-screen-xl items-center gap-8 px-4 py-20 md:grid-cols-2 md:py-32">
           <div className="flex flex-col items-start gap-6">
             <h1 className="text-4xl font-extrabold tracking-tighter md:text-5xl lg:text-6xl">
-              Where Wishes Truly Find Their Way
+              From Wishful Thinking to Reality.
             </h1>
             <p className="max-w-[600px] text-lg text-muted-foreground">
-              Connect, share, and fulfill dreams. The social platform for
-              personal goals, group gifts, and community support.
+              The social platform where personal dreams, group gifts, and community causes connect. Share your wishes, support others, and make a real impact.
             </p>
             <div className="flex flex-wrap gap-4">
               <Button size="lg" asChild>
                 <Link href="/signup">
-                  Start a Wishlist <ArrowRight className="ml-2 h-5 w-5" />
+                  Start Your First Wishlist <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
@@ -109,11 +108,10 @@ export default function Home() {
           <div className="container mx-auto max-w-screen-xl px-4">
             <div className="mb-12 text-center">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
-                A Platform for Everyone
+                A Platform for Every Dream
               </h2>
               <p className="mx-auto mt-4 max-w-[700px] text-muted-foreground md:text-xl">
-                Whether you're an individual, a group, or a non-profit,
-                WishYork has the tools you need.
+                Whether you are an individual with a personal goal, a group of friends, or a non-profit organization, WishYork has the tools you need.
               </p>
             </div>
             <div className="grid gap-8 md:grid-cols-3">
