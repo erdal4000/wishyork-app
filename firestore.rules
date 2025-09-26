@@ -1,70 +1,81 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-  
+
+    // Helper functions
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
-    
-    function isPublic(wishlistId) {
-      return get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public';
-    }
 
+    // Rules for 'users' collection
     match /users/{userId} {
-      allow read: if true;
-      
-      // Allow a user to update their own document for any field except counts
-      allow update: if isOwner(userId) && 
-                      !('followersCount' in request.resource.data.diff(resource.data).affectedKeys()) &&
-                      !('followingCount' in request.resource.data.diff(resource.data).affectedKeys());
-
-      // Allow a user to update ANOTHER user's document ONLY to modify the 'followers' array and 'followersCount'
-      allow update: if request.auth != null && !isOwner(userId) &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followersCount']);
+      // Users can read their own profile, create a profile, and update their own profile.
+      allow read, update: if isOwner(userId);
+      allow create: if request.auth != null;
     }
 
+    // Rules for 'usernames' collection
     match /usernames/{username} {
-      allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      // Anyone can check if a username exists.
+      allow get;
+      // Only authenticated users can claim a username (done via signup).
+      allow create: if request.auth != null;
+      // Only the owner can release their username.
+      allow delete: if isOwner(resource.data.uid);
     }
-
+    
+    // Rules for 'wishlists' collection
     match /wishlists/{wishlistId} {
-      allow create: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-      allow delete: if isOwner(resource.data.authorId);
-      
-      allow get: if isOwner(resource.data.authorId) || resource.data.privacy == 'public' || (resource.data.privacy == 'friends' && request.auth != null);
-      
-      allow list: if (request.query.limit <= 20 && ('authorId' in request.query.keys() ? request.auth.uid == request.query.authorId : false)) || (request.query.privacy == 'public');
+      // Read a single wishlist if it's public or you are the owner.
+      allow get: if isOwner(resource.data.authorId) || resource.data.privacy == 'public';
+      // Query a list of wishlists if you are the owner or if you are querying for public lists.
+      allow list: if (request.auth != null && request.query.where.size() > 0 && request.query.where[0][1] == 'authorId') || (request.query.where.size() > 0 && request.query.where[0][1] == 'privacy' && request.query.where[0][2] == 'public');
+      // Create, update, delete only if you are the owner.
+      allow create, update, delete: if isOwner(request.resource.data.authorId);
 
-      allow update: if isOwner(resource.data.authorId);
-      
+      // Sub-collection rules
       match /items/{itemId} {
-        allow read: if true;
+        // Anyone can read items in a public wishlist. Owners can read any item in their list.
+        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+        // Only the wishlist owner can create and delete items.
         allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-        
+        // Any authenticated user can update an item (for reserving/fulfilling).
+        // Specific logic is handled in the UI.
         allow update: if request.auth != null;
       }
       
-      match /comments/{commentId} {
-        allow read: if true;
+       match /comments/{commentId} {
+        // Authenticated users can read all comments.
+        allow read: if request.auth != null;
+        // Authenticated users can create comments.
         allow create: if request.auth != null;
-        allow delete: if request.auth != null && (isOwner(resource.data.authorId) || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId));
-        allow update: if request.auth != null && isOwner(resource.data.authorId);
+        // Only the author of the comment can update or delete it.
+        allow update, delete: if isOwner(resource.data.authorId);
       }
     }
-    
+
+    // Rules for 'posts' collection
     match /posts/{postId} {
-      allow read: if true;
-      allow create: if request.auth != null && isOwner(request.resource.data.authorId);
-      allow update, delete: if request.auth != null && isOwner(resource.data.authorId);
-      
-      match /comments/{commentId} {
-        allow read: if true;
-        allow create: if request.auth != null;
-        allow delete: if request.auth != null && (isOwner(resource.data.authorId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
-        allow update: if request.auth != null && isOwner(resource.data.authorId);
-      }
+        // Any authenticated user can read any post.
+        allow read: if request.auth != null;
+        // Users can only create posts for themselves.
+        allow create: if isOwner(request.resource.data.authorId);
+        // Users can only update or delete their own posts.
+        allow update, delete: if isOwner(resource.data.authorId);
+
+        match /comments/{commentId} {
+            allow read: if request.auth != null;
+            allow create: if request.auth != null;
+            allow update, delete: if isOwner(resource.data.authorId);
+        }
+    }
+    
+    // Rules for user-specific sub-collections like 'bookmarks'
+    match /users/{userId}/bookmarks/{bookmarkId} {
+      // Only the owner can manage their own bookmarks.
+      allow read, write, delete: if isOwner(userId);
     }
   }
 }

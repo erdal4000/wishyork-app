@@ -63,7 +63,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -340,6 +339,39 @@ export default function ProfilePage() {
     useEffect(() => {
         if (!profileUser) return;
 
+        setLoading(true);
+        let wishlistsUnsubscribe: (() => void) | undefined;
+        try {
+            let wishlistsQuery: Query<DocumentData>;
+            if (isOwnProfile) {
+                wishlistsQuery = query(
+                    collection(db, 'wishlists'), 
+                    where('authorId', '==', profileUser.uid),
+                    orderBy('createdAt', 'desc')
+                );
+            } else {
+                 wishlistsQuery = query(
+                    collection(db, 'wishlists'),
+                    where('authorId', '==', profileUser.uid),
+                    where('privacy', '==', 'public'),
+                    orderBy('createdAt', 'desc')
+                );
+            }
+            
+            wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
+                const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+                setWishlists(fetchedWishlists);
+                setLoading(false); // Set loading to false after wishlists are fetched
+            }, (error) => {
+                console.error("Error fetching wishlists:", error);
+                toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
+                setLoading(false);
+            });
+        } catch (error) {
+            console.error("Error creating wishlists query:", error);
+            setLoading(false);
+        }
+
         // Listener for Posts
         const postsQuery = query(
             collection(db, 'posts'),
@@ -350,40 +382,12 @@ export default function ProfilePage() {
             setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
         }, (error) => {
             console.error("Error fetching posts:", error);
-            toast({ title: "Error", description: "Could not load posts.", variant: "destructive" });
-        });
-
-        // Listener for Wishlists
-        let wishlistsQuery: Query<DocumentData>;
-        
-        if (isOwnProfile) {
-            wishlistsQuery = query(
-                collection(db, 'wishlists'), 
-                where('authorId', '==', profileUser.uid),
-                orderBy('createdAt', 'desc')
-            );
-        } else {
-             wishlistsQuery = query(
-                collection(db, 'wishlists'),
-                where('authorId', '==', profileUser.uid),
-                where('privacy', '==', 'public'),
-                orderBy('createdAt', 'desc')
-            );
-        }
-        
-        const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
-            const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
-            setWishlists(fetchedWishlists);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching wishlists:", error);
-            toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
-            setLoading(false);
+            // Don't toast for posts error to avoid multiple toasts
         });
 
         return () => {
+            if (wishlistsUnsubscribe) wishlistsUnsubscribe();
             postsUnsubscribe();
-            wishlistsUnsubscribe();
         };
 
     }, [profileUser, isOwnProfile, toast]);

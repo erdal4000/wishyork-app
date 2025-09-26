@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, where, addDoc, serverTimestamp, deleteDoc, Unsubscribe, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, where, addDoc, serverTimestamp, deleteDoc, Unsubscribe, limit, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -38,7 +38,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
@@ -567,34 +566,35 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
 
-    let combinedUnsubscribes: Unsubscribe[] = [];
-  
-    // Simplified Query for Public/Friends Wishlists
+    const unsubscribes: Unsubscribe[] = [];
+
+    // Query for public wishlists
     const wishlistsQuery = query(
       collection(db, 'wishlists'),
-      where('privacy', 'in', ['public', 'friends']),
+      where('privacy', '==', 'public'),
       orderBy('createdAt', 'desc'),
       limit(20)
     );
-    
+
     const wishlistsUnsub = onSnapshot(wishlistsQuery, 
       (snapshot) => {
         const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
         setFeedItems(currentItems => {
           const otherItems = currentItems.filter(item => item.type !== 'wishlist');
-          return [...lists, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+          const combined = [...lists, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+          return combined;
         });
         setLoading(false);
       },
       (err) => {
-        console.error("Error fetching wishlists:", err);
+        console.error("Error fetching public wishlists:", err);
         setError("Failed to load wishlists.");
         setLoading(false);
       }
     );
-    combinedUnsubscribes.push(wishlistsUnsub);
+    unsubscribes.push(wishlistsUnsub);
 
-    // Simplified Query for All Posts
+    // Query for all posts
     const postsQuery = query(
       collection(db, 'posts'),
       orderBy('createdAt', 'desc'),
@@ -606,7 +606,8 @@ export default function DashboardPage() {
         const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
         setFeedItems(currentItems => {
           const otherItems = currentItems.filter(item => item.type !== 'post');
-          return [...posts, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+          const combined = [...posts, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+          return combined;
         });
         setLoading(false);
       },
@@ -616,10 +617,10 @@ export default function DashboardPage() {
         setLoading(false);
       }
     );
-    combinedUnsubscribes.push(postsUnsub);
+    unsubscribes.push(postsUnsub);
   
     return () => {
-      combinedUnsubscribes.forEach(unsub => unsub());
+      unsubscribes.forEach(unsub => unsub());
     };
   }, []);
 
