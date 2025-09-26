@@ -227,8 +227,15 @@ export default function WishlistDetailPage() {
     return () => unsubscribe();
   }, [id, toast]);
 
+  const isOwnWishlist = user?.uid === wishlist?.authorId;
+  const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
+
   useEffect(() => {
-    if (!id) return;
+    if (!id || !canViewItems) {
+      setLoadingItems(false);
+      return;
+    }
+    
     setLoadingItems(true);
     const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
     const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
@@ -247,7 +254,7 @@ export default function WishlistDetailPage() {
     });
 
     return () => unsubscribe();
-  }, [id, toast]);
+  }, [id, toast, canViewItems]);
 
   const updateItemAndWishlist = async (itemId: string, itemChanges: Partial<Item>, wishlistChanges: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
     setIsUpdatingItem(itemId);
@@ -398,8 +405,20 @@ export default function WishlistDetailPage() {
   if (!wishlist || !authorProfile) {
     return <div>Wishlist or author not found.</div>;
   }
-
-  const isOwnWishlist = user?.uid === wishlist.authorId;
+  
+  if (!canViewItems) {
+      return (
+          <div className="flex flex-col items-center justify-center h-96 gap-4 text-center">
+              <Lock className="h-16 w-16 text-muted-foreground" />
+              <h2 className="text-2xl font-bold">This Wishlist is Private</h2>
+              <p className="text-muted-foreground">Only the owner can view the items in this list.</p>
+              <Button onClick={() => router.back()}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Go Back
+              </Button>
+          </div>
+      )
+  }
 
   return (
     <div className="space-y-6">
@@ -734,5 +753,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
