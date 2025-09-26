@@ -568,13 +568,10 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-    
+  
     setLoading(true);
     setError(null);
-    
-    let unsubPosts: () => void = () => {};
-    let unsubWishlists: () => void = () => {};
-
+  
     const fetchFeed = async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -585,75 +582,66 @@ export default function DashboardPage() {
         }
         const userData = userDoc.data();
         const following = userData.following || [];
-        const authorIdsToQuery = [...new Set([user.uid, ...following])].slice(0, 30);
+        const authorIdsToQuery = [...new Set([user.uid, ...following])];
   
         if (authorIdsToQuery.length === 0) {
-            setLoading(false);
-            setFeedItems([]);
-            return;
+          setLoading(false);
+          setFeedItems([]);
+          return;
         }
 
-        let posts: Post[] = [];
-        let wishlists: Wishlist[] = [];
+        // Fetch Posts - New method without collectionGroup
+        const postPromises = authorIdsToQuery.map(authorId => {
+            const postsQuery = query(
+                collection(db, 'posts'),
+                where('authorId', '==', authorId),
+                orderBy('createdAt', 'desc'),
+                limit(10) // Limit per user to not fetch too much
+            );
+            return getDocs(postsQuery);
+        });
+
+        const postSnapshots = await Promise.all(postPromises);
+        const posts: Post[] = postSnapshots.flatMap(snapshot => 
+            snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post))
+        );
+
+        // Fetch Wishlists - This query is valid with indexes
+        const wishlistsQuery = query(
+            collection(db, 'wishlists'),
+            where('authorId', 'in', authorIdsToQuery),
+            orderBy('createdAt', 'desc'),
+            limit(20)
+          );
         
-        const updateFeed = () => {
-          const combinedFeed = [...posts, ...wishlists];
-          combinedFeed.sort((a, b) => {
+        const wishlistsSnapshot = await getDocs(wishlistsQuery);
+        const wishlists: Wishlist[] = wishlistsSnapshot.docs
+            .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
+            .filter(wl => wl.authorId === user.uid || wl.privacy === 'public');
+
+
+        const combinedFeed = [...posts, ...wishlists];
+        combinedFeed.sort((a, b) => {
             const dateA = a.createdAt?.toMillis() || 0;
             const dateB = b.createdAt?.toMillis() || 0;
             return dateB - dateA;
-          });
-          setFeedItems(combinedFeed);
-          setLoading(false);
-        }
-
-        const postsQuery = query(
-          collectionGroup(db, 'posts'),
-          where('authorId', 'in', authorIdsToQuery),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-
-        unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-            posts = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-            updateFeed();
-        }, (err) => {
-            console.error("Error fetching posts:", err);
-            setError("Failed to load feed posts.");
-            setLoading(false);
         });
-
-        const wishlistsQuery = query(
-          collectionGroup(db, 'wishlists'),
-          where('authorId', 'in', authorIdsToQuery),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-
-        unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-            wishlists = wishlistsSnapshot.docs
-              .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
-              .filter(wl => wl.authorId === user.uid || wl.privacy === 'public'); // Filter for own or public wishlists
-            updateFeed();
-        }, (err) => {
-            console.error("Error fetching wishlists:", err);
-            setError("Failed to load feed wishlists.");
-            setLoading(false);
-        });
+        
+        setFeedItems(combinedFeed);
   
       } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
         setError("Failed to load feed. " + err.message);
+      } finally {
         setLoading(false);
       }
     };
   
     fetchFeed();
   
-    return () => {
-      unsubPosts();
-      unsubWishlists();
-    };
+    // Note: This approach doesn't use onSnapshot for real-time updates for simplicity and to avoid complex listener management.
+    // For a production app, a more sophisticated real-time solution would be needed.
+
   }, [user]);
 
   return (

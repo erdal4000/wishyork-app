@@ -1,3 +1,4 @@
+
 {
   "indexes": [
     {
@@ -6,20 +7,6 @@
       "fields": [
         {
           "fieldPath": "addedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "authorId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
       ]
@@ -90,20 +77,6 @@
         },
         {
           "fieldPath": "title_lowercase",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "title_lowercase",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "privacy",
           "order": "ASCENDING"
         }
       ]
