@@ -50,6 +50,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -311,7 +312,6 @@ export default function WishlistDetailPage() {
           throw new Error("Item or Wishlist not found");
         }
         
-        // Only proceed if the item is not already fulfilled to prevent double counting
         if (itemDoc.data().status === 'fulfilled') {
             return;
         }

@@ -570,88 +570,99 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-
+  
     setLoading(true);
     setError(null);
-
+  
     const userDocRef = doc(db, 'users', user.uid);
-
-    // This listener fetches the user's following list and then sets up the feed listeners.
+  
     const userUnsubscribe = onSnapshot(userDocRef, (userDoc) => {
       const userData = userDoc.data();
       const following = userData?.following || [];
       const authorIdsToQuery = [...new Set([user.uid, ...following])];
-
+  
       if (authorIdsToQuery.length === 0) {
         setPostItems([]);
         setWishlistItems([]);
         setLoading(false);
         return;
       }
-      
-      const unsubscribes: Unsubscribe[] = [];
-
-      // Wishlist Listener
-      const wishlistsQuery = query(
-        collection(db, 'wishlists'),
-        where('authorId', 'in', authorIdsToQuery),
-        where('privacy', '==', 'public'), // Only public wishlists in the feed
-        orderBy('createdAt', 'desc')
-      );
-      const wishlistsUnsub = onSnapshot(wishlistsQuery, (snapshot) => {
-        const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-        setWishlistItems(lists);
-        setLoading(false); // Stop loading once the first set of data arrives
-      }, (err) => {
-        console.error("Error fetching wishlists:", err);
-        setError("Failed to load wishlists.");
-        setLoading(false);
-      });
-      unsubscribes.push(wishlistsUnsub);
-
-      // Posts Listener
-      const postsQuery = query(
-        collection(db, 'posts'),
-        where('authorId', 'in', authorIdsToQuery),
-        orderBy('createdAt', 'desc')
-      );
-      const postsUnsub = onSnapshot(postsQuery, (snapshot) => {
-        const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        setPostItems(posts);
-        setLoading(false); // Stop loading once the first set of data arrives
-      }, (err) => {
-        console.error("Error fetching posts:", err);
-        setError("Failed to load posts.");
-        setLoading(false);
-      });
-      unsubscribes.push(postsUnsub);
-      
-      // Return a cleanup function that unsubscribes from all listeners
+  
+      // This will hold all active listeners so we can clean them up.
+      const allUnsubscribes: Unsubscribe[] = [];
+  
+      const chunkSize = 10;
+      for (let i = 0; i < authorIdsToQuery.length; i += chunkSize) {
+        const chunk = authorIdsToQuery.slice(i, i + chunkSize);
+  
+        // Wishlist Listener for chunk
+        const wishlistsQuery = query(
+          collection(db, 'wishlists'),
+          where('authorId', 'in', chunk),
+          where('privacy', 'in', ['public', 'friends']) 
+        );
+        const wishlistsUnsub = onSnapshot(wishlistsQuery, (snapshot) => {
+          const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+          setWishlistItems(prev => {
+            const otherItems = prev.filter(p => !chunk.includes(p.authorId));
+            return [...otherItems, ...lists];
+          });
+          setLoading(false);
+        }, (err) => {
+          console.error("Error fetching wishlists:", err);
+          setError("Failed to load wishlists.");
+          setLoading(false);
+        });
+        allUnsubscribes.push(wishlistsUnsub);
+  
+        // Posts Listener for chunk
+        const postsQuery = query(
+          collection(db, 'posts'),
+          where('authorId', 'in', chunk)
+        );
+        const postsUnsub = onSnapshot(postsQuery, (snapshot) => {
+          const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+           setPostItems(prev => {
+            const otherItems = prev.filter(p => !chunk.includes(p.authorId));
+            return [...otherItems, ...posts];
+          });
+          setLoading(false);
+        }, (err) => {
+          console.error("Error fetching posts:", err);
+          setError("Failed to load feed posts.");
+          setLoading(false);
+        });
+        allUnsubscribes.push(postsUnsub);
+      }
+  
       return () => {
-        unsubscribes.forEach(unsub => unsub());
+        allUnsubscribes.forEach(unsub => unsub());
       };
-
+  
     }, (err) => {
       console.error("Error fetching user's following list:", err);
       setError("Failed to load user data to build feed.");
       setLoading(false);
     });
-
+  
     return () => userUnsubscribe();
   }, [user]);
 
   // This effect combines and sorts the feed whenever posts or wishlists are updated.
   useEffect(() => {
     const combinedFeed = [...postItems, ...wishlistItems];
-
+  
+    // Filter out items that don't have a valid `createdAt` timestamp.
+    // This is a crucial defensive check.
     const validFeedItems = combinedFeed.filter(item => item.createdAt && typeof item.createdAt.toMillis === 'function');
     
+    // Sort the valid items by date
     validFeedItems.sort((a, b) => {
         const dateA = a.createdAt.toMillis();
         const dateB = b.createdAt.toMillis();
         return dateB - dateA;
     });
-
+  
     setFeedItems(validFeedItems);
   }, [postItems, wishlistItems]);
 
