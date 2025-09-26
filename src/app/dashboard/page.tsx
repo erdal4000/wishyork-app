@@ -596,7 +596,7 @@ export default function DashboardPage() {
       const wishlistsQuery = query(
           collection(db, 'wishlists'),
           where('authorId', 'in', authors),
-          orderBy('createdAt', 'desc'),
+          // orderBy('createdAt', 'desc'), // Temporarily removed to fix index issue
           limit(30)
       );
 
