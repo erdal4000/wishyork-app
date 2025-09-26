@@ -599,7 +599,8 @@ export default function DashboardPage() {
         const wishlistsQuery = query(
           collection(db, 'wishlists'),
           where('authorId', 'in', chunk),
-          where('privacy', 'in', ['public', 'friends']) 
+          where('privacy', 'in', ['public', 'friends']),
+          orderBy('createdAt', 'desc')
         );
         const wishlistsUnsub = onSnapshot(wishlistsQuery, (snapshot) => {
           const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
@@ -618,7 +619,8 @@ export default function DashboardPage() {
         // Posts Listener for chunk
         const postsQuery = query(
           collection(db, 'posts'),
-          where('authorId', 'in', chunk)
+          where('authorId', 'in', chunk),
+          orderBy('createdAt', 'desc')
         );
         const postsUnsub = onSnapshot(postsQuery, (snapshot) => {
           const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
