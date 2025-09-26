@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, storage } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, where, addDoc, serverTimestamp, deleteDoc, Unsubscribe, limit, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
@@ -482,7 +482,9 @@ function FeedCard({ item }: { item: FeedItem }) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -574,75 +576,67 @@ export default function DashboardPage() {
     setLoading(true);
 
     const followingList = userProfile.following || [];
-    // Firestore 'in' queries are limited to 30 items. We take the current user plus the last 29 followed.
     const feedAuthors = [userProfile.uid, ...followingList.slice(-29)];
     
     if (feedAuthors.length === 0) {
         setLoading(false);
-        setFeedItems([]);
+        setPosts([]);
+        setWishlists([]);
         return;
     }
 
-    let combinedUnsubscribes: Unsubscribe[] = [];
-
-    const setupListeners = (authors: string[]) => {
-      const postsQuery = query(
-        collection(db, 'posts'),
-        where('authorId', 'in', authors),
-        orderBy('createdAt', 'desc'),
-        limit(30)
-      );
-      
-      const wishlistsQuery = query(
-          collection(db, 'wishlists'),
-          where('authorId', 'in', authors),
-          // orderBy('createdAt', 'desc'), // Temporarily removed to fix index issue
-          limit(30)
-      );
-
-      const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-          const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
-          
-          setFeedItems(prevItems => {
-              const otherItems = prevItems.filter(item => item.type !== 'post' || !authors.includes(item.authorId));
-              const newFeed = [...postsData, ...otherItems].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-              return newFeed;
-          });
-          setLoading(false);
-          setError(null);
-      }, (error) => {
-          console.error("Error fetching posts:", error);
-          setError("Feed unavailable: Failed to load posts.");
-          setLoading(false);
-      });
-
-      const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-          const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
-
-          setFeedItems(prevItems => {
-              const otherItems = prevItems.filter(item => item.type !== 'wishlist' || !authors.includes(item.authorId));
-              const newFeed = [...wishlistsData, ...otherItems].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-              return newFeed;
-          });
-          setLoading(false);
-          setError(null);
-      }, (error) => {
-          console.error("Error fetching wishlists:", error);
-          setError("Feed unavailable: Failed to load wishlists.");
-          setLoading(false);
-      });
-
-      return [unsubPosts, unsubWishlists];
-    }
+    const postsQuery = query(
+      collection(db, 'posts'),
+      where('authorId', 'in', feedAuthors),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
     
-    // Initial setup for followed users
-    combinedUnsubscribes = setupListeners(feedAuthors);
+    const wishlistsQuery = query(
+        collection(db, 'wishlists'),
+        where('authorId', 'in', feedAuthors),
+        where('privacy', 'in', ['public', 'friends']),
+        limit(20)
+    );
+
+    const unsubPosts = onSnapshot(postsQuery, 
+      (postsSnapshot) => {
+        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
+        setPosts(postsData);
+        setLoading(false);
+        setError(null);
+      }, 
+      (error) => {
+        console.error("Error fetching posts:", error);
+        setError("Feed unavailable: Failed to load posts.");
+        setLoading(false);
+      }
+    );
+
+    const unsubWishlists = onSnapshot(wishlistsQuery, 
+      (wishlistsSnapshot) => {
+        const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
+        setWishlists(wishlistsData);
+        setLoading(false);
+      }, 
+      (error) => {
+        console.error("Error fetching wishlists:", error);
+        setError("Feed unavailable: Failed to load wishlists.");
+        setLoading(false);
+      }
+    );
 
     return () => {
-      combinedUnsubscribes.forEach(unsub => unsub());
+      unsubPosts();
+      unsubWishlists();
     };
 
   }, [user, userProfile]);
+
+  const feedItems = useMemo(() => {
+    const combined = [...posts, ...wishlists];
+    return combined.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }, [posts, wishlists]);
 
 
   return (
@@ -727,3 +721,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
