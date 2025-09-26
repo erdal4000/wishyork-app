@@ -362,10 +362,8 @@ export default function ProfilePage() {
         ];
 
         if (isOwnProfile) {
-            // Owner sees all their lists, no privacy filter needed.
             wishlistsQuery = query(collection(db, 'wishlists'), ...baseWishlistsQuery);
         } else {
-            // Others only see public lists.
              wishlistsQuery = query(
                 collection(db, 'wishlists'),
                 where('authorId', '==', profileUser.uid),
@@ -377,7 +375,7 @@ export default function ProfilePage() {
         const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
             const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
             setWishlists(fetchedWishlists);
-            setLoading(false); // Set loading to false after wishlists (the primary content) are loaded
+            setLoading(false);
         }, (error) => {
             console.error("Error fetching wishlists:", error);
             toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
@@ -564,3 +562,5 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+    
