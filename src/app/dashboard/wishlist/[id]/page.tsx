@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, runTransaction, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -256,10 +256,10 @@ export default function WishlistDetailPage() {
     return () => unsubscribe();
   }, [id, toast, canViewItems]);
 
-  const updateItemAndWishlist = async (itemId: string, itemChanges: Partial<Item>, wishlistChanges: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
+  const updateItemAndWishlistTransaction = async (itemId: string, itemChanges: Partial<Item>, wishlistIncrement: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
     setIsUpdatingItem(itemId);
     const wishlistRef = doc(db, 'wishlists', id);
-    const itemRef = doc(wishlistRef, 'items', itemId);
+    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
   
     try {
       await runTransaction(db, async (transaction) => {
@@ -270,23 +270,26 @@ export default function WishlistDetailPage() {
         
         transaction.update(itemRef, itemChanges);
   
-        const data = wishlistDoc.data();
-        let newUnitsFulfilled = data.unitsFulfilled || 0;
-        let newTotalUnits = data.totalUnits || 0;
-        let newItemCount = data.itemCount || 0;
-  
-        if (wishlistChanges.fulfilled) newUnitsFulfilled += wishlistChanges.fulfilled;
-        if (wishlistChanges.total) newTotalUnits += wishlistChanges.total;
-        if (wishlistChanges.items) newItemCount += wishlistChanges.items;
-  
+        const currentData = wishlistDoc.data();
+        let newUnitsFulfilled = currentData.unitsFulfilled || 0;
+        let newTotalUnits = currentData.totalUnits || 0;
+        
+        if (wishlistIncrement.fulfilled) newUnitsFulfilled += wishlistIncrement.fulfilled;
+        if (wishlistIncrement.total) newTotalUnits += wishlistIncrement.total;
+       
         const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
         
-        transaction.update(wishlistRef, {
+        const updateData: any = {
           unitsFulfilled: newUnitsFulfilled,
           totalUnits: newTotalUnits,
-          itemCount: newItemCount,
-          progress: newProgress,
-        });
+          progress: newProgress
+        };
+        
+        if (wishlistIncrement.items) {
+            updateData.itemCount = increment(wishlistIncrement.items);
+        }
+
+        transaction.update(wishlistRef, updateData);
       });
       return true;
     } catch (e) {
@@ -322,7 +325,7 @@ export default function WishlistDetailPage() {
         toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
         return;
     }
-    const success = await updateItemAndWishlist(itemId, {
+    const success = await updateItemAndWishlistTransaction(itemId, {
         status: 'reserved',
         reservedBy: user.displayName || 'Anonymous',
     }, {});
@@ -336,7 +339,7 @@ export default function WishlistDetailPage() {
         toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
         return;
     }
-    const success = await updateItemAndWishlist(itemId, { status: 'fulfilled' }, { fulfilled: itemQuantity });
+    const success = await updateItemAndWishlistTransaction(itemId, { status: 'fulfilled' }, { fulfilled: itemQuantity });
     if(success) {
       toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     }
@@ -351,7 +354,7 @@ export default function WishlistDetailPage() {
       wishlistChanges = { fulfilled: -itemQuantity };
     }
 
-    const success = await updateItemAndWishlist(itemId, {
+    const success = await updateItemAndWishlistTransaction(itemId, {
         status: 'available',
         reservedBy: undefined,
     }, wishlistChanges);
@@ -363,18 +366,44 @@ export default function WishlistDetailPage() {
 
 
   const handleDeleteItem = async (item: Item) => {
-    const success = await updateItemAndWishlist(item.id, {}, {
-      total: -item.quantity,
-      items: -1,
-      fulfilled: item.status === 'fulfilled' ? -item.quantity : 0,
-    });
-
-    if (success) {
-      const itemRef = doc(db, 'wishlists', id, 'items', item.id);
+    const wishlistRef = doc(db, 'wishlists', id);
+    const itemRef = doc(db, 'wishlists', id, 'items', item.id);
+  
+    try {
       await runTransaction(db, async (transaction) => {
-        transaction.delete(itemRef);
+        const wishlistDoc = await transaction.get(wishlistRef);
+        if (!wishlistDoc.exists()) {
+          throw "Wishlist does not exist!";
+        }
+  
+        // Defer the delete operation to a batch write after the transaction
+        
+        const currentData = wishlistDoc.data();
+        let newUnitsFulfilled = currentData.unitsFulfilled || 0;
+        let newTotalUnits = currentData.totalUnits || 0;
+        
+        newTotalUnits -= item.quantity;
+        if (item.status === 'fulfilled') {
+          newUnitsFulfilled -= item.quantity;
+        }
+
+        const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
+        
+        transaction.update(wishlistRef, {
+          itemCount: increment(-1),
+          totalUnits: newTotalUnits,
+          unitsFulfilled: newUnitsFulfilled,
+          progress: newProgress
+        });
       });
+
+      // Now delete the item document itself
+      await deleteDoc(itemRef);
+
       toast({ title: "Success", description: "Item removed from wishlist." });
+    } catch (e) {
+      console.error("Item deletion failed: ", e);
+      toast({ title: "Error", description: "Could not delete the item. Please try again.", variant: "destructive" });
     }
   }
 
@@ -385,7 +414,7 @@ export default function WishlistDetailPage() {
         const itemsRef = collection(wishlistRef, 'items');
         const itemsSnapshot = await getDocs(itemsRef);
         
-        const batch = writeBatch(db); // Use writeBatch instead of runTransaction for deletes
+        const batch = writeBatch(db); 
         itemsSnapshot.forEach(itemDoc => batch.delete(itemDoc.ref));
         batch.delete(wishlistRef);
 
@@ -667,9 +696,7 @@ export default function WishlistDetailPage() {
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDeleteItem(item)} className="bg-destructive hover:bg-destructive/90">
-                                          Yes, delete item
-                                      </AlertDialogAction>
+                                      <AlertDialogAction onClick={() => handleDeleteItem(item)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
                                   </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
@@ -677,79 +704,65 @@ export default function WishlistDetailPage() {
                         </DropdownMenu>
                       )}
                     </CardHeader>
-                    <CardContent className="space-y-2 pb-4 pt-0 text-sm">
-                      <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
-                        <Badge variant="outline">{item.recurrence}</Badge>
-                        <Badge variant="outline">{item.quantity} required</Badge>
-                         <Badge variant="outline">Priority: {item.priority}</Badge>
-                         {item.neededBy && (
-                            <Badge variant="outline" className="flex items-center gap-1.5">
-                                <Calendar className="h-3 w-3" />
-                                Needed by {format(item.neededBy.toDate(), "MMM d, yyyy")}
-                            </Badge>
-                         )}
-                      </div>
-                      {item.description && <p className="whitespace-pre-wrap break-words">{item.description}</p>}
-                      {item.price && <p className="font-bold">{item.price}</p>}
-                      {item.purchaseUrl && <Link href={item.purchaseUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View Product</Link>}
+                    <CardContent className="space-y-3 pb-3">
+                        {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                            <Badge variant="outline">Priority: {item.priority}</Badge>
+                            {item.price && <span className="font-semibold text-primary">{item.price}</span>}
+                            {item.neededBy && (
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Calendar className="h-4 w-4" />
+                                    <span>Needed by {format(item.neededBy.toDate(), 'PPP')}</span>
+                                </div>
+                            )}
+                        </div>
                     </CardContent>
-
-                    {!isOwnWishlist && (
-                       <div className="px-6 pb-4">
-                          {item.status === 'available' && (
-                              <Button className="w-full" onClick={() => handleReserveItem(item.id)} disabled={isUpdatingItem === item.id}>
-                                  {isUpdatingItem === item.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                  Reserve this item
-                              </Button>
-                          )}
-                          {item.status === 'fulfilled' && (
-                              <div className="rounded-md border border-green-300 bg-green-50 p-4 dark:bg-green-900/30 dark:border-green-700/50">
-                                  <div className="flex items-center gap-3">
-                                      <Gift className="h-5 w-5 flex-shrink-0 text-green-500 dark:text-green-400"/>
-                                      <p className="font-semibold text-green-700 dark:text-green-300">Fulfilled</p>
-                                  </div>
-                              </div>
-                          )}
-                          {item.status === 'reserved' && (
-                              <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 dark:bg-yellow-900/30 dark:border-yellow-700/50">
-                                  <div className="flex items-start gap-3">
-                                      <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500 dark:text-yellow-400"/>
-                                      <div>
-                                          <p className="font-semibold">Reserved by {item.reservedBy}</p>
-                                          <p className="text-xs text-muted-foreground">Item is reserved before purchase to ensure no gift duplicates.</p>
-                                      </div>
-                                  </div>
-                                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                                  <Button className="w-full" onClick={() => handleMarkAsPurchased(item.id, item.quantity)} disabled={isUpdatingItem === item.id}>
-                                      {isUpdatingItem === item.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                      Mark as purchased
-                                  </Button>
-                                  {(user?.displayName === item.reservedBy || isOwnWishlist) && (
-                                      <Button variant="outline" className="w-full" onClick={() => handleCancelReservation(item.id, item.quantity)} disabled={isUpdatingItem === item.id}>
-                                          <XCircle className="mr-2 h-4 w-4" />
-                                          Cancel Reservation
-                                      </Button>
-                                  )}
-                                  </div>
-                              </div>
-                          )}
-                      </div>
-                    )}
                   </div>
                 </div>
+
+                 <CardFooter className="bg-muted/50 p-3">
+                   {isUpdatingItem === item.id ? (
+                      <div className="flex w-full items-center justify-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <span>Updating...</span>
+                      </div>
+                   ) : item.status === 'available' ? (
+                        <div className="flex w-full gap-2">
+                            {!isOwnWishlist && (
+                                <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve</Button>
+                            )}
+                            <Button variant={isOwnWishlist ? 'default' : 'secondary'} size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                        </div>
+                   ) : item.status === 'reserved' ? (
+                       <div className="flex w-full items-center justify-between">
+                           <p className="text-sm">Reserved by {item.reservedBy === user?.displayName ? 'you' : item.reservedBy}</p>
+                           {(isOwnWishlist || item.reservedBy === user?.displayName) && (
+                            <div className="flex gap-2">
+                                <Button variant="destructive" size="sm" onClick={() => handleCancelReservation(item.id, item.quantity)}>Cancel</Button>
+                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                            </div>
+                           )}
+                       </div>
+                   ) : ( // Fulfilled
+                       <div className="flex w-full items-center justify-between">
+                           <p className="text-sm font-semibold text-green-600">Fulfilled!</p>
+                           {isOwnWishlist && (
+                             <Button variant="ghost" size="sm" onClick={() => handleCancelReservation(item.id, item.quantity)}>Mark as Available</Button>
+                           )}
+                       </div>
+                   )}
+                </CardFooter>
               </Card>
             ))}
           </div>
         )}
       </div>
 
-      <Separator />
-
+       <Separator />
        <div className="space-y-4">
-         <h2 className="text-2xl font-bold">Replies ({wishlist.commentCount || 0})</h2>
-         <CommentSection docId={id} collectionType="wishlists" docAuthorId={wishlist.authorId} />
-       </div>
-
+        <h2 className="text-2xl font-bold">Replies ({wishlist.commentCount || 0})</h2>
+        <CommentSection docId={wishlist.id} collectionType="wishlists" docAuthorId={wishlist.authorId} />
+      </div>
     </div>
   );
 }
