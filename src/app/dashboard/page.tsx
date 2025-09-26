@@ -496,22 +496,22 @@ export default function DashboardPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    if (user) {
-      const userDocRef = doc(db, 'users', user.uid);
-      const unsubscribe = onSnapshot(userDocRef, (doc) => {
-        if (doc.exists()) {
-          setUserProfile({ uid: doc.id, ...doc.data() } as UserProfile);
-        } else {
-          setUserProfile(null);
-        }
-      }, (error) => {
-        console.error("Error fetching user profile for feed:", error);
+    if (!user) {
         setUserProfile(null);
-      });
-      return () => unsubscribe();
+        return;
+    }
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (doc) => {
+    if (doc.exists()) {
+        setUserProfile({ uid: doc.id, ...doc.data() } as UserProfile);
     } else {
         setUserProfile(null);
     }
+    }, (error) => {
+    console.error("Error fetching user profile for feed:", error);
+    setUserProfile(null);
+    });
+    return () => unsubscribe();
   }, [user]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -578,77 +578,80 @@ export default function DashboardPage() {
         return;
     };
 
-    const following = userProfile.following || [];
-    if (following.length === 0 && !userProfile.uid) {
-        setLoading(false);
-        setAllPosts([]);
-        setAllWishlists([]);
-        return;
-    }
+    setLoading(true);
+    setError(null);
     
     // Create the list of authors for the 'in' query.
-    // Limit to 30 to comply with Firestore 'in' query limit.
-    const feedAuthors = [userProfile.uid, ...following].slice(0, 30);
+    const feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
     
-    setLoading(true);
-
-    const postsQuery = query(
-      collection(db, 'posts'),
-      where('authorId', 'in', feedAuthors)
-    );
-    
-    const wishlistsQuery = query(
-        collection(db, 'wishlists'),
-        where('authorId', 'in', feedAuthors)
-    );
-
-    const unsubPosts = onSnapshot(postsQuery, 
-      (postsSnapshot) => {
-        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
-        setAllPosts(postsData);
-        setError(null);
-      }, 
-      (error) => {
-        console.error("Error fetching posts:", error);
-        setError("Feed unavailable: Failed to load posts.");
-        setAllPosts([]); // Clear posts on error
-      }
-    );
-
-    const unsubWishlists = onSnapshot(wishlistsQuery, 
-      (wishlistsSnapshot) => {
-        const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
-        setAllWishlists(wishlistsData);
-        setError(null);
-      }, 
-      (error) => {
-        console.error("Error fetching wishlists:", error);
-        setError("Feed unavailable: Failed to load wishlists.");
-        setAllWishlists([]); // Clear wishlists on error
-      }
-    );
-
-    // This is to set loading to false only after initial fetch attempt
-    const combinedLoading = Promise.allSettled([
-        getDocs(postsQuery),
-        getDocs(wishlistsQuery)
-    ]);
-    
-    combinedLoading.finally(() => {
+    if (feedAuthors.length === 0) {
+        setAllPosts([]);
+        setAllWishlists([]);
         setLoading(false);
-    })
+        return;
+    }
 
-    return () => {
-      unsubPosts();
-      unsubWishlists();
-    };
-  }, [userProfile]);
+    const fetchAllFeedData = async () => {
+        try {
+            const postsPromises = feedAuthors.map(authorId => {
+                const postsQuery = query(
+                    collection(db, 'posts'),
+                    where('authorId', '==', authorId),
+                    orderBy('createdAt', 'desc'),
+                    limit(5) // Limit to 5 posts per followed user
+                );
+                return getDocs(postsQuery);
+            });
+    
+            const wishlistsPromises = feedAuthors.map(authorId => {
+                const wishlistsQuery = query(
+                    collection(db, 'wishlists'),
+                    where('authorId', '==', authorId),
+                    where('privacy', 'in', ['public', 'friends']), // Ensure we only get what we can see
+                    orderBy('createdAt', 'desc'),
+                    limit(5) // Limit to 5 wishlists per followed user
+                );
+                return getDocs(wishlistsQuery);
+            });
+    
+            const [postsSnapshots, wishlistsSnapshots] = await Promise.all([
+                Promise.all(postsPromises),
+                Promise.all(wishlistsPromises),
+            ]);
+
+            const postsData = postsSnapshots.flatMap(snapshot => 
+                snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post))
+            );
+            setAllPosts(postsData);
+
+            const wishlistsData = wishlistsSnapshots.flatMap(snapshot => 
+                snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist))
+            );
+            setAllWishlists(wishlistsData);
+            
+        } catch (err: any) {
+            console.error("Error fetching feed data:", err);
+            // Check for permission error specifically on wishlists
+            if (err.code === 'permission-denied' && err.message.includes('wishlists')) {
+                 setError("Feed unavailable: Failed to load wishlists.");
+            } else {
+                 setError("There was an issue loading content. Please try again later.");
+            }
+            setAllPosts([]);
+            setAllWishlists([]);
+        } finally {
+            setLoading(false);
+        }
+    }
+    
+    fetchAllFeedData();
+
+  }, [userProfile, user]);
 
   const feedItems = useMemo(() => {
     if (!userProfile) return [];
     
     const filteredWishlists = allWishlists.filter(w => {
-        // Only show private lists if the current user is the author
         return w.privacy !== 'private' || w.authorId === userProfile.uid;
     });
     
@@ -717,7 +720,7 @@ export default function DashboardPage() {
       )}
 
       {!loading && error && (
-          <Card className="p-8 text-center text-destructive border-destructive">
+          <Card className="p-8 text-center text-destructive border-destructive bg-destructive/10">
             <h3 className="text-lg font-semibold">{error}</h3>
             <p className="mt-2 text-sm">There was an issue loading content. Please try again later.</p>
           </Card>
