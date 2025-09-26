@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction, Unsubscribe } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -50,7 +50,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -205,56 +204,70 @@ export default function WishlistDetailPage() {
   });
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
-   useEffect(() => {
-    if (!id) return;
+  useEffect(() => {
+    if (!id || !user) return;
+
     setLoading(true);
-    const docRef = doc(db, 'wishlists', id);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setWishlist({ id: docSnap.id, ...data } as Wishlist);
-      } else {
-        console.log("No such document!");
-        setWishlist(null);
-      }
-      setLoading(false);
+    let itemsUnsubscribe: Unsubscribe | null = null;
+
+    const wishlistRef = doc(db, 'wishlists', id);
+    const wishlistUnsubscribe = onSnapshot(wishlistRef, (wishlistDoc) => {
+        if (wishlistDoc.exists()) {
+            const wishlistData = { id: wishlistDoc.id, ...wishlistDoc.data() } as Wishlist;
+            setWishlist(wishlistData);
+            setLoading(false);
+
+            // Once we have wishlist data, decide if we can fetch items
+            const isOwn = user.uid === wishlistData.authorId;
+            const canView = isOwn || wishlistData.privacy === 'public';
+
+            if (canView) {
+                // If we can view, set up the items listener
+                setLoadingItems(true);
+                const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
+                const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
+                
+                // Unsubscribe from previous items listener if it exists
+                if (itemsUnsubscribe) itemsUnsubscribe();
+
+                itemsUnsubscribe = onSnapshot(q, (itemsSnapshot) => {
+                    const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+                    setItems(itemsData);
+                    setLoadingItems(false);
+                }, (error) => {
+                    console.error("Error fetching items: ", error);
+                    toast({ title: "Error", description: "Could not fetch items.", variant: "destructive" });
+                    setLoadingItems(false);
+                });
+            } else {
+                // If we cannot view, clear items and stop loading
+                setItems([]);
+                setLoadingItems(false);
+            }
+        } else {
+            console.log("No such document!");
+            setWishlist(null);
+            setLoading(false);
+            setLoadingItems(false);
+        }
     }, (error) => {
         console.error("Error fetching wishlist: ", error);
         toast({ title: "Error", description: "Could not fetch wishlist.", variant: "destructive" });
         setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [id, toast]);
-
-  const isOwnWishlist = user?.uid === wishlist?.authorId;
-  const canViewItems = wishlist && (isOwnWishlist || wishlist.privacy === 'public');
-
-  useEffect(() => {
-    if (!id || !canViewItems) {
-      setLoadingItems(false);
-      return;
-    }
-    
-    setLoadingItems(true);
-    const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
-    const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const itemsData: Item[] = [];
-      querySnapshot.forEach((doc) => {
-        itemsData.push({ id: doc.id, ...doc.data() } as Item);
-      });
-      setItems(itemsData);
-      setLoadingItems(false);
-    }, (error) => {
-        console.error("Error fetching items: ", error);
-        toast({ title: "Error", description: "Could not fetch items.", variant: "destructive" });
         setLoadingItems(false);
     });
 
-    return () => unsubscribe();
-  }, [id, toast, canViewItems]);
+    // Cleanup function
+    return () => {
+        wishlistUnsubscribe();
+        if (itemsUnsubscribe) {
+            itemsUnsubscribe();
+        }
+    };
+}, [id, user, toast]);
+
+  const isOwnWishlist = user?.uid === wishlist?.authorId;
+  const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
 
   const updateItemAndWishlistTransaction = async (itemId: string, itemChanges: Partial<Item>, wishlistIncrement: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
     setIsUpdatingItem(itemId);
