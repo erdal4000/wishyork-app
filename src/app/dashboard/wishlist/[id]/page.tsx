@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, Unsubscribe, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -297,13 +297,13 @@ export default function WishlistDetailPage() {
     }
   };
 
-  const handleMarkAsPurchased = async (itemId: string) => {
+  const handleMarkAsPurchased = async (item: Item) => {
     if (!user) {
         toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
         return;
     }
-    setIsUpdatingItem(itemId);
-    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+    setIsUpdatingItem(item.id);
+    const itemRef = doc(db, 'wishlists', id, 'items', item.id);
     try {
         await updateDoc(itemRef, {
             status: 'fulfilled'
@@ -612,7 +612,7 @@ export default function WishlistDetailPage() {
             {items.map((item) => (
               <Card key={item.id} className="overflow-hidden">
                 <div className="flex">
-                  <div className="relative flex w-32 flex-shrink-0 items-center justify-center">
+                  <div className="relative flex w-32 flex-shrink-0 items-center justify-center bg-secondary">
                     <Image
                         src={item.imageUrl}
                         alt={item.name}
@@ -631,7 +631,15 @@ export default function WishlistDetailPage() {
                   <div className="flex-1">
                     <CardHeader className="flex flex-row items-start justify-between pb-2">
                       <div>
-                        <CardTitle className="text-lg">{item.name}</CardTitle>
+                        <CardTitle className="text-lg">
+                           {item.purchaseUrl ? (
+                                <Link href={item.purchaseUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                    {item.name}
+                                </Link>
+                            ) : (
+                                item.name
+                            )}
+                        </CardTitle>
                          {item.addedAt && (
                            <p className="text-sm text-muted-foreground">
                             Added {formatDistanceToNow(item.addedAt.toDate(), { addSuffix: true })}
@@ -710,7 +718,7 @@ export default function WishlistDetailPage() {
                                 <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Un-reserve</Button>
                             )}
                             {item.reservedById === user?.uid && (
-                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id)}>Mark as Purchased</Button>
+                                <Button size="sm" onClick={() => handleMarkAsPurchased(item)}>Mark as Purchased</Button>
                             )}
                            </div>
                        </div>

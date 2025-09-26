@@ -355,21 +355,24 @@ export default function ProfilePage() {
 
         // Listener for Wishlists
         let wishlistsQuery: Query<DocumentData>;
-        const baseWishlistsQuery = query(
-            collection(db, 'wishlists'),
-            where('authorId', '==', profileUser.uid),
-            orderBy('createdAt', 'desc')
-        );
         
+        let baseQuery = query(
+            collection(db, 'wishlists'),
+            where('authorId', '==', profileUser.uid)
+        );
+
         if (isOwnProfile) {
-            wishlistsQuery = baseWishlistsQuery; // Owner sees all their lists
+            wishlistsQuery = baseQuery; // Owner sees all their lists
         } else {
             // Others see public lists. 'friends' logic can be added here if needed.
-            wishlistsQuery = query(baseWishlistsQuery, where('privacy', '==', 'public'));
+            wishlistsQuery = query(baseQuery, where('privacy', '==', 'public'));
         }
         
         const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
-            setWishlists(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist)));
+            const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+            // Manual sort since we removed orderBy from the query
+            fetchedWishlists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            setWishlists(fetchedWishlists);
             setLoading(false); // Set loading to false after wishlists (the primary content) are loaded
         }, (error) => {
             console.error("Error fetching wishlists:", error);
