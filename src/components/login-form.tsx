@@ -78,9 +78,15 @@ export function LoginForm() {
         const customToken = searchParams.get('token');
         if (customToken) {
             try {
-                await signInWithCustomToken(auth, customToken);
-                // The onAuthStateChanged listener in AuthProvider will handle the redirect and cookie creation.
+                const userCredential = await signInWithCustomToken(auth, customToken);
+                const idToken = await userCredential.user.getIdToken();
+                await fetch('/api/auth/session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ idToken }),
+                });
                 toast({ title: "Welcome!", description: "You have successfully signed in." });
+                router.push('/dashboard');
             } catch (error: any) {
                 console.error("Google sign-in with custom token error:", error);
                 setError(error.message || "Failed to sign in with Google.");
@@ -104,9 +110,10 @@ export function LoginForm() {
 
   useEffect(() => {
     if (!loading && user) {
-        router.push('/dashboard');
+        const redirectUrl = searchParams.get('redirect') || '/dashboard';
+        router.push(redirectUrl);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, searchParams]);
 
 
   const form = useForm<FormData>({
@@ -143,8 +150,15 @@ export function LoginForm() {
         throw new Error("Invalid username or password.");
       }
       
-      await signInWithEmailAndPassword(auth, emailToLogin, values.password);
-      
+      const userCredential = await signInWithEmailAndPassword(auth, emailToLogin, values.password);
+      const idToken = await userCredential.user.getIdToken();
+
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+
       toast({ title: "Login Successful!", description: "Redirecting you..." });
       // The useEffect for user state will handle the redirect
     } catch (error: any) {
