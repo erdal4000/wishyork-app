@@ -1,74 +1,83 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
+    
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
-
-    function isPublic(wishlistId) {
-      return get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public';
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if a set of keys is a subset of allowed keys
+    function isSubset(requestKeys, allowedKeys) {
+      return requestKeys.size() > 0 && requestKeys.difference(allowedKeys).size() == 0;
     }
 
-    // Rules for 'users' collection
+    // Rules for the 'users' collection
     match /users/{userId} {
-      allow read;
+      allow read: if true;
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
-    }
+      allow delete: if false; 
 
-    // Rules for 'usernames' collection
-    match /usernames/{username} {
-      allow read;
-      allow create: if request.auth != null;
-    }
-
-    // Rules for 'posts' collection
-    match /posts/{postId} {
-      allow read;
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-
-      // Comments subcollection
-      match /comments/{commentId} {
-        allow read;
-        allow create: if request.auth != null;
-        allow update: if isOwner(resource.data.authorId);
-        allow delete: if isOwner(resource.data.authorId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId);
-      }
-    }
-
-    // Rules for 'wishlists' collection
-    match /wishlists/{wishlistId} {
-      allow create: if isOwner(request.resource.data.authorId);
-      allow read: if resource.data.privacy == 'public' || isOwner(resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-
-      // Comments subcollection for wishlists
-      match /comments/{commentId} {
-        allow read;
-        allow create: if request.auth != null;
-        allow update: if isOwner(resource.data.authorId);
-        allow delete: if isOwner(resource.data.authorId) || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+      match /bookmarks/{bookmarkId} {
+        allow read, write: if isOwner(userId);
       }
     }
     
-    // Standalone rules for 'items' subcollection across all 'wishlists'
-    match /wishlists/{wishlistId}/items/{itemId} {
-      allow read;
-      allow create: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-      allow delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+    // Rules for the 'usernames' collection
+    match /usernames/{username} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow delete: if isSignedIn();
+    }
 
-      allow update: if request.auth != null && (
-        // Allow owner to update everything
-        get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid ||
-        (
-          // Allow others to update only specific fields if the list is public
-          get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy', 'reservedById'])
-        )
-      );
+    // Rules for the 'wishlists' collection
+    match /wishlists/{wishlistId} {
+      allow read: if resource.data.privacy == 'public' || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      
+      // Separate rules for the 'comments' subcollection
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      }
+    }
+    
+    // Rules for the 'posts' collection
+    match /posts/{postId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+
+        match /comments/{commentId} {
+            allow read: if true;
+            allow create: if isSignedIn();
+            allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        }
+    }
+    
+    // Standalone rules for 'items' subcollection across all wishlists
+    match /wishlists/{wishlistId}/items/{itemId} {
+      allow read: if true;
+      allow create, delete: if isSignedIn() && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      
+      // A user can update an item if:
+      // 1. They are signed in AND
+      // 2. They are the owner of the wishlist OR the wishlist is public
+      // 3. AND if they are NOT the owner, they can only update a subset of specific fields.
+      allow update: if isSignedIn() && 
+                      (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid ||
+                        (
+                          get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' &&
+                          isSubset(request.resource.data.keys(), ['status', 'reservedBy', 'reservedById'])
+                        )
+                      );
     }
   }
 }
