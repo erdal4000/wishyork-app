@@ -39,6 +39,13 @@
         { "fieldPath": "title_lowercase", "order": "ASCENDING" },
         { "fieldPath": "privacy", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "addedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
