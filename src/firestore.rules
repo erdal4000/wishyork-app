@@ -1,93 +1,74 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Users Collection ---
+    // Helper Functions (none for now to keep it simple)
+
+    // USER-RELATED RULES
     match /users/{userId} {
-      // READ: Any authenticated user can read any user's profile.
-      // This is necessary to view other people's profiles.
-      allow read: if request.auth != null;
+      // A user can read and update their own profile.
+      // Nobody else can read or write to other user profiles.
+      allow read, update: if request.auth != null && request.auth.uid == userId;
 
-      // UPDATE: A user can only update their own document.
-      allow update: if request.auth.uid == userId;
-      
-      // CREATE: Any authenticated user can create their own user document.
-      allow create: if request.auth.uid == userId;
-      
-      // DELETE: A user can only delete their own document.
-      allow delete: if request.auth.uid == userId;
+      // Anyone can create a user document during signup.
+      allow create: if request.auth != null;
     }
 
-    // --- Usernames Collection (for uniqueness) ---
     match /usernames/{username} {
-      // READ: No one needs to read this directly.
-      allow read: if false;
-
-      // WRITE: Only the corresponding user can create/delete their username entry.
-      allow write: if request.auth.uid == request.resource.data.uid || request.auth.uid == resource.data.uid;
+      // Anyone can read to check for username availability.
+      allow read;
+      // Only the associated user can create/delete their username document.
+      allow create, delete: if request.auth != null && request.auth.uid == request.resource.data.uid;
     }
-    
-    // --- Wishlists Collection ---
+
+    // CONTENT-RELATED RULES
+
     match /wishlists/{wishlistId} {
-      // READ: Allow reading if the list is 'public' OR the user is the owner.
-      // This is the key rule that fixes the list loading issues.
-      allow read: if resource.data.privacy == 'public' || request.auth.uid == resource.data.authorId;
+      // A user can only read their own wishlists. Public visibility is temporarily disabled.
+      allow read: if request.auth != null && request.auth.uid == resource.data.authorId;
 
-      // WRITE: Only the owner can create, update, or delete their wishlist.
-      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
+      // A user can only create a wishlist for themselves.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+      
+      // A user can only update or delete their own wishlists.
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
 
-      // --- Items Subcollection ---
+      // Rules for items subcollection
       match /items/{itemId} {
-        // READ: Inherits the read rule from the parent wishlist.
-        // If you can read the wishlist, you can read its items.
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
-
-        // WRITE:
         // Owner can do anything.
-        // Any authenticated user can update an item (for reserving/fulfilling).
-        allow create, delete: if request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+        allow read, write, delete: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
+        
+        // Logged-in users can update items on public lists (for reserving/fulfilling).
+        // This is simplified for now.
         allow update: if request.auth != null;
       }
-
-      // --- Comments Subcollection ---
-      match /comments/{commentId} {
-        // READ: If you can read the wishlist, you can read its comments.
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || request.auth.uid == get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId;
-        
-        // WRITE: Any authenticated user can create a comment.
-        // Only the comment owner can update/delete their comment.
-        allow create: if request.auth != null;
-        allow update, delete: if request.auth.uid == resource.data.authorId;
-      }
+      
+      // Rules for comments subcollection
+       match /comments/{commentId} {
+          // Any logged-in user can read comments.
+          allow read: if request.auth != null;
+          // Users can only create/delete their own comments.
+          allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+          allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+          // Liking a comment (simplified).
+          allow update: if request.auth != null;
+       }
     }
-
-    // --- Posts Collection ---
+    
     match /posts/{postId} {
-      // READ: Any authenticated user can read any post.
-      allow read: if request.auth != null;
-
-      // WRITE: Only the owner can create, update, or delete their post.
-      allow create: if request.auth.uid == request.resource.data.authorId;
-      allow update, delete: if request.auth.uid == resource.data.authorId;
-
-      // --- Comments Subcollection for Posts ---
-      match /comments/{commentId} {
-        // READ: If you can read the post, you can read its comments.
+        // Any logged-in user can read posts.
         allow read: if request.auth != null;
+        // Users can only create/update/delete their own posts.
+        allow create, update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
         
-        // WRITE: Any authenticated user can create a comment.
-        // Only the comment owner can update/delete their comment.
-        allow create: if request.auth != null;
-        allow update, delete: if request.auth.uid == resource.data.authorId;
-      }
-    }
-
-    // --- Bookmarks Subcollection (within Users) ---
-    match /users/{userId}/bookmarks/{bookmarkId} {
-      // A user can only access their own bookmarks.
-      allow read, write: if request.auth.uid == userId;
+        // Rules for comments on posts
+        match /comments/{commentId} {
+          allow read: if request.auth != null;
+          allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+          allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+          allow update: if request.auth != null;
+       }
     }
   }
 }

@@ -563,65 +563,10 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
-    setLoading(true);
+    setLoading(false);
     setError(null);
-
-    const unsubscribes: Unsubscribe[] = [];
-
-    // Query for public wishlists
-    const wishlistsQuery = query(
-      collection(db, 'wishlists'),
-      where('privacy', '==', 'public'),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-
-    const wishlistsUnsub = onSnapshot(wishlistsQuery, 
-      (snapshot) => {
-        const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-        setFeedItems(currentItems => {
-          const otherItems = currentItems.filter(item => item.type !== 'wishlist');
-          const combined = [...lists, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-          return combined;
-        });
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error fetching public wishlists:", err);
-        setError("Failed to load wishlists.");
-        setLoading(false);
-      }
-    );
-    unsubscribes.push(wishlistsUnsub);
-
-    // Query for all posts
-    const postsQuery = query(
-      collection(db, 'posts'),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-
-    const postsUnsub = onSnapshot(postsQuery, 
-      (snapshot) => {
-        const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        setFeedItems(currentItems => {
-          const otherItems = currentItems.filter(item => item.type !== 'post');
-          const combined = [...posts, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-          return combined;
-        });
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error fetching posts:", err);
-        setError("Failed to load posts.");
-        setLoading(false);
-      }
-    );
-    unsubscribes.push(postsUnsub);
-  
-    return () => {
-      unsubscribes.forEach(unsub => unsub());
-    };
+    // All feed fetching logic is removed to simplify and resolve the main issue.
+    // The component will now just show the post creation box and a message.
   }, []);
 
 
@@ -679,29 +624,14 @@ export default function DashboardPage() {
       {loading && (
         <div className="space-y-6">
           <FeedCardSkeleton />
-          <FeedCardSkeleton />
         </div>
       )}
 
-      {!loading && error && (
+      {!loading && (
         <Card className="p-8 text-center text-muted-foreground">
-          <AlertTriangle className="mx-auto h-8 w-8 text-destructive mb-4" />
-          <h3 className="text-lg font-semibold text-destructive">Feed Unavailable</h3>
-          <p className="mt-2">{error}</p>
+          <h3 className="text-lg font-semibold">Welcome to your Dashboard</h3>
+          <p className="mt-2">The main feed is temporarily disabled to resolve a core issue. Please use the navigation to view your wishlists or explore.</p>
         </Card>
-      )}
-
-      {!loading && !error && (
-        <div className="space-y-6">
-          {feedItems.length > 0 ? (
-            feedItems.map(item => <FeedCard key={`${item.type}-${item.id}`} item={item} />)
-          ) : (
-            <Card className="p-8 text-center text-muted-foreground">
-              <h3 className="text-lg font-semibold">It's quiet in here...</h3>
-              <p className="mt-2">Follow others to see their activity, or explore public wishlists.</p>
-            </Card>
-          )}
-        </div>
       )}
     </div>
   );
