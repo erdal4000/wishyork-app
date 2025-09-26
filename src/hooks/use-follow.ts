@@ -4,21 +4,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, runTransaction, DocumentReference } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, runTransaction, DocumentReference, increment } from 'firebase/firestore';
 import { useToast } from './use-toast';
-
-// Debounce function to prevent spamming follow/unfollow actions
-function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-
-  return (...args: Parameters<F>): Promise<ReturnType<F>> =>
-    new Promise(resolve => {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-      timeout = setTimeout(() => resolve(func(...args)), waitFor);
-    });
-}
 
 export const useFollow = (profileUserId?: string) => {
   const { user: currentUser } = useAuth();
@@ -33,11 +20,12 @@ export const useFollow = (profileUserId?: string) => {
         return;
     };
 
+    // Listen to changes in the current user's "following" list
     const unsub = onSnapshot(doc(db, "users", currentUser.uid), (doc) => {
         const followingList = doc.data()?.following || [];
         setIsFollowing(followingList.includes(profileUserId));
-    }, () => {
-        // Handle potential errors, e.g. if user is logged out
+    }, (error) => {
+        console.error("Failed to listen for follow status:", error);
         setIsFollowing(false);
     });
 
@@ -61,63 +49,37 @@ export const useFollow = (profileUserId?: string) => {
     setIsTogglingFollow(true);
     
     const currentUserRef = doc(db, "users", currentUser.uid);
-    const profileUserRef = doc(db, "users", profileUserId);
 
+    // The logic is now simplified to only update the current user's document
+    // to comply with security rules that only allow a user to write to their own document.
     try {
-      await runTransaction(db, async (transaction) => {
-        const currentUserDoc = await transaction.get(currentUserRef);
-        const profileUserDoc = await transaction.get(profileUserRef);
-
-        if (!currentUserDoc.exists() || !profileUserDoc.exists()) {
-          throw "User document not found!";
-        }
-
-        const currentUserData = currentUserDoc.data();
-        const currentlyFollowing = (currentUserData.following || []).includes(profileUserId);
-
-        if (currentlyFollowing) {
-          // Unfollow logic
-          transaction.update(currentUserRef, {
+        if (isFollowing) {
+          // --- Unfollow Logic ---
+          await updateDoc(currentUserRef, {
             following: arrayRemove(profileUserId),
-            followingCount: Math.max(0, (currentUserData.followingCount || 0) - 1)
+            followingCount: increment(-1)
           });
-          transaction.update(profileUserRef, {
-            followers: arrayRemove(currentUser.uid),
-            followersCount: Math.max(0, (profileUserDoc.data().followersCount || 0) - 1)
-          });
+           toast({ title: "Unfollowed", description: "You are no longer following this user." });
         } else {
-          // Follow logic
-          transaction.update(currentUserRef, {
+          // --- Follow Logic ---
+          await updateDoc(currentUserRef, {
             following: arrayUnion(profileUserId),
-            followingCount: (currentUserData.followingCount || 0) + 1
+            followingCount: increment(1)
           });
-          transaction.update(profileUserRef, {
-            followers: arrayUnion(currentUser.uid),
-            followersCount: (profileUserDoc.data().followersCount || 0) + 1
-          });
+           toast({ title: "Followed", description: "You are now following this user." });
         }
-      });
-
-      // Optimistic update for UI responsiveness
-      setIsFollowing(prev => !prev);
-      
+        // The UI will update automatically thanks to the onSnapshot listener.
     } catch (error: any) {
       console.error("Error toggling follow:", error);
       toast({
         title: "Error",
-        description: `Could not perform the follow action. Please try again.`,
+        description: `Could not perform the follow action. Please check your permissions and try again.`,
         variant: "destructive",
       });
-      // Revert optimistic update on error
-      setIsFollowing(prev => !prev);
     } finally {
       setIsTogglingFollow(false);
     }
-  }, [currentUser, profileUserId, isTogglingFollow, toast]);
+  }, [currentUser, profileUserId, isTogglingFollow, isFollowing, toast]);
 
-  // Debounced version of toggleFollow to be used in the UI
-  const debouncedToggleFollow = useCallback(debounce(toggleFollow, 300), [toggleFollow]);
-
-
-  return { isFollowing, isTogglingFollow, toggleFollow: debouncedToggleFollow };
+  return { isFollowing, isTogglingFollow, toggleFollow };
 };
