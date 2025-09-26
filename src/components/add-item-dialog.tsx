@@ -215,6 +215,8 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
             dataToSave.neededBy = Timestamp.fromDate(values.neededBy);
         }
         
+        const batch = writeBatch(db);
+
         const wishlistDoc = await getDoc(wishlistRef);
         if (!wishlistDoc.exists()) {
             throw new Error("Wishlist does not exist!");
@@ -223,7 +225,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         const newTotalUnits = (currentData.totalUnits || 0) + values.quantity;
         const newProgress = newTotalUnits > 0 ? Math.round(((currentData.unitsFulfilled || 0) / newTotalUnits) * 100) : 0;
         
-        const batch = writeBatch(db);
         batch.set(newItemRef, dataToSave);
         batch.update(wishlistRef, {
             itemCount: increment(1),
@@ -247,7 +248,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     }
   }
   
-  const isUploading = itemImageUpload.uploading;
   const isBusy = isSubmitting || isUploading || isFetchingUrl;
 
   return (
@@ -513,4 +513,6 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
         </Form>
         </ScrollArea>
       </DialogContent>
-    </
+    </Dialog>
+  );
+}
