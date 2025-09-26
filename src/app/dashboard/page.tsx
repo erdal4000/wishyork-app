@@ -582,11 +582,12 @@ export default function DashboardPage() {
     
     // Firestore 'in' queries are limited to 30 elements.
     // We take the current user + the last 29 people they followed.
+    // If you follow more, this logic would need to be more complex, but this is a safe starting point.
     if (feedAuthors.length > 30) {
-        feedAuthors.splice(1, feedAuthors.length - 30);
+        feedAuthors.splice(1, feedAuthors.length - 30); // Keep user + 29 others
     }
     
-    // If feedAuthors is empty (which should not happen as it always includes the current user),
+    // If feedAuthors is somehow empty (shouldn't happen as it always includes the current user),
     // we should not proceed to avoid invalid queries.
     if (feedAuthors.length === 0) {
         setLoading(false);
@@ -602,11 +603,11 @@ export default function DashboardPage() {
       limit(20)
     );
     
-    // Note: We use 'in' for authorId and another 'in' for privacy. This is a valid compound query.
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
         where('authorId', 'in', feedAuthors),
         where('privacy', 'in', ['public', 'friends']),
+        orderBy('createdAt', 'desc'),
         limit(20)
     );
 
@@ -615,7 +616,7 @@ export default function DashboardPage() {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
         setPosts(postsData);
         setError(null);
-        setLoading(false); // Set loading to false here
+        setLoading(false);
       }, 
       (error) => {
         console.error("Error fetching posts:", error);
@@ -629,7 +630,7 @@ export default function DashboardPage() {
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
         setWishlists(wishlistsData);
         setError(null);
-        setLoading(false); // And also here
+        setLoading(false);
       }, 
       (error) => {
         console.error("Error fetching wishlists:", error);
@@ -642,13 +643,13 @@ export default function DashboardPage() {
       unsubPosts();
       unsubWishlists();
     };
-    // Re-run this effect if the user or their profile (specifically following list) changes.
   }, [user, userProfile]);
 
   const feedItems = useMemo(() => {
     const combined = [...posts, ...wishlists];
     // Sort by creation date, most recent first.
-    return combined.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    // Make sure createdAt is not null before trying to call toMillis
+    return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
   }, [posts, wishlists]);
 
 
@@ -734,5 +735,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
