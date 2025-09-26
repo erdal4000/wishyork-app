@@ -274,6 +274,29 @@ export default function WishlistDetailPage() {
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
   }
 
+  const handleReserveItem = async (itemId: string) => {
+    if (!user) {
+      toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
+      return;
+    }
+    setIsUpdatingItem(itemId);
+    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+
+    try {
+        await updateDoc(itemRef, {
+            status: 'reserved',
+            reservedBy: user.displayName || 'Anonymous',
+            reservedById: user.uid,
+        });
+        toast({ title: "Item Reserved", description: "You have reserved this item. You can now mark it as purchased." });
+    } catch (error) {
+        console.error("Error reserving item:", error);
+        toast({ title: "Error", description: "Could not reserve the item. Please try again.", variant: "destructive" });
+    } finally {
+        setIsUpdatingItem(null);
+    }
+  };
+
   const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
     if (!user) {
       toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
@@ -296,8 +319,8 @@ export default function WishlistDetailPage() {
 
         transaction.update(itemRef, { 
             status: 'fulfilled',
-            reservedBy: user.displayName || 'Anonymous',
-            reservedById: user.uid,
+            reservedBy: itemDoc.data().reservedBy || user.displayName || 'Anonymous',
+            reservedById: itemDoc.data().reservedById || user.uid,
         });
         
         const newUnitsFulfilled = (wishlistDoc.data().unitsFulfilled || 0) + itemQuantity;
@@ -320,7 +343,12 @@ export default function WishlistDetailPage() {
 
   const handleMarkAsAvailable = async (itemId: string, itemQuantity: number) => {
     const item = items.find(i => i.id === itemId);
-    if (!item || !isOwnWishlist) return;
+    if (!item) return;
+
+    if (!user || (item.status === 'reserved' && item.reservedById !== user.uid && !isOwnWishlist)) {
+      toast({ title: "Action Not Allowed", description: "Only the person who reserved this item or the wishlist owner can un-reserve it.", variant: "destructive"});
+      return;
+    }
 
     setIsUpdatingItem(itemId);
     const itemRef = doc(db, 'wishlists', id, 'items', itemId);
@@ -720,11 +748,21 @@ export default function WishlistDetailPage() {
                    ) : item.status === 'available' ? (
                         <div className="flex w-full gap-2">
                             {!isOwnWishlist && user && (
-                                <>
-                                  <Button size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
-                                </>
+                                <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve Item</Button>
                             )}
                         </div>
+                   ) : item.status === 'reserved' ? (
+                       <div className="flex w-full items-center justify-between">
+                            <p className="text-sm font-semibold text-blue-600">Reserved by {item.reservedById === user?.uid ? 'you' : item.reservedBy || 'someone'}</p>
+                           <div className="flex gap-2">
+                            {(isOwnWishlist || item.reservedById === user?.uid) && (
+                                <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Un-reserve</Button>
+                            )}
+                            {item.reservedById === user?.uid && (
+                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                            )}
+                           </div>
+                       </div>
                    ) : item.status === 'fulfilled' ? (
                        <div className="flex w-full items-center justify-between">
                            <p className="text-sm font-semibold text-green-600">Fulfilled by {item.reservedById === user?.uid ? 'you' : item.reservedBy || 'someone'}</p>
@@ -748,5 +786,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
