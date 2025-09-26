@@ -483,8 +483,8 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
+  const [allWishlists, setAllWishlists] = useState<Wishlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -505,6 +505,7 @@ export default function DashboardPage() {
           setUserProfile(null);
         }
       }, (error) => {
+        console.error("Error fetching user profile for feed:", error);
         setUserProfile(null);
       });
       return () => unsubscribe();
@@ -572,39 +573,25 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
-    if (!userProfile) { 
-        setLoading(user ? true : false);
-        if (user === null) {
-            setPosts([]);
-            setWishlists([]);
-        }
-        return;
-    }
-
     setLoading(true);
-
-    const feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
-    if (feedAuthors.length === 0) {
-        setLoading(false);
-        setPosts([]);
-        setWishlists([]);
-        return;
-    }
 
     const postsQuery = query(
       collection(db, 'posts'),
-      where('authorId', 'in', feedAuthors.slice(0, 30))
+      orderBy('createdAt', 'desc'),
+      limit(50) 
     );
     
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
-        where('authorId', 'in', feedAuthors.slice(0, 30))
+        where('privacy', 'in', ['public', 'friends']),
+        orderBy('createdAt', 'desc'),
+        limit(50)
     );
 
     const unsubPosts = onSnapshot(postsQuery, 
       (postsSnapshot) => {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
-        setPosts(postsData);
+        setAllPosts(postsData);
         setError(null);
       }, 
       (error) => {
@@ -616,7 +603,7 @@ export default function DashboardPage() {
     const unsubWishlists = onSnapshot(wishlistsQuery, 
       (wishlistsSnapshot) => {
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
-        setWishlists(wishlistsData);
+        setAllWishlists(wishlistsData);
         setError(null);
       }, 
       (error) => {
@@ -625,6 +612,7 @@ export default function DashboardPage() {
       }
     );
 
+    // This is to set loading to false only after initial fetch attempt
     const combinedLoading = Promise.allSettled([
         getDocs(postsQuery),
         getDocs(wishlistsQuery)
@@ -634,24 +622,24 @@ export default function DashboardPage() {
         setLoading(false);
     })
 
-
     return () => {
       unsubPosts();
       unsubWishlists();
     };
-  }, [userProfile, user]);
+  }, []);
 
   const feedItems = useMemo(() => {
-    if (!user) return [];
+    if (!userProfile) return [];
     
-    const filteredWishlists = wishlists.filter(w => {
-        return w.authorId === user.uid || (w.privacy === 'public' || w.privacy === 'friends');
-    });
+    const feedAuthors = new Set([userProfile.uid, ...(userProfile.following || [])]);
 
-    const combined = [...posts, ...filteredWishlists];
+    const filteredPosts = allPosts.filter(p => feedAuthors.has(p.authorId));
+    const filteredWishlists = allWishlists.filter(w => feedAuthors.has(w.authorId));
+    
+    const combined = [...filteredPosts, ...filteredWishlists];
     
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-  }, [posts, wishlists, user]);
+  }, [allPosts, allWishlists, userProfile]);
 
 
   return (
@@ -736,3 +724,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
