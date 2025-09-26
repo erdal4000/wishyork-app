@@ -572,11 +572,15 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     
+    let unsubPosts: () => void = () => {};
+    let unsubWishlists: () => void = () => {};
+
     const fetchFeed = async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists()) {
           setLoading(false);
+          setFeedItems([]);
           return;
         }
         const userData = userDoc.data();
@@ -589,12 +593,35 @@ export default function DashboardPage() {
             return;
         }
 
+        let posts: Post[] = [];
+        let wishlists: Wishlist[] = [];
+        
+        const updateFeed = () => {
+          const combinedFeed = [...posts, ...wishlists];
+          combinedFeed.sort((a, b) => {
+            const dateA = a.createdAt?.toMillis() || 0;
+            const dateB = b.createdAt?.toMillis() || 0;
+            return dateB - dateA;
+          });
+          setFeedItems(combinedFeed);
+          setLoading(false);
+        }
+
         const postsQuery = query(
           collectionGroup(db, 'posts'),
           where('authorId', 'in', authorIdsToQuery),
           orderBy('createdAt', 'desc'),
           limit(20)
         );
+
+        unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+            posts = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+            updateFeed();
+        }, (err) => {
+            console.error("Error fetching posts:", err);
+            setError("Failed to load feed posts.");
+            setLoading(false);
+        });
 
         const wishlistsQuery = query(
           collectionGroup(db, 'wishlists'),
@@ -603,34 +630,16 @@ export default function DashboardPage() {
           limit(20)
         );
 
-        const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
-            const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-            
-            const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
-                const wishlists = wishlistsSnapshot.docs
-                  .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
-                  .filter(wl => wl.authorId === user.uid || wl.privacy === 'public'); // Filter for own or public wishlists
-
-                const combinedFeed = [...posts, ...wishlists];
-                combinedFeed.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
-                setFeedItems(combinedFeed);
-                setLoading(false);
-            }, (err) => {
-                console.error("Error fetching wishlists:", err);
-                setError("Failed to load feed wishlists.");
-                setLoading(false);
-            });
-
-            return () => unsubWishlists();
-
+        unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+            wishlists = wishlistsSnapshot.docs
+              .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
+              .filter(wl => wl.authorId === user.uid || wl.privacy === 'public'); // Filter for own or public wishlists
+            updateFeed();
         }, (err) => {
-            console.error("Error fetching posts:", err);
-            setError("Failed to load feed posts.");
+            console.error("Error fetching wishlists:", err);
+            setError("Failed to load feed wishlists.");
             setLoading(false);
         });
-
-        return () => unsubPosts();
   
       } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
@@ -639,10 +648,11 @@ export default function DashboardPage() {
       }
     };
   
-    const unsubscribe = fetchFeed();
+    fetchFeed();
   
     return () => {
-      unsubscribe.then(unsub => unsub && unsub());
+      unsubPosts();
+      unsubWishlists();
     };
   }, [user]);
 
