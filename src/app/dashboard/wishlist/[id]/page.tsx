@@ -217,7 +217,7 @@ export default function WishlistDetailPage() {
           const wishlistData = { id: wishlistDoc.id, ...wishlistDoc.data() } as Wishlist;
           setWishlist(wishlistData);
   
-          const canView = wishlistData.authorId === user?.uid || wishlistData.privacy === 'public';
+          const canView = wishlistData.authorId === user?.uid || wishlistData.privacy === 'public' || wishlistData.privacy === 'friends'; // Friends logic can be refined
           if (canView) {
             const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
             const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
@@ -254,7 +254,7 @@ export default function WishlistDetailPage() {
   }, [id, user, toast]);
 
   const isOwnWishlist = user?.uid === wishlist?.authorId;
-  const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
+  const canViewItems = isOwnWishlist || wishlist?.privacy === 'public' || wishlist?.privacy === 'friends';
   
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
@@ -745,7 +745,7 @@ export default function WishlistDetailPage() {
                       </div>
                    ) : item.status === 'available' ? (
                         <div className="flex w-full gap-2">
-                            {!isOwnWishlist && user && (
+                            {!isOwnWishlist && user && wishlist.privacy === 'public' && (
                                 <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve Item</Button>
                             )}
                         </div>
