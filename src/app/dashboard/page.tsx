@@ -239,7 +239,7 @@ function PostCard({ item }: { item: Post }) {
                                 <AlertDialogDescription>
                                     This action cannot be undone. This will permanently delete this post.
                                 </AlertDialogDescription>
-                            </AlertDialogHeader>
+                            AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction 
@@ -504,8 +504,12 @@ export default function DashboardPage() {
         } else {
           setUserProfile(null);
         }
+      }, (error) => {
+        setUserProfile(null);
       });
       return () => unsubscribe();
+    } else {
+        setUserProfile(null);
     }
   }, [user]);
 
@@ -575,12 +579,7 @@ export default function DashboardPage() {
 
     setLoading(true);
 
-    let feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
-    
-    // Firestore 'in' query has a limit of 30 elements.
-    if (feedAuthors.length > 30) {
-        feedAuthors = feedAuthors.slice(0, 30);
-    }
+    const feedAuthors = [userProfile.uid, ...(userProfile.following || [])].slice(0, 30);
     
     if (feedAuthors.length === 0) {
         setLoading(false);
@@ -596,8 +595,7 @@ export default function DashboardPage() {
     
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
-        where('authorId', 'in', feedAuthors),
-        where('privacy', 'in', ['public', 'friends'])
+        where('authorId', 'in', feedAuthors)
     );
 
     const unsubPosts = onSnapshot(postsQuery, 
@@ -632,12 +630,16 @@ export default function DashboardPage() {
       unsubPosts();
       unsubWishlists();
     };
-  }, [user, userProfile]);
+  }, [userProfile, user]);
 
   const feedItems = useMemo(() => {
-    const combined = [...posts, ...wishlists];
+    if (!user) return [];
+    
+    const filteredWishlists = wishlists.filter(w => w.privacy !== 'private' || w.authorId === user.uid);
+    const combined = [...posts, ...filteredWishlists];
+    
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-  }, [posts, wishlists]);
+  }, [posts, wishlists, user]);
 
 
   return (
@@ -723,4 +725,5 @@ export default function DashboardPage() {
   );
 }
 
+    
     
