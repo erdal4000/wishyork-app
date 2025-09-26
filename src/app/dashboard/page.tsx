@@ -568,27 +568,20 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
-    // Wait until we have the user's profile, which contains the 'following' list.
     if (!userProfile) { 
-        setLoading(user ? true : false); // Show loader if user is logged in but profile is not yet loaded.
+        setLoading(user ? true : false);
         return;
     }
 
     setLoading(true);
 
     const followingList = userProfile.following || [];
-    // The feed should contain the user's own content plus the content of people they follow.
     const feedAuthors = [userProfile.uid, ...followingList];
     
-    // Firestore 'in' queries are limited to 30 elements.
-    // We take the current user + the last 29 people they followed.
-    // If you follow more, this logic would need to be more complex, but this is a safe starting point.
     if (feedAuthors.length > 30) {
-        feedAuthors.splice(1, feedAuthors.length - 30); // Keep user + 29 others
+        feedAuthors.splice(1, feedAuthors.length - 30);
     }
     
-    // If feedAuthors is somehow empty (shouldn't happen as it always includes the current user),
-    // we should not proceed to avoid invalid queries.
     if (feedAuthors.length === 0) {
         setLoading(false);
         setPosts([]);
@@ -596,10 +589,11 @@ export default function DashboardPage() {
         return;
     }
 
+    // Simplified query without orderBy to avoid indexing issues.
+    // Sorting will be done on the client side.
     const postsQuery = query(
       collection(db, 'posts'),
       where('authorId', 'in', feedAuthors),
-      orderBy('createdAt', 'desc'),
       limit(20)
     );
     
@@ -607,7 +601,6 @@ export default function DashboardPage() {
         collection(db, 'wishlists'),
         where('authorId', 'in', feedAuthors),
         where('privacy', 'in', ['public', 'friends']),
-        orderBy('createdAt', 'desc'),
         limit(20)
     );
 
@@ -647,8 +640,6 @@ export default function DashboardPage() {
 
   const feedItems = useMemo(() => {
     const combined = [...posts, ...wishlists];
-    // Sort by creation date, most recent first.
-    // Make sure createdAt is not null before trying to call toMillis
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
   }, [posts, wishlists]);
 
