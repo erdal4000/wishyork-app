@@ -82,6 +82,7 @@ type FeedItem = Post | Wishlist;
 
 
 interface UserProfile extends DocumentData {
+  uid: string;
   name: string;
   username: string;
   photoURL?: string;
@@ -106,7 +107,7 @@ const useAuthorProfile = (authorId: string) => {
         const userDocRef = doc(db, 'users', authorId);
         const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                const profileData = docSnap.data() as UserProfile;
+                const profileData = { uid: docSnap.id, ...docSnap.data() } as UserProfile;
                 userProfilesCache[authorId] = profileData;
                 setAuthorProfile(profileData);
             } else {
@@ -497,7 +498,7 @@ export default function DashboardPage() {
       const userDocRef = doc(db, 'users', user.uid);
       const unsubscribe = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
-          setUserProfile(doc.data() as UserProfile);
+          setUserProfile({ uid: doc.id, ...doc.data() } as UserProfile);
         } else {
           setUserProfile(null);
         }
@@ -576,6 +577,12 @@ export default function DashboardPage() {
     // Firestore 'in' queries are limited to 30 items. We take the current user plus the last 29 followed.
     const feedAuthors = [userProfile.uid, ...followingList.slice(-29)];
     
+    if (feedAuthors.length === 0) {
+        setLoading(false);
+        setFeedItems([]);
+        return;
+    }
+
     let combinedUnsubscribes: Unsubscribe[] = [];
 
     const setupListeners = (authors: string[]) => {
@@ -589,8 +596,6 @@ export default function DashboardPage() {
       const wishlistsQuery = query(
           collection(db, 'wishlists'),
           where('authorId', 'in', authors),
-          where('privacy', '!=', 'private'), // Show public and friends lists
-          orderBy('authorId'), // First order by the field in the 'in' query
           orderBy('createdAt', 'desc'),
           limit(30)
       );
@@ -632,32 +637,6 @@ export default function DashboardPage() {
     
     // Initial setup for followed users
     combinedUnsubscribes = setupListeners(feedAuthors);
-    
-    // Also fetch all public wishlists to enrich the feed
-    const publicWishlistsQuery = query(
-        collection(db, 'wishlists'),
-        where('privacy', '==', 'public'),
-        orderBy('createdAt', 'desc'),
-        limit(20) // Limit to avoid overwhelming the feed
-    );
-
-    const unsubPublic = onSnapshot(publicWishlistsQuery, (publicSnapshot) => {
-        const publicWishlists = publicSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
-        
-        setFeedItems(prevItems => {
-            const currentIds = new Set(prevItems.map(item => item.id));
-            const newPublicItems = publicWishlists.filter(item => !currentIds.has(item.id));
-            const newFeed = [...prevItems, ...newPublicItems].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-            return newFeed;
-        });
-
-    }, (error) => {
-        console.error("Error fetching public wishlists:", error);
-        // Don't set a global error for this, it's just enrichment
-    });
-    
-    combinedUnsubscribes.push(unsubPublic);
-
 
     return () => {
       combinedUnsubscribes.forEach(unsub => unsub());
@@ -748,5 +727,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
