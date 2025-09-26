@@ -204,7 +204,6 @@ export default function WishlistDetailPage() {
   });
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
-  // Effect 1: Fetch the main wishlist document
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -227,22 +226,21 @@ export default function WishlistDetailPage() {
     return () => unsubscribe();
   }, [id, toast]);
 
-  // Effect 2: Fetch items only after wishlist is loaded and permissions are checked
   useEffect(() => {
-      // Don't run if we don't have the wishlist or user info yet
       if (!wishlist || !user) {
+          setItems([]);
           return;
       }
       
       const canView = user.uid === wishlist.authorId || wishlist.privacy === 'public';
       
-      let unsubscribe: Unsubscribe | undefined;
+      let unsubscribeItems: Unsubscribe | undefined;
 
       if (canView) {
           const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
           const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
           
-          unsubscribe = onSnapshot(q, (itemsSnapshot) => {
+          unsubscribeItems = onSnapshot(q, (itemsSnapshot) => {
               const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
               setItems(itemsData);
           }, (error) => {
@@ -250,17 +248,15 @@ export default function WishlistDetailPage() {
               toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
           });
       } else {
-          // If user cannot view, ensure items are cleared.
           setItems([]);
       }
 
-      // Cleanup function for the items listener
       return () => {
-          if (unsubscribe) {
-              unsubscribe();
+          if (unsubscribeItems) {
+              unsubscribeItems();
           }
       };
-  }, [wishlist, user, id, toast]); // Dependency array ensures this runs when wishlist or user changes
+  }, [wishlist, user, id, toast]);
 
 
   const isOwnWishlist = user?.uid === wishlist?.authorId;
@@ -355,13 +351,13 @@ export default function WishlistDetailPage() {
     }
   };
 
-  const handleCancelReservation = async (itemId: string, itemQuantity: number) => {
+  const handleMarkAsAvailable = async (itemId: string, itemQuantity: number) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
     
-    let wishlistChanges = {};
+    let wishlistChanges: { fulfilled?: number } = {};
     if (item.status === 'fulfilled') {
-      wishlistChanges = { fulfilled: -itemQuantity };
+      wishlistChanges.fulfilled = -itemQuantity;
     }
 
     const success = await updateItemAndWishlistTransaction(itemId, {
@@ -370,10 +366,9 @@ export default function WishlistDetailPage() {
     }, wishlistChanges);
 
     if(success) {
-      toast({ title: "Reservation Cancelled", description: "The item is now available for others." });
+      toast({ title: "Item Updated", description: "The item is now marked as available." });
     }
   };
-
 
   const handleDeleteItem = async (item: Item) => {
     const wishlistRef = doc(db, 'wishlists', id);
@@ -385,8 +380,6 @@ export default function WishlistDetailPage() {
         if (!wishlistDoc.exists()) {
           throw "Wishlist does not exist!";
         }
-  
-        // Defer the delete operation to a batch write after the transaction
         
         const currentData = wishlistDoc.data();
         let newUnitsFulfilled = currentData.unitsFulfilled || 0;
@@ -407,7 +400,6 @@ export default function WishlistDetailPage() {
         });
       });
 
-      // Now delete the item document itself
       await deleteDoc(itemRef);
 
       toast({ title: "Success", description: "Item removed from wishlist." });
@@ -653,8 +645,8 @@ export default function WishlistDetailPage() {
                     }`}
                   >
                     {item.status === 'fulfilled' ? (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white">
-                        <Gift className="h-8 w-8" />
+                      <div className="flex h-full w-full items-center justify-center bg-green-100 dark:bg-green-900/50">
+                        <Gift className="h-10 w-10 text-green-600 dark:text-green-400" />
                       </div>
                     ) : (
                       <Image
@@ -739,25 +731,30 @@ export default function WishlistDetailPage() {
                    ) : item.status === 'available' ? (
                         <div className="flex w-full gap-2">
                             {!isOwnWishlist && (
-                                <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve</Button>
+                                <>
+                                  <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve</Button>
+                                  <Button variant='secondary' size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                                </>
                             )}
-                            <Button variant={isOwnWishlist ? 'default' : 'secondary'} size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
                         </div>
                    ) : item.status === 'reserved' ? (
                        <div className="flex w-full items-center justify-between">
                            <p className="text-sm">Reserved by {item.reservedBy === user?.displayName ? 'you' : item.reservedBy}</p>
-                           {(isOwnWishlist || item.reservedBy === user?.displayName) && (
+                           {(item.reservedBy === user?.displayName) && (
                             <div className="flex gap-2">
-                                <Button variant="destructive" size="sm" onClick={() => handleCancelReservation(item.id, item.quantity)}>Cancel</Button>
+                                <Button variant="destructive" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Cancel</Button>
                                 <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
                             </div>
+                           )}
+                           {isOwnWishlist && (
+                              <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Mark as Available</Button>
                            )}
                        </div>
                    ) : ( // Fulfilled
                        <div className="flex w-full items-center justify-between">
                            <p className="text-sm font-semibold text-green-600">Fulfilled!</p>
                            {isOwnWishlist && (
-                             <Button variant="ghost" size="sm" onClick={() => handleCancelReservation(item.id, item.quantity)}>Mark as Available</Button>
+                             <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Mark as Available</Button>
                            )}
                        </div>
                    )}
