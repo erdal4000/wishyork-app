@@ -50,7 +50,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -217,13 +216,11 @@ export default function WishlistDetailPage() {
           const wishlistData = { id: wishlistDoc.id, ...wishlistDoc.data() } as Wishlist;
           setWishlist(wishlistData);
   
-          // Now that we have the wishlist, check permissions and fetch items
           const canView = wishlistData.authorId === user?.uid || wishlistData.privacy === 'public';
           if (canView) {
             const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
             const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
             
-            // Unsubscribe from previous items listener if it exists
             if (itemsUnsub) itemsUnsub();
   
             itemsUnsub = onSnapshot(q, (itemsSnapshot) => {
@@ -249,7 +246,6 @@ export default function WishlistDetailPage() {
       });
     }
   
-    // Cleanup function
     return () => {
       if (wishlistUnsub) wishlistUnsub();
       if (itemsUnsub) itemsUnsub();
@@ -309,10 +305,17 @@ export default function WishlistDetailPage() {
     const wishlistRef = doc(db, 'wishlists', id);
     try {
       await runTransaction(db, async (transaction) => {
+        const itemDoc = await transaction.get(itemRef);
         const wishlistDoc = await transaction.get(wishlistRef);
-        if (!wishlistDoc.exists()) {
-          throw new Error("Wishlist not found");
+        if (!itemDoc.exists() || !wishlistDoc.exists()) {
+          throw new Error("Item or Wishlist not found");
         }
+        
+        // Only proceed if the item is not already fulfilled to prevent double counting
+        if (itemDoc.data().status === 'fulfilled') {
+            return;
+        }
+
         transaction.update(itemRef, { status: 'fulfilled' });
         
         const newUnitsFulfilled = (wishlistDoc.data().unitsFulfilled || 0) + itemQuantity;
@@ -776,7 +779,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
-
-    
