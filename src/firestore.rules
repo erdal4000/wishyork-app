@@ -1,61 +1,70 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // USERNAME a document containing a single 'uid' field
-    match /usernames/{username} {
-      allow read;
-      allow create: if isOwner(request.resource.data.uid);
-      allow update: if isOwner(resource.data.uid);
-      allow delete: if isOwner(resource.data.uid);
-    }
-    
-    // USER document
+    // Rules for the 'users' and 'usernames' collections
     match /users/{userId} {
-      allow read;
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-
-      match /bookmarks/{bookmarkId} {
-        allow read, write: if isOwner(userId);
-      }
-    }
-    
-    // WISHLIST document
-    match /wishlists/{wishlistId} {
-      allow read: if isOwner(resource.data.authorId) || resource.data.privacy == 'public';
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
-
-      match /comments/{commentId} {
-        allow read;
-        allow create: if request.auth != null;
-        allow update, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)/comments/$(commentId)).data.authorId);
-      }
-    }
-    
-    // WISHLIST ITEMS subcollection
-    match /wishlists/{wishlistId}/items/{itemId} {
-      allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid || get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public';
-      allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
-      allow update: if request.auth != null && (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid || get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public');
-    }
-
-    // POSTS document
-    match /posts/{postId} {
-      allow read;
-      allow create: if isOwner(request.resource.data.authorId);
-      allow update, delete: if isOwner(resource.data.authorId);
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
       
-      match /comments/{commentId} {
-        allow read;
-        allow create: if request.auth != null;
-        allow update, delete: if isOwner(get(/databases/$(database)/documents/posts/$(postId)/comments/$(commentId)).data.authorId);
+      // Bookmarks subcollection
+      match /bookmarks/{bookmarkId} {
+        allow read, write, delete: if request.auth != null && request.auth.uid == userId;
       }
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Rules for the 'wishlists' collection (main document)
+    match /wishlists/{wishlistId} {
+      allow read: if resource.data.privacy == 'public' || (request.auth != null && resource.data.authorId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if request.auth != null && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+    }
+
+    // Rules for the 'items' subcollection
+    match /wishlists/{wishlistId}/items/{itemId} {
+      allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || (request.auth != null && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid);
+      allow create: if request.auth != null && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+      
+      // A visitor can update an item if it's in a public list.
+      // An owner can always update their own items.
+      // Added field validation to prevent malicious updates as per the expert recommendation.
+      allow update: if request.auth != null &&
+                       (get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid ||
+                        get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public') &&
+                       (
+                         // Allow owner to change anything
+                         get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid ||
+                         // Allow visitor to only change reservation/fulfillment status
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reservedBy', 'reservedById'])
+                       );
+    }
+    
+    // Rules for comments on both posts and wishlists
+    match /{collectionType}/{docId}/comments/{commentId} {
+      // Anyone can read comments
+      allow read: if true;
+      
+      // Only logged-in users can create comments
+      allow create: if request.auth != null;
+      
+      // Only the author of the comment can update or delete it
+      allow update, delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+    }
+
+    // Rules for the 'posts' collection
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.authorId == request.auth.uid;
     }
   }
 }
