@@ -297,7 +297,7 @@ export default function WishlistDetailPage() {
     }
   };
 
-  const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
+  const handleMarkAsPurchased = async (itemId: string) => {
     if (!user) {
         toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
         return;
@@ -612,26 +612,19 @@ export default function WishlistDetailPage() {
             {items.map((item) => (
               <Card key={item.id} className="overflow-hidden">
                 <div className="flex">
-                  <div
-                    className={`flex w-32 flex-shrink-0 items-center justify-center ${
-                      item.status === 'fulfilled'
-                        ? 'bg-green-100 dark:bg-green-900/50'
-                        : ''
-                    }`}
-                  >
-                    {item.status === 'fulfilled' ? (
-                      <div className="flex h-full w-full items-center justify-center bg-green-100 dark:bg-green-900/50">
-                        <Gift className="h-10 w-10 text-green-600 dark:text-green-400" />
-                      </div>
-                    ) : (
-                      <Image
+                  <div className="relative flex w-32 flex-shrink-0 items-center justify-center">
+                    <Image
                         src={item.imageUrl}
                         alt={item.name}
                         data-ai-hint={item.aiHint}
                         width={128}
                         height={128}
                         className="h-full w-full object-cover"
-                      />
+                    />
+                    {item.status === 'fulfilled' && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-green-600/70">
+                            <Gift className="h-10 w-10 text-white" />
+                        </div>
                     )}
                   </div>
 
@@ -705,7 +698,7 @@ export default function WishlistDetailPage() {
                       </div>
                    ) : item.status === 'available' ? (
                         <div className="flex w-full gap-2">
-                            {!isOwnWishlist && user && wishlist.privacy === 'public' && (
+                            {wishlist.privacy === 'public' && !isOwnWishlist && user && (
                                 <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve Item</Button>
                             )}
                         </div>
@@ -717,7 +710,7 @@ export default function WishlistDetailPage() {
                                 <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Un-reserve</Button>
                             )}
                             {item.reservedById === user?.uid && (
-                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id)}>Mark as Purchased</Button>
                             )}
                            </div>
                        </div>
@@ -744,5 +737,3 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
-
-    
