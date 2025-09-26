@@ -356,13 +356,12 @@ export default function ProfilePage() {
         // Listener for Wishlists
         let wishlistsQuery: Query<DocumentData>;
         
-        const baseWishlistsQuery = [
-            where('authorId', '==', profileUser.uid),
-            orderBy('createdAt', 'desc')
-        ];
-
         if (isOwnProfile) {
-            wishlistsQuery = query(collection(db, 'wishlists'), ...baseWishlistsQuery);
+            wishlistsQuery = query(
+                collection(db, 'wishlists'), 
+                where('authorId', '==', profileUser.uid),
+                orderBy('createdAt', 'desc')
+            );
         } else {
              wishlistsQuery = query(
                 collection(db, 'wishlists'),
@@ -562,5 +561,3 @@ export default function ProfilePage() {
         </div>
     );
 }
-
-    

@@ -566,69 +566,62 @@ export default function DashboardPage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
+
+    let combinedUnsubscribes: Unsubscribe[] = [];
   
-    const allUnsubscribes: Unsubscribe[] = [];
-  
-    // Simple Wishlist Listener
+    // Simplified Query for Public/Friends Wishlists
     const wishlistsQuery = query(
       collection(db, 'wishlists'),
       where('privacy', 'in', ['public', 'friends']),
       orderBy('createdAt', 'desc'),
       limit(20)
     );
-    const wishlistsUnsub = onSnapshot(wishlistsQuery, (snapshot) => {
-      const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
-      setFeedItems(prev => {
-        const otherItems = prev.filter(p => p.type !== 'wishlist');
-        return [...otherItems, ...lists];
-      });
-      setLoading(false);
-    }, (err) => {
-      console.error("Error fetching wishlists:", err);
-      setError("Failed to load wishlists.");
-      setLoading(false);
-    });
-    allUnsubscribes.push(wishlistsUnsub);
-  
-    // Simple Posts Listener
+    
+    const wishlistsUnsub = onSnapshot(wishlistsQuery, 
+      (snapshot) => {
+        const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+        setFeedItems(currentItems => {
+          const otherItems = currentItems.filter(item => item.type !== 'wishlist');
+          return [...lists, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+        });
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching wishlists:", err);
+        setError("Failed to load wishlists.");
+        setLoading(false);
+      }
+    );
+    combinedUnsubscribes.push(wishlistsUnsub);
+
+    // Simplified Query for All Posts
     const postsQuery = query(
       collection(db, 'posts'),
       orderBy('createdAt', 'desc'),
       limit(20)
     );
-    const postsUnsub = onSnapshot(postsQuery, (snapshot) => {
-      const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-      setFeedItems(prev => {
-        const otherItems = prev.filter(p => p.type !== 'post');
-        return [...otherItems, ...posts];
-      });
-      setLoading(false);
-    }, (err) => {
-      console.error("Error fetching posts:", err);
-      setError("Failed to load feed posts.");
-      setLoading(false);
-    });
-    allUnsubscribes.push(postsUnsub);
+
+    const postsUnsub = onSnapshot(postsQuery, 
+      (snapshot) => {
+        const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        setFeedItems(currentItems => {
+          const otherItems = currentItems.filter(item => item.type !== 'post');
+          return [...posts, ...otherItems].sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+        });
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching posts:", err);
+        setError("Failed to load posts.");
+        setLoading(false);
+      }
+    );
+    combinedUnsubscribes.push(postsUnsub);
   
     return () => {
-      allUnsubscribes.forEach(unsub => unsub());
+      combinedUnsubscribes.forEach(unsub => unsub());
     };
-  
   }, []);
-
-  // This effect combines and sorts the feed whenever new items arrive.
-  useEffect(() => {
-    // Sort a copy of the array, don't mutate state directly
-    const sortedFeed = [...feedItems].sort((a, b) => {
-        const dateA = a.createdAt?.toMillis() || 0;
-        const dateB = b.createdAt?.toMillis() || 0;
-        return dateB - dateA;
-    });
-    // Only update state if the order has actually changed
-    if (JSON.stringify(sortedFeed) !== JSON.stringify(feedItems)) {
-        setFeedItems(sortedFeed);
-    }
-  }, [feedItems]);
 
 
   return (
@@ -712,5 +705,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
