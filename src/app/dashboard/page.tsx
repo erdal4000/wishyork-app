@@ -239,7 +239,7 @@ function PostCard({ item }: { item: Post }) {
                                 <AlertDialogDescription>
                                     This action cannot be undone. This will permanently delete this post.
                                 </AlertDialogDescription>
-                            AlertDialogHeader>
+                            </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction 
@@ -574,13 +574,16 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!userProfile) { 
         setLoading(user ? true : false);
+        if (user === null) {
+            setPosts([]);
+            setWishlists([]);
+        }
         return;
     }
 
     setLoading(true);
 
-    const feedAuthors = [userProfile.uid, ...(userProfile.following || [])].slice(0, 30);
-    
+    const feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
     if (feedAuthors.length === 0) {
         setLoading(false);
         setPosts([]);
@@ -590,12 +593,12 @@ export default function DashboardPage() {
 
     const postsQuery = query(
       collection(db, 'posts'),
-      where('authorId', 'in', feedAuthors)
+      where('authorId', 'in', feedAuthors.slice(0, 30))
     );
     
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
-        where('authorId', 'in', feedAuthors)
+        where('authorId', 'in', feedAuthors.slice(0, 30))
     );
 
     const unsubPosts = onSnapshot(postsQuery, 
@@ -603,12 +606,10 @@ export default function DashboardPage() {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
         setPosts(postsData);
         setError(null);
-        setLoading(false);
       }, 
       (error) => {
         console.error("Error fetching posts:", error);
         setError("Feed unavailable: Failed to load posts.");
-        setLoading(false);
       }
     );
 
@@ -617,14 +618,22 @@ export default function DashboardPage() {
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
         setWishlists(wishlistsData);
         setError(null);
-        setLoading(false);
       }, 
       (error) => {
         console.error("Error fetching wishlists:", error);
         setError("Feed unavailable: Failed to load wishlists.");
-        setLoading(false);
       }
     );
+
+    const combinedLoading = Promise.allSettled([
+        getDocs(postsQuery),
+        getDocs(wishlistsQuery)
+    ]);
+    
+    combinedLoading.finally(() => {
+        setLoading(false);
+    })
+
 
     return () => {
       unsubPosts();
@@ -635,7 +644,10 @@ export default function DashboardPage() {
   const feedItems = useMemo(() => {
     if (!user) return [];
     
-    const filteredWishlists = wishlists.filter(w => w.privacy !== 'private' || w.authorId === user.uid);
+    const filteredWishlists = wishlists.filter(w => {
+        return w.authorId === user.uid || (w.privacy === 'public' || w.privacy === 'friends');
+    });
+
     const combined = [...posts, ...filteredWishlists];
     
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
@@ -724,6 +736,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
-    
