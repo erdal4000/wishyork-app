@@ -73,7 +73,7 @@ interface Wishlist extends DocumentData {
   likes: number;
   commentCount: number;
   saves: number;
-  createdAt: any;
+  createdAt: Timestamp;
   unitsFulfilled: number;
   totalUnits: number;
 }
@@ -568,80 +568,66 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
-  
-    setLoading(true);
-    setError(null);
-  
+
     const fetchFeed = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) {
-          setLoading(false);
-          setFeedItems([]);
-          return;
-        }
         const userData = userDoc.data();
-        const following = userData.following || [];
+        const following = userData?.following || [];
         const authorIdsToQuery = [...new Set([user.uid, ...following])];
-  
+
         if (authorIdsToQuery.length === 0) {
           setLoading(false);
           setFeedItems([]);
           return;
         }
 
-        // Fetch Posts - New method without collectionGroup
-        const postPromises = authorIdsToQuery.map(authorId => {
-            const postsQuery = query(
-                collection(db, 'posts'),
-                where('authorId', '==', authorId),
-                orderBy('createdAt', 'desc'),
-                limit(10) // Limit per user to not fetch too much
-            );
-            return getDocs(postsQuery);
-        });
-
-        const postSnapshots = await Promise.all(postPromises);
-        const posts: Post[] = postSnapshots.flatMap(snapshot => 
-            snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post))
-        );
-
-        // Fetch Wishlists - This query is valid with indexes
+        // Fetch Wishlists
         const wishlistsQuery = query(
-            collection(db, 'wishlists'),
-            where('authorId', 'in', authorIdsToQuery),
-            orderBy('createdAt', 'desc'),
-            limit(20)
-          );
-        
+          collection(db, 'wishlists'),
+          where('authorId', 'in', authorIdsToQuery),
+          orderBy('createdAt', 'desc'),
+          limit(20)
+        );
         const wishlistsSnapshot = await getDocs(wishlistsQuery);
         const wishlists: Wishlist[] = wishlistsSnapshot.docs
-            .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
-            .filter(wl => wl.authorId === user.uid || wl.privacy === 'public');
-
-
-        const combinedFeed = [...posts, ...wishlists];
-        combinedFeed.sort((a, b) => {
+          .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
+          .filter(wl => wl.authorId === user.uid || wl.privacy === 'public');
+        
+        // Fetch Posts
+        const postsQuery = query(
+          collection(db, 'posts'),
+          where('authorId', 'in', authorIdsToQuery),
+          orderBy('createdAt', 'desc'),
+          limit(20)
+        );
+        const postsSnapshot = await getDocs(postsQuery);
+        const posts: Post[] = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        
+        // Combine and sort
+        const combinedFeed: FeedItem[] = [...posts, ...wishlists]
+          .filter(item => item.createdAt) // **CRITICAL FIX**: Filter out items without a createdAt field
+          .sort((a, b) => {
             const dateA = a.createdAt?.toMillis() || 0;
             const dateB = b.createdAt?.toMillis() || 0;
             return dateB - dateA;
         });
-        
+
         setFeedItems(combinedFeed);
-  
+
       } catch (err: any) {
-        console.error("Error setting up feed listeners:", err);
+        console.error("Error fetching feed:", err);
         setError("Failed to load feed. " + err.message);
       } finally {
         setLoading(false);
       }
     };
-  
-    fetchFeed();
-  
-    // Note: This approach doesn't use onSnapshot for real-time updates for simplicity and to avoid complex listener management.
-    // For a production app, a more sophisticated real-time solution would be needed.
 
+    fetchFeed();
+    // This is not a real-time listener for simplicity, but for a real app,
+    // you would manage onSnapshot listeners here.
   }, [user]);
 
   return (
@@ -725,3 +711,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
