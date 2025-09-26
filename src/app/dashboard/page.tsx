@@ -575,11 +575,11 @@ export default function DashboardPage() {
 
     setLoading(true);
 
-    const followingList = userProfile.following || [];
-    const feedAuthors = [userProfile.uid, ...followingList];
+    let feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
     
+    // Firestore 'in' query has a limit of 30 elements.
     if (feedAuthors.length > 30) {
-        feedAuthors.splice(1, feedAuthors.length - 30);
+        feedAuthors = feedAuthors.slice(0, 30);
     }
     
     if (feedAuthors.length === 0) {
@@ -589,19 +589,15 @@ export default function DashboardPage() {
         return;
     }
 
-    // Simplified query without orderBy to avoid indexing issues.
-    // Sorting will be done on the client side.
     const postsQuery = query(
       collection(db, 'posts'),
-      where('authorId', 'in', feedAuthors),
-      limit(20)
+      where('authorId', 'in', feedAuthors)
     );
     
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
         where('authorId', 'in', feedAuthors),
-        where('privacy', 'in', ['public', 'friends']),
-        limit(20)
+        where('privacy', 'in', ['public', 'friends'])
     );
 
     const unsubPosts = onSnapshot(postsQuery, 
@@ -726,3 +722,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
