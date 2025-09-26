@@ -573,19 +573,33 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
+    if (!userProfile) {
+        setLoading(user ? true : false);
+        return;
+    };
+
+    const following = userProfile.following || [];
+    if (following.length === 0 && !userProfile.uid) {
+        setLoading(false);
+        setAllPosts([]);
+        setAllWishlists([]);
+        return;
+    }
+    
+    // Create the list of authors for the 'in' query.
+    // Limit to 30 to comply with Firestore 'in' query limit.
+    const feedAuthors = [userProfile.uid, ...following].slice(0, 30);
+    
     setLoading(true);
 
     const postsQuery = query(
       collection(db, 'posts'),
-      orderBy('createdAt', 'desc'),
-      limit(50) 
+      where('authorId', 'in', feedAuthors)
     );
     
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
-        where('privacy', 'in', ['public', 'friends']),
-        orderBy('createdAt', 'desc'),
-        limit(50)
+        where('authorId', 'in', feedAuthors)
     );
 
     const unsubPosts = onSnapshot(postsQuery, 
@@ -597,6 +611,7 @@ export default function DashboardPage() {
       (error) => {
         console.error("Error fetching posts:", error);
         setError("Feed unavailable: Failed to load posts.");
+        setAllPosts([]); // Clear posts on error
       }
     );
 
@@ -609,6 +624,7 @@ export default function DashboardPage() {
       (error) => {
         console.error("Error fetching wishlists:", error);
         setError("Feed unavailable: Failed to load wishlists.");
+        setAllWishlists([]); // Clear wishlists on error
       }
     );
 
@@ -626,17 +642,17 @@ export default function DashboardPage() {
       unsubPosts();
       unsubWishlists();
     };
-  }, []);
+  }, [userProfile]);
 
   const feedItems = useMemo(() => {
     if (!userProfile) return [];
     
-    const feedAuthors = new Set([userProfile.uid, ...(userProfile.following || [])]);
-
-    const filteredPosts = allPosts.filter(p => feedAuthors.has(p.authorId));
-    const filteredWishlists = allWishlists.filter(w => feedAuthors.has(w.authorId));
+    const filteredWishlists = allWishlists.filter(w => {
+        // Only show private lists if the current user is the author
+        return w.privacy !== 'private' || w.authorId === userProfile.uid;
+    });
     
-    const combined = [...filteredPosts, ...filteredWishlists];
+    const combined = [...allPosts, ...filteredWishlists];
     
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
   }, [allPosts, allWishlists, userProfile]);
