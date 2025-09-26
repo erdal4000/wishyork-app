@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit, getDocs, WriteBatch, writeBatch } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -260,7 +260,7 @@ function PostCard({ item }: { item: Post }) {
          </DropdownMenu>
       </CardHeader>
       <CardContent className="px-4 pb-4">
-        <p className="whitespace-pre-wrap">{item.content}</p>
+        {item.content && <p className="whitespace-pre-wrap">{item.content}</p>}
 
         {item.imageUrl && (
           <Link href={`/dashboard/post/${item.id}`} className="mt-4 block">
@@ -562,7 +562,7 @@ export default function DashboardPage() {
       setIsSubmittingPost(false);
     }
   };
-
+  
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -570,59 +570,83 @@ export default function DashboardPage() {
     }
 
     const fetchFeed = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        const userData = userDoc.data();
-        const following = userData?.following || [];
-        const authorIdsToQuery = [...new Set([user.uid, ...following])];
+        setLoading(true);
+        setError(null);
+        try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            const userData = userDoc.data();
+            const following = userData?.following || [];
+            const authorIdsToQuery = [...new Set([user.uid, ...following])];
 
-        if (authorIdsToQuery.length === 0) {
-          setLoading(false);
-          setFeedItems([]);
-          return;
+            if (authorIdsToQuery.length === 0) {
+                setFeedItems([]);
+                setLoading(false);
+                return;
+            }
+
+            // Chunk the author IDs into groups of 30 for 'in' queries
+            const chunks: string[][] = [];
+            for (let i = 0; i < authorIdsToQuery.length; i += 30) {
+                chunks.push(authorIdsToQuery.slice(i, i + 30));
+            }
+
+            const fetchPromises: Promise<DocumentData[]>[] = [];
+
+            // Create promises for fetching wishlists and posts for each chunk
+            chunks.forEach(chunk => {
+                // Wishlists query
+                const wishlistsQuery = query(
+                    collection(db, 'wishlists'),
+                    where('authorId', 'in', chunk),
+                    orderBy('createdAt', 'desc'),
+                    limit(20)
+                );
+                fetchPromises.push(getDocs(wishlistsQuery).then(snapshot => 
+                    snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() }))
+                ));
+
+                // Posts query
+                const postsQuery = query(
+                    collection(db, 'posts'),
+                    where('authorId', 'in', chunk),
+                    orderBy('createdAt', 'desc'),
+                    limit(20)
+                );
+                fetchPromises.push(getDocs(postsQuery).then(snapshot => 
+                    snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() }))
+                ));
+            });
+
+            const results = await Promise.all(fetchPromises);
+            const combinedFeed = results.flat() as FeedItem[];
+            
+            // Filter out items without a valid createdAt timestamp before sorting
+            const validFeedItems = combinedFeed.filter(item => item.createdAt && typeof item.createdAt.toMillis === 'function');
+            
+            // Sort the combined feed by creation date
+            validFeedItems.sort((a, b) => {
+                const dateA = a.createdAt.toMillis();
+                const dateB = b.createdAt.toMillis();
+                return dateB - dateA;
+            });
+
+            // Filter out non-public wishlists from people the user is following
+            const finalFeed = validFeedItems.filter(item => {
+                if (item.type === 'wishlist') {
+                    // Show item if it's the user's own or if it's public
+                    return item.authorId === user.uid || item.privacy === 'public';
+                }
+                return true; // Always show posts
+            });
+
+            setFeedItems(finalFeed);
+
+        } catch (err: any) {
+            console.error("Error fetching feed:", err);
+            setError("Failed to load feed. " + err.message);
+        } finally {
+            setLoading(false);
         }
-
-        // Fetch Wishlists
-        const wishlistsQuery = query(
-          collection(db, 'wishlists'),
-          where('authorId', 'in', authorIdsToQuery),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-        const wishlistsSnapshot = await getDocs(wishlistsQuery);
-        const wishlists: Wishlist[] = wishlistsSnapshot.docs
-          .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
-          .filter(wl => wl.authorId === user.uid || wl.privacy === 'public');
-        
-        // Fetch Posts
-        const postsQuery = query(
-          collection(db, 'posts'),
-          where('authorId', 'in', authorIdsToQuery),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-        const postsSnapshot = await getDocs(postsQuery);
-        const posts: Post[] = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
-        
-        // Combine and sort
-        const combinedFeed: FeedItem[] = [...posts, ...wishlists]
-          .filter(item => item.createdAt) // **CRITICAL FIX**: Filter out items without a createdAt field
-          .sort((a, b) => {
-            const dateA = a.createdAt?.toMillis() || 0;
-            const dateB = b.createdAt?.toMillis() || 0;
-            return dateB - dateA;
-        });
-
-        setFeedItems(combinedFeed);
-
-      } catch (err: any) {
-        console.error("Error fetching feed:", err);
-        setError("Failed to load feed. " + err.message);
-      } finally {
-        setLoading(false);
-      }
     };
 
     fetchFeed();
@@ -711,5 +735,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
