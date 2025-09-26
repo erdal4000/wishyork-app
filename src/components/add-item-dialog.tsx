@@ -79,7 +79,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
   const { user } = useAuth();
   const { toast } = useToast();
-  const itemImageUpload = useImageUpload();
+  const { uploading: isUploading, progress, uploadImage, reset: resetImageUpload } = useImageUpload();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const form = useForm<FormData>({
@@ -99,7 +99,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
   const resetDialog = () => {
     form.reset();
-    itemImageUpload.reset();
+    resetImageUpload();
     setImageUrl(null);
     setIsFetchingUrl(false);
     setFetchError(null);
@@ -161,7 +161,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     const path = `item-images/${wishlistId}/${Date.now()}_${file.name}`;
     
     try {
-        const newUrl = await itemImageUpload.uploadImage(file, path);
+        const newUrl = await uploadImage(file, path);
         setImageUrl(newUrl);
     } catch(err) {
         // Error is toasted in the hook
@@ -170,7 +170,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
 
   const handleRemoveImage = () => {
     setImageUrl(null);
-    itemImageUpload.reset();
+    resetImageUpload();
     const fileInput = document.getElementById('item-image-upload') as HTMLInputElement;
     if (fileInput) {
         fileInput.value = "";
@@ -333,7 +333,7 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
                         <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center rounded-lg">
                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
                            <p className="text-sm text-muted-foreground mt-2">Uploading...</p>
-                           <Progress value={itemImageUpload.progress} className="w-3/4 h-2 mt-2" />
+                           <Progress value={progress} className="w-3/4 h-2 mt-2" />
                         </div>
                      )}
                 </div>
@@ -516,3 +516,5 @@ export function AddItemDialog({ children, wishlistId }: { children: React.ReactN
     </Dialog>
   );
 }
+
+    
