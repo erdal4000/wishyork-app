@@ -84,6 +84,7 @@ interface Wishlist extends DocumentData {
     saves: number;
     progress: number;
     itemCount: number;
+    createdAt: any;
 }
 
 interface UserProfile extends DocumentData {
@@ -102,6 +103,7 @@ interface Item extends DocumentData {
     imageUrl: string;
     aiHint?: string;
     reservedBy?: string;
+    reservedById?: string;
     price?: string;
     purchaseUrl?: string;
     addedAt: any;
@@ -227,86 +229,31 @@ export default function WishlistDetailPage() {
   }, [id, toast]);
 
   useEffect(() => {
-      if (!wishlist || !user) {
-          setItems([]);
-          return;
-      }
-      
-      const canView = user.uid === wishlist.authorId || wishlist.privacy === 'public';
-      
-      let unsubscribeItems: Unsubscribe | undefined;
+    if (!wishlist) return;
 
-      if (canView) {
-          const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
-          const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
-          
-          unsubscribeItems = onSnapshot(q, (itemsSnapshot) => {
-              const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
-              setItems(itemsData);
-          }, (error) => {
-              console.error("Error fetching items: ", error);
-              toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
-          });
-      } else {
-          setItems([]);
-      }
+    const canView = user?.uid === wishlist.authorId || wishlist.privacy === 'public';
+    if (!canView) {
+        setItems([]);
+        return;
+    }
 
-      return () => {
-          if (unsubscribeItems) {
-              unsubscribeItems();
-          }
-      };
+    const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
+    const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
+    
+    const unsubscribeItems = onSnapshot(q, (itemsSnapshot) => {
+        const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+        setItems(itemsData);
+    }, (error) => {
+        console.error("Error fetching items: ", error);
+        toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
+    });
+
+    return () => unsubscribeItems();
   }, [wishlist, user, id, toast]);
 
 
   const isOwnWishlist = user?.uid === wishlist?.authorId;
   const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
-
-  const updateItemAndWishlistTransaction = async (itemId: string, itemChanges: Partial<Item>, wishlistIncrement: { fulfilled?: number, reserved?: number, total?: number, items?: number }) => {
-    setIsUpdatingItem(itemId);
-    const wishlistRef = doc(db, 'wishlists', id);
-    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-  
-    try {
-      await runTransaction(db, async (transaction) => {
-        const wishlistDoc = await transaction.get(wishlistRef);
-        if (!wishlistDoc.exists()) {
-          throw "Wishlist does not exist!";
-        }
-        
-        transaction.update(itemRef, itemChanges);
-  
-        const currentData = wishlistDoc.data();
-        let newUnitsFulfilled = currentData.unitsFulfilled || 0;
-        let newTotalUnits = currentData.totalUnits || 0;
-        
-        if (wishlistIncrement.fulfilled) newUnitsFulfilled += wishlistIncrement.fulfilled;
-        if (wishlistIncrement.total) newTotalUnits += wishlistIncrement.total;
-       
-        const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
-        
-        const updateData: any = {
-          unitsFulfilled: newUnitsFulfilled,
-          totalUnits: newTotalUnits,
-          progress: newProgress
-        };
-        
-        if (wishlistIncrement.items) {
-            updateData.itemCount = increment(wishlistIncrement.items);
-        }
-
-        transaction.update(wishlistRef, updateData);
-      });
-      return true;
-    } catch (e) {
-      console.error("Transaction failed: ", e);
-      toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
-      return false;
-    } finally {
-        setIsUpdatingItem(null);
-    }
-  };
-
   
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
@@ -328,45 +275,103 @@ export default function WishlistDetailPage() {
 
   const handleReserveItem = async (itemId: string) => {
     if (!user) {
-        toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
-        return;
+      toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
+      return;
     }
-    const success = await updateItemAndWishlistTransaction(itemId, {
+    setIsUpdatingItem(itemId);
+    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+    try {
+      await updateDoc(itemRef, {
         status: 'reserved',
         reservedBy: user.displayName || 'Anonymous',
-    }, {});
-    if (success) {
+        reservedById: user.uid,
+      });
       toast({ title: "Success", description: "Item has been reserved!" });
+    } catch (error) {
+      console.error("Error reserving item:", error);
+      toast({ title: "Error", description: "Could not reserve the item. Please try again.", variant: "destructive" });
+    } finally {
+      setIsUpdatingItem(null);
     }
   };
 
   const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
     if (!user) {
-        toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
-        return;
+      toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
+      return;
     }
-    const success = await updateItemAndWishlistTransaction(itemId, { status: 'fulfilled' }, { fulfilled: itemQuantity });
-    if(success) {
-      toast({ title: "Thank You!", description: "This wish has been fulfilled." });
+    setIsUpdatingItem(itemId);
+    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+    const wishlistRef = doc(db, 'wishlists', id);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const wishlistDoc = await transaction.get(wishlistRef);
+            if (!wishlistDoc.exists()) {
+                throw new Error("Wishlist not found");
+            }
+            // Update the item status
+            transaction.update(itemRef, { status: 'fulfilled' });
+
+            // Update the wishlist progress
+            const currentFulfilled = wishlistDoc.data().unitsFulfilled || 0;
+            const newFulfilled = currentFulfilled + itemQuantity;
+            const totalUnits = wishlistDoc.data().totalUnits || 0;
+            const newProgress = totalUnits > 0 ? Math.round((newFulfilled / totalUnits) * 100) : 0;
+            
+            transaction.update(wishlistRef, {
+                unitsFulfilled: newFulfilled,
+                progress: newProgress,
+            });
+        });
+        toast({ title: "Thank You!", description: "This wish has been fulfilled." });
+    } catch (error) {
+        console.error("Error marking as purchased:", error);
+        toast({ title: "Error", description: "Could not mark the item as purchased. Please try again.", variant: "destructive" });
+    } finally {
+      setIsUpdatingItem(null);
     }
   };
+
 
   const handleMarkAsAvailable = async (itemId: string, itemQuantity: number) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
-    
-    let wishlistChanges: { fulfilled?: number } = {};
-    if (item.status === 'fulfilled') {
-      wishlistChanges.fulfilled = -itemQuantity;
-    }
 
-    const success = await updateItemAndWishlistTransaction(itemId, {
-        status: 'available',
-        reservedBy: undefined,
-    }, wishlistChanges);
+    setIsUpdatingItem(itemId);
+    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
+    const wishlistRef = doc(db, 'wishlists', id);
 
-    if(success) {
-      toast({ title: "Item Updated", description: "The item is now marked as available." });
+    try {
+        await runTransaction(db, async (transaction) => {
+            const wishlistDoc = await transaction.get(wishlistRef);
+             if (!wishlistDoc.exists()) {
+                throw new Error("Wishlist not found");
+            }
+
+            transaction.update(itemRef, {
+                status: 'available',
+                reservedBy: null,
+                reservedById: null,
+            });
+
+            if(item.status === 'fulfilled') {
+                const currentFulfilled = wishlistDoc.data().unitsFulfilled || 0;
+                const newFulfilled = Math.max(0, currentFulfilled - itemQuantity);
+                const totalUnits = wishlistDoc.data().totalUnits || 0;
+                const newProgress = totalUnits > 0 ? Math.round((newFulfilled / totalUnits) * 100) : 0;
+                
+                transaction.update(wishlistRef, {
+                    unitsFulfilled: newFulfilled,
+                    progress: newProgress,
+                });
+            }
+        });
+        toast({ title: "Item Updated", description: "The item is now marked as available." });
+    } catch (error) {
+      console.error("Error marking as available:", error);
+      toast({ title: "Error", description: "Could not update the item. Please try again.", variant: "destructive" });
+    } finally {
+        setIsUpdatingItem(null);
     }
   };
 
@@ -398,9 +403,9 @@ export default function WishlistDetailPage() {
           unitsFulfilled: newUnitsFulfilled,
           progress: newProgress
         });
-      });
 
-      await deleteDoc(itemRef);
+        transaction.delete(itemRef);
+      });
 
       toast({ title: "Success", description: "Item removed from wishlist." });
     } catch (e) {
@@ -739,8 +744,8 @@ export default function WishlistDetailPage() {
                         </div>
                    ) : item.status === 'reserved' ? (
                        <div className="flex w-full items-center justify-between">
-                           <p className="text-sm">Reserved by {item.reservedBy === user?.displayName ? 'you' : item.reservedBy}</p>
-                           {(item.reservedBy === user?.displayName) && (
+                           <p className="text-sm">Reserved by {item.reservedById === user?.uid ? 'you' : item.reservedBy}</p>
+                           {(item.reservedById === user?.uid) && (
                             <div className="flex gap-2">
                                 <Button variant="destructive" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Cancel</Button>
                                 <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
@@ -773,3 +778,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
