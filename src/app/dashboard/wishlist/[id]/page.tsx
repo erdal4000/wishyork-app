@@ -319,8 +319,6 @@ export default function WishlistDetailPage() {
 
         transaction.update(itemRef, { 
             status: 'fulfilled',
-            reservedBy: itemDoc.data().reservedBy || user.displayName || 'Anonymous',
-            reservedById: itemDoc.data().reservedById || user.uid,
         });
         
         const newUnitsFulfilled = (wishlistDoc.data().unitsFulfilled || 0) + itemQuantity;
