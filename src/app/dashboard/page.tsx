@@ -568,16 +568,26 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
+    // Wait until we have the user's profile, which contains the 'following' list.
     if (!userProfile) { 
-        setLoading(user ? true : false);
+        setLoading(user ? true : false); // Show loader if user is logged in but profile is not yet loaded.
         return;
     }
 
     setLoading(true);
 
     const followingList = userProfile.following || [];
-    const feedAuthors = [userProfile.uid, ...followingList.slice(-29)];
+    // The feed should contain the user's own content plus the content of people they follow.
+    const feedAuthors = [userProfile.uid, ...followingList];
     
+    // Firestore 'in' queries are limited to 30 elements.
+    // We take the current user + the last 29 people they followed.
+    if (feedAuthors.length > 30) {
+        feedAuthors.splice(1, feedAuthors.length - 30);
+    }
+    
+    // If feedAuthors is empty (which should not happen as it always includes the current user),
+    // we should not proceed to avoid invalid queries.
     if (feedAuthors.length === 0) {
         setLoading(false);
         setPosts([]);
@@ -592,6 +602,7 @@ export default function DashboardPage() {
       limit(20)
     );
     
+    // Note: We use 'in' for authorId and another 'in' for privacy. This is a valid compound query.
     const wishlistsQuery = query(
         collection(db, 'wishlists'),
         where('authorId', 'in', feedAuthors),
@@ -603,8 +614,8 @@ export default function DashboardPage() {
       (postsSnapshot) => {
         const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
         setPosts(postsData);
-        setLoading(false);
         setError(null);
+        setLoading(false); // Set loading to false here
       }, 
       (error) => {
         console.error("Error fetching posts:", error);
@@ -617,7 +628,8 @@ export default function DashboardPage() {
       (wishlistsSnapshot) => {
         const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
         setWishlists(wishlistsData);
-        setLoading(false);
+        setError(null);
+        setLoading(false); // And also here
       }, 
       (error) => {
         console.error("Error fetching wishlists:", error);
@@ -630,11 +642,12 @@ export default function DashboardPage() {
       unsubPosts();
       unsubWishlists();
     };
-
+    // Re-run this effect if the user or their profile (specifically following list) changes.
   }, [user, userProfile]);
 
   const feedItems = useMemo(() => {
     const combined = [...posts, ...wishlists];
+    // Sort by creation date, most recent first.
     return combined.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
   }, [posts, wishlists]);
 
