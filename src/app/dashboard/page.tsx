@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit, getDocs, WriteBatch, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, where, addDoc, serverTimestamp, deleteDoc, Unsubscribe } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -480,6 +480,8 @@ function FeedCard({ item }: { item: FeedItem }) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [postItems, setPostItems] = useState<Post[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<Wishlist[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -569,90 +571,90 @@ export default function DashboardPage() {
       return;
     }
 
-    const fetchFeed = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            const userData = userDoc.data();
-            const following = userData?.following || [];
-            const authorIdsToQuery = [...new Set([user.uid, ...following])];
+    setLoading(true);
+    setError(null);
 
-            if (authorIdsToQuery.length === 0) {
-                setFeedItems([]);
-                setLoading(false);
-                return;
-            }
+    const userDocRef = doc(db, 'users', user.uid);
 
-            // Chunk the author IDs into groups of 30 for 'in' queries
-            const chunks: string[][] = [];
-            for (let i = 0; i < authorIdsToQuery.length; i += 30) {
-                chunks.push(authorIdsToQuery.slice(i, i + 30));
-            }
+    // This listener fetches the user's following list and then sets up the feed listeners.
+    const userUnsubscribe = onSnapshot(userDocRef, (userDoc) => {
+      const userData = userDoc.data();
+      const following = userData?.following || [];
+      const authorIdsToQuery = [...new Set([user.uid, ...following])];
 
-            const fetchPromises: Promise<DocumentData[]>[] = [];
+      if (authorIdsToQuery.length === 0) {
+        setPostItems([]);
+        setWishlistItems([]);
+        setLoading(false);
+        return;
+      }
+      
+      const unsubscribes: Unsubscribe[] = [];
 
-            // Create promises for fetching wishlists and posts for each chunk
-            chunks.forEach(chunk => {
-                // Wishlists query
-                const wishlistsQuery = query(
-                    collection(db, 'wishlists'),
-                    where('authorId', 'in', chunk),
-                    orderBy('createdAt', 'desc'),
-                    limit(20)
-                );
-                fetchPromises.push(getDocs(wishlistsQuery).then(snapshot => 
-                    snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() }))
-                ));
+      // Wishlist Listener
+      const wishlistsQuery = query(
+        collection(db, 'wishlists'),
+        where('authorId', 'in', authorIdsToQuery),
+        where('privacy', '==', 'public'), // Only public wishlists in the feed
+        orderBy('createdAt', 'desc')
+      );
+      const wishlistsUnsub = onSnapshot(wishlistsQuery, (snapshot) => {
+        const lists = snapshot.docs.map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist));
+        setWishlistItems(lists);
+        setLoading(false); // Stop loading once the first set of data arrives
+      }, (err) => {
+        console.error("Error fetching wishlists:", err);
+        setError("Failed to load wishlists.");
+        setLoading(false);
+      });
+      unsubscribes.push(wishlistsUnsub);
 
-                // Posts query
-                const postsQuery = query(
-                    collection(db, 'posts'),
-                    where('authorId', 'in', chunk),
-                    orderBy('createdAt', 'desc'),
-                    limit(20)
-                );
-                fetchPromises.push(getDocs(postsQuery).then(snapshot => 
-                    snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() }))
-                ));
-            });
+      // Posts Listener
+      const postsQuery = query(
+        collection(db, 'posts'),
+        where('authorId', 'in', authorIdsToQuery),
+        orderBy('createdAt', 'desc')
+      );
+      const postsUnsub = onSnapshot(postsQuery, (snapshot) => {
+        const posts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+        setPostItems(posts);
+        setLoading(false); // Stop loading once the first set of data arrives
+      }, (err) => {
+        console.error("Error fetching posts:", err);
+        setError("Failed to load posts.");
+        setLoading(false);
+      });
+      unsubscribes.push(postsUnsub);
+      
+      // Return a cleanup function that unsubscribes from all listeners
+      return () => {
+        unsubscribes.forEach(unsub => unsub());
+      };
 
-            const results = await Promise.all(fetchPromises);
-            const combinedFeed = results.flat() as FeedItem[];
-            
-            // Filter out items without a valid createdAt timestamp before sorting
-            const validFeedItems = combinedFeed.filter(item => item.createdAt && typeof item.createdAt.toMillis === 'function');
-            
-            // Sort the combined feed by creation date
-            validFeedItems.sort((a, b) => {
-                const dateA = a.createdAt.toMillis();
-                const dateB = b.createdAt.toMillis();
-                return dateB - dateA;
-            });
+    }, (err) => {
+      console.error("Error fetching user's following list:", err);
+      setError("Failed to load user data to build feed.");
+      setLoading(false);
+    });
 
-            // Filter out non-public wishlists from people the user is following
-            const finalFeed = validFeedItems.filter(item => {
-                if (item.type === 'wishlist') {
-                    // Show item if it's the user's own or if it's public
-                    return item.authorId === user.uid || item.privacy === 'public';
-                }
-                return true; // Always show posts
-            });
-
-            setFeedItems(finalFeed);
-
-        } catch (err: any) {
-            console.error("Error fetching feed:", err);
-            setError("Failed to load feed. " + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchFeed();
-    // This is not a real-time listener for simplicity, but for a real app,
-    // you would manage onSnapshot listeners here.
+    return () => userUnsubscribe();
   }, [user]);
+
+  // This effect combines and sorts the feed whenever posts or wishlists are updated.
+  useEffect(() => {
+    const combinedFeed = [...postItems, ...wishlistItems];
+
+    const validFeedItems = combinedFeed.filter(item => item.createdAt && typeof item.createdAt.toMillis === 'function');
+    
+    validFeedItems.sort((a, b) => {
+        const dateA = a.createdAt.toMillis();
+        const dateB = b.createdAt.toMillis();
+        return dateB - dateA;
+    });
+
+    setFeedItems(validFeedItems);
+  }, [postItems, wishlistItems]);
+
 
   return (
     <div className="space-y-6">

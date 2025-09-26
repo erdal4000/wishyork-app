@@ -30,13 +30,17 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "privacy",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "wishlists",
+      "collectionGroup": "posts",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
@@ -44,40 +48,8 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "privacy",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "privacy",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "wishlists",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "privacy",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "title_lowercase",
-          "order": "ASCENDING"
         }
       ]
     }
