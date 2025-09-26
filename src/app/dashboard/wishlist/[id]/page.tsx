@@ -274,28 +274,6 @@ export default function WishlistDetailPage() {
       return privacy.charAt(0).toUpperCase() + privacy.slice(1);
   }
 
-  const handleReserveItem = async (itemId: string) => {
-    if (!user) {
-      toast({ title: "Login Required", description: "You must be logged in to reserve an item.", variant: "destructive" });
-      return;
-    }
-    setIsUpdatingItem(itemId);
-    const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-    try {
-      await updateDoc(itemRef, {
-        status: 'reserved',
-        reservedBy: user.displayName || 'Anonymous',
-        reservedById: user.uid,
-      });
-      toast({ title: "Success", description: "Item has been reserved!" });
-    } catch (error) {
-      console.error("Error reserving item:", error);
-      toast({ title: "Error", description: "Could not reserve the item. Please try again.", variant: "destructive" });
-    } finally {
-      setIsUpdatingItem(null);
-    }
-  };
-
   const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
     if (!user) {
       toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
@@ -316,7 +294,11 @@ export default function WishlistDetailPage() {
             return;
         }
 
-        transaction.update(itemRef, { status: 'fulfilled' });
+        transaction.update(itemRef, { 
+            status: 'fulfilled',
+            reservedBy: user.displayName || 'Anonymous',
+            reservedById: user.uid,
+        });
         
         const newUnitsFulfilled = (wishlistDoc.data().unitsFulfilled || 0) + itemQuantity;
         const totalUnits = wishlistDoc.data().totalUnits || 0;
@@ -739,31 +721,18 @@ export default function WishlistDetailPage() {
                         <div className="flex w-full gap-2">
                             {!isOwnWishlist && user && (
                                 <>
-                                  <Button size="sm" className="flex-1" onClick={() => handleReserveItem(item.id)}>Reserve</Button>
-                                  <Button variant='secondary' size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
+                                  <Button size="sm" className="flex-1" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
                                 </>
                             )}
                         </div>
-                   ) : item.status === 'reserved' ? (
+                   ) : item.status === 'fulfilled' ? (
                        <div className="flex w-full items-center justify-between">
-                           <p className="text-sm">Reserved by {item.reservedById === user?.uid ? 'you' : item.reservedBy}</p>
-                           {(item.reservedById === user?.uid) ? (
-                            <div className="flex gap-2">
-                                <Button variant="destructive" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Cancel</Button>
-                                <Button size="sm" onClick={() => handleMarkAsPurchased(item.id, item.quantity)}>Mark as Purchased</Button>
-                            </div>
-                           ) : isOwnWishlist ? (
-                              <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Mark as Available</Button>
-                           ) : null }
-                       </div>
-                   ) : ( // Fulfilled
-                       <div className="flex w-full items-center justify-between">
-                           <p className="text-sm font-semibold text-green-600">Fulfilled!</p>
+                           <p className="text-sm font-semibold text-green-600">Fulfilled by {item.reservedById === user?.uid ? 'you' : item.reservedBy || 'someone'}</p>
                            {isOwnWishlist && (
                              <Button variant="ghost" size="sm" onClick={() => handleMarkAsAvailable(item.id, item.quantity)}>Mark as Available</Button>
                            )}
                        </div>
-                   )}
+                   ) : null }
                 </CardFooter>
               </Card>
             ))}
@@ -779,3 +748,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
