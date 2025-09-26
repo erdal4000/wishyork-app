@@ -1,86 +1,60 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // USERS collection
-    // - A user can read their own profile.
-    // - Any authenticated user can read public profile data (name, username, photo).
-    // - A user can update their own profile.
-    // - A user can create their own profile document.
+    // Kullanıcılar kendi profilini okuyabilir ve güncelleyebilir.
+    // Herkes (giriş yapmış) diğer kullanıcıların profillerini okuyabilir.
     match /users/{userId} {
-      allow read: if isOwner(userId) || request.auth != null;
-      allow update: if isOwner(userId);
-      allow create: if isOwner(userId);
-    }
-    
-    // USERNAMES collection
-    // Used for unique username checks.
-    // - A user can claim a username if it doesn't exist.
-    // - No one can read the full list or overwrite existing entries easily.
-    match /usernames/{username} {
-        allow read: if false; // Disallow reading directly
-        allow create: if request.auth != null;
-        allow delete: if isOwner(resource.data.uid);
+      allow read: if request.auth != null;
+      allow update: if request.auth.uid == userId;
     }
 
-    // POSTS collection
-    // - Any authenticated user can read posts.
-    // - Users can only create, update, or delete their own posts.
+    // Kullanıcı adlarının benzersizliğini sağlamak için kullanılır.
+    // Sadece sunucu tarafı veya kimliği doğrulanmış kullanıcılar oluşturabilir, kimse okuyamaz/silemez.
+    match /usernames/{username} {
+      allow read: if false;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // Ana akışın çalışması için GEREKLİ KURAL:
+    // Giriş yapmış herhangi bir kullanıcı, tüm gönderileri okuyabilir.
     match /posts/{postId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if isOwner(request.resource.data.authorId);
-      
-      // Comments subcollection
+      // Sadece gönderi sahibi gönderisini oluşturabilir, güncelleyebilir veya silebilir.
+      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
+
+      // Yorumlar için kurallar
       match /comments/{commentId} {
         allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null; // Further checks can be added if needed
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth.uid == resource.data.authorId;
       }
     }
-    
-    // WISHLISTS collection
+
+    // Ana akışın çalışması için GEREKLİ KURAL:
+    // Giriş yapmış herhangi bir kullanıcı, dilek listelerini okuyabilir.
+    // Gizlilik, kod tarafında (client-side) kontrol edilecek.
     match /wishlists/{wishlistId} {
-      // READ:
-      // - A user can read a wishlist if they are the owner.
-      // - OR if the wishlist's privacy is 'public'.
-      // (Friends-only logic would require reading the user's own doc, which is complex here,
-      // so we rely on client-side filtering for 'friends' privacy for now).
-      allow read: if isOwner(resource.data.authorId) || resource.data.privacy == 'public';
+      allow read: if request.auth != null;
+      // Sadece dilek listesi sahibi listesini oluşturabilir, güncelleyebilir veya silebilir.
+      allow create, update, delete: if request.auth.uid == request.resource.data.authorId;
 
-      // WRITE:
-      // - Users can only create, update, or delete their own wishlists.
-      allow create, update, delete: if isOwner(request.resource.data.authorId);
-
-      // ITEMS subcollection
+      // Dilek listesi içindeki item'lar için kurallar
       match /items/{itemId} {
-        // READ:
-        // - Anyone who can read the parent wishlist can read its items.
-        allow read: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.privacy == 'public' || isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
-        
-        // WRITE:
-        // - The wishlist owner can do anything.
-        // - Authenticated users can update items on public lists (for reserving/fulfilling).
-        allow create, delete: if isOwner(get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId);
+        allow read: if request.auth != null;
+        // Sadece liste sahibi item ekleyebilir/silebilir.
+        allow create, delete: if get(/databases/$(database)/documents/wishlists/$(wishlistId)).data.authorId == request.auth.uid;
+        // Giriş yapmış herkes bir item'ı güncelleyebilir (rezerve etmek/satın almak için).
         allow update: if request.auth != null;
       }
-      
-      // Comments subcollection for wishlists
+
+      // Yorumlar için kurallar
       match /comments/{commentId} {
         allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth.uid == resource.data.authorId;
       }
-    }
-    
-    // BOOKMARKS subcollection nested under users
-    // - A user can only access their own bookmarks.
-    match /users/{userId}/bookmarks/{bookmarkId} {
-        allow read, write, delete: if isOwner(userId);
     }
   }
 }
