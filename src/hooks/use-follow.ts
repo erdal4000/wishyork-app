@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, runTransaction, DocumentReference, increment } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
 export const useFollow = (profileUserId?: string) => {
@@ -50,7 +50,7 @@ export const useFollow = (profileUserId?: string) => {
     
     const currentUserRef = doc(db, "users", currentUser.uid);
 
-    // The logic is now simplified to only update the current user's document
+    // This logic only updates the current user's document
     // to comply with security rules that only allow a user to write to their own document.
     try {
         if (isFollowing) {
@@ -68,7 +68,6 @@ export const useFollow = (profileUserId?: string) => {
           });
            toast({ title: "Followed", description: "You are now following this user." });
         }
-        // The UI will update automatically thanks to the onSnapshot listener.
     } catch (error: any) {
       console.error("Error toggling follow:", error);
       toast({

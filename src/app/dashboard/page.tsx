@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db, storage } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, where, addDoc, serverTimestamp, deleteDoc, Unsubscribe, limit, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
@@ -84,6 +84,7 @@ interface UserProfile extends DocumentData {
   name: string;
   username: string;
   photoURL?: string;
+  following?: string[];
 }
 
 const userProfilesCache: { [key: string]: UserProfile } = {};
@@ -563,11 +564,63 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
-    setLoading(false);
-    setError(null);
-    // All feed fetching logic is removed to simplify and resolve the main issue.
-    // The component will now just show the post creation box and a message.
-  }, []);
+    if (!userProfile) { // Wait for userProfile to be loaded
+        setLoading(user ? true : false); // Only show loading if user is logged in
+        return;
+    }
+
+    setLoading(true);
+
+    const followingList = userProfile.following || [];
+    const feedAuthors = [...followingList, userProfile.uid]; // Show own content and followed content
+    
+    // --- Create Queries ---
+    const postsQuery = query(
+      collection(db, 'posts'),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+    
+    const wishlistsQuery = query(
+        collection(db, 'wishlists'),
+        where('privacy', '==', 'public'), // Only show public wishlists on the main feed
+        orderBy('createdAt', 'desc'),
+        limit(30)
+    );
+
+    // --- Set up listeners and combine results ---
+    const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+        const postsData = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
+        
+        const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+            const wishlistsData = wishlistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
+
+            const combinedFeed = [...postsData, ...wishlistsData]
+                // Filter to show only own content or content from followed users
+                .filter(item => feedAuthors.includes(item.authorId) || item.privacy === 'public') 
+                // Sort by date
+                .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+            setFeedItems(combinedFeed);
+            setLoading(false);
+            setError(null);
+        }, (error) => {
+            console.error("Error fetching wishlists:", error);
+            setError("Feed unavailable: Failed to load wishlists.");
+            setLoading(false);
+        });
+
+        return () => unsubWishlists(); // Cleanup wishlist listener
+
+    }, (error) => {
+        console.error("Error fetching posts:", error);
+        setError("Feed unavailable: Failed to load posts.");
+        setLoading(false);
+    });
+
+    return () => unsubPosts(); // Cleanup post listener
+
+  }, [userProfile]);
 
 
   return (
@@ -624,14 +677,30 @@ export default function DashboardPage() {
       {loading && (
         <div className="space-y-6">
           <FeedCardSkeleton />
+          <FeedCardSkeleton />
         </div>
       )}
 
-      {!loading && (
-        <Card className="p-8 text-center text-muted-foreground">
-          <h3 className="text-lg font-semibold">Welcome to your Dashboard</h3>
-          <p className="mt-2">The main feed is temporarily disabled to resolve a core issue. Please use the navigation to view your wishlists or explore.</p>
+      {!loading && error && (
+          <Card className="p-8 text-center text-destructive border-destructive">
+            <h3 className="text-lg font-semibold">{error}</h3>
+            <p className="mt-2 text-sm">There was an issue loading content. Please try again later.</p>
+          </Card>
+      )}
+
+      {!loading && !error && feedItems.length === 0 && (
+         <Card className="p-8 text-center text-muted-foreground">
+            <h3 className="text-lg font-semibold">Your Feed is Empty</h3>
+            <p className="mt-2">Start by following some people or explore public wishlists!</p>
         </Card>
+      )}
+
+      {!loading && !error && (
+        <div className="space-y-6">
+            {feedItems.map(item => (
+                <FeedCard key={`${item.type}-${item.id}`} item={item} />
+            ))}
+        </div>
       )}
     </div>
   );
