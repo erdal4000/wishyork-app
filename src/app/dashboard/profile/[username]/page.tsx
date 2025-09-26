@@ -274,7 +274,7 @@ function WishlistCard({ list, isOwnProfile, onEdit, onDelete }: { list: Wishlist
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogDescription>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogHeader>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -341,52 +341,50 @@ export default function ProfilePage() {
         if (!profileUser) return;
     
         setLoading(true);
-        let wishlistsUnsubscribe: (() => void) | undefined;
-        let postsUnsubscribe: (() => void) | undefined;
     
-        try {
-            // This query fetches wishlists for the specific user profile being viewed.
-            const wishlistsQuery = query(
-                collection(db, 'wishlists'),
-                where('authorId', '==', profileUser.uid),
-                orderBy('createdAt', 'desc')
-            );
+        // Base query for wishlists
+        let wishlistsQuery = query(
+            collection(db, 'wishlists'),
+            where('authorId', '==', profileUser.uid),
+            orderBy('createdAt', 'desc')
+        );
     
-            wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
-                const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
-                setWishlists(fetchedWishlists);
-                setLoading(false);
-            }, (error) => {
-                console.error("Error fetching wishlists:", error);
-                toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
-                setWishlists([]); // Clear wishlists on error
-                setLoading(false);
-            });
-    
-            // This query fetches posts for the specific user.
-            const postsQuery = query(
-                collection(db, 'posts'),
-                where('authorId', '==', profileUser.uid),
-                orderBy('createdAt', 'desc')
-            );
-            postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
-                setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
-            }, (error) => {
-                console.error("Error fetching posts:", error);
-                setPosts([]); // Clear posts on error
-            });
-    
-        } catch (error) {
-            console.error("Error creating queries:", error);
-            setLoading(false);
+        // If not viewing own profile, only fetch public wishlists
+        if (!isOwnProfile) {
+            wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
         }
     
+        const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
+            const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
+            setWishlists(fetchedWishlists);
+            setLoading(false); 
+        }, (error) => {
+            console.error("Error fetching wishlists:", error);
+            toast({ title: "Error", description: "Could not load wishlists.", variant: "destructive" });
+            setWishlists([]);
+            setLoading(false);
+        });
+    
+        // Fetch posts for the user
+        const postsQuery = query(
+            collection(db, 'posts'),
+            where('authorId', '==', profileUser.uid),
+            orderBy('createdAt', 'desc')
+        );
+    
+        const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
+            setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
+        }, (error) => {
+            console.error("Error fetching posts:", error);
+            setPosts([]);
+        });
+    
         return () => {
-            if (wishlistsUnsubscribe) wishlistsUnsubscribe();
-            if (postsUnsubscribe) postsUnsubscribe();
+            wishlistsUnsubscribe();
+            postsUnsubscribe();
         };
     
-    }, [profileUser, toast]);
+    }, [profileUser, isOwnProfile, toast]);
 
     if (loading) {
         return (
