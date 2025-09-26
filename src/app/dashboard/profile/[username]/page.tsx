@@ -274,7 +274,7 @@ function WishlistCard({ list, isOwnProfile, onEdit, onDelete }: { list: Wishlist
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogHeader>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete this wishlist.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -343,16 +343,18 @@ export default function ProfilePage() {
         setLoading(true);
     
         // Base query for wishlists
-        let wishlistsQuery = query(
+        let wishlistsQuery: Query<DocumentData> = query(
             collection(db, 'wishlists'),
-            where('authorId', '==', profileUser.uid),
-            orderBy('createdAt', 'desc')
+            where('authorId', '==', profileUser.uid)
         );
     
         // If not viewing own profile, only fetch public wishlists
         if (!isOwnProfile) {
             wishlistsQuery = query(wishlistsQuery, where('privacy', '==', 'public'));
         }
+
+        // Add ordering
+        wishlistsQuery = query(wishlistsQuery, orderBy('createdAt', 'desc'));
     
         const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, (snapshot) => {
             const fetchedWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wishlist));
@@ -373,7 +375,8 @@ export default function ProfilePage() {
         );
     
         const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
-            setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
+            const fetchedPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+            setPosts(fetchedPosts);
         }, (error) => {
             console.error("Error fetching posts:", error);
             setPosts([]);
