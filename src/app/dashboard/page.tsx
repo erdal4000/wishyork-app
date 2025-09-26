@@ -574,89 +574,102 @@ export default function DashboardPage() {
   
   useEffect(() => {
     if (!userProfile) {
-        setLoading(user ? true : false);
-        return;
-    };
-
+      setLoading(user ? true : false);
+      return;
+    }
+  
     setLoading(true);
     setError(null);
-    
-    // Create the list of authors for the 'in' query.
+  
     const feedAuthors = [userProfile.uid, ...(userProfile.following || [])];
-    
+  
     if (feedAuthors.length === 0) {
-        setAllPosts([]);
-        setAllWishlists([]);
-        setLoading(false);
-        return;
+      setAllPosts([]);
+      setAllWishlists([]);
+      setLoading(false);
+      return;
     }
-
-    const fetchAllFeedData = async () => {
-        try {
-            const postsPromises = feedAuthors.map(authorId => {
-                const postsQuery = query(
-                    collection(db, 'posts'),
-                    where('authorId', '==', authorId),
-                    orderBy('createdAt', 'desc'),
-                    limit(5) // Limit to 5 posts per followed user
-                );
-                return getDocs(postsQuery);
-            });
+  
+    const allUnsubscribes: Unsubscribe[] = [];
     
-            const wishlistsPromises = feedAuthors.map(authorId => {
-                const wishlistsQuery = query(
-                    collection(db, 'wishlists'),
-                    where('authorId', '==', authorId),
-                    where('privacy', 'in', ['public', 'friends']), // Ensure we only get what we can see
-                    orderBy('createdAt', 'desc'),
-                    limit(5) // Limit to 5 wishlists per followed user
-                );
-                return getDocs(wishlistsQuery);
-            });
-    
-            const [postsSnapshots, wishlistsSnapshots] = await Promise.all([
-                Promise.all(postsPromises),
-                Promise.all(wishlistsPromises),
-            ]);
+    // Create a map to hold the data from each author
+    const postsByAuthor = new Map<string, Post[]>();
+    const wishlistsByAuthor = new Map<string, Wishlist[]>();
+  
+    const updateAllData = () => {
+        let combinedPosts: Post[] = [];
+        postsByAuthor.forEach(posts => combinedPosts.push(...posts));
+        setAllPosts(combinedPosts);
 
-            const postsData = postsSnapshots.flatMap(snapshot => 
-                snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post))
-            );
-            setAllPosts(postsData);
+        let combinedWishlists: Wishlist[] = [];
+        wishlistsByAuthor.forEach(lists => combinedWishlists.push(...lists));
+        setAllWishlists(combinedWishlists);
+    };
 
-            const wishlistsData = wishlistsSnapshots.flatMap(snapshot => 
-                snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist))
-            );
-            setAllWishlists(wishlistsData);
-            
-        } catch (err: any) {
-            console.error("Error fetching feed data:", err);
-            // Check for permission error specifically on wishlists
-            if (err.code === 'permission-denied' && err.message.includes('wishlists')) {
-                 setError("Feed unavailable: Failed to load wishlists.");
-            } else {
-                 setError("There was an issue loading content. Please try again later.");
-            }
-            setAllPosts([]);
-            setAllWishlists([]);
-        } finally {
-            setLoading(false);
+    feedAuthors.forEach(authorId => {
+      // Subscribe to posts
+      const postsQuery = query(
+        collection(db, 'posts'),
+        where('authorId', '==', authorId),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+      const postsUnsubscribe = onSnapshot(postsQuery, 
+        (snapshot) => {
+          const authorPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'post' } as Post));
+          postsByAuthor.set(authorId, authorPosts);
+          updateAllData();
+          setLoading(false);
+        }, 
+        (err) => {
+          console.error(`Error fetching posts for author ${authorId}:`, err);
+          setError("There was an issue loading posts.");
+          setLoading(false);
         }
-    }
-    
-    fetchAllFeedData();
-
+      );
+      allUnsubscribes.push(postsUnsubscribe);
+  
+      // Subscribe to wishlists
+      const wishlistsQuery = query(
+        collection(db, 'wishlists'),
+        where('authorId', '==', authorId),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+      const wishlistsUnsubscribe = onSnapshot(wishlistsQuery, 
+        (snapshot) => {
+          const authorWishlists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'wishlist' } as Wishlist));
+          wishlistsByAuthor.set(authorId, authorWishlists);
+          updateAllData();
+          setLoading(false);
+        }, 
+        (err) => {
+          console.error(`Error fetching wishlists for author ${authorId}:`, err);
+          setError("There was an issue loading wishlists.");
+          setLoading(false);
+        }
+      );
+      allUnsubscribes.push(wishlistsUnsubscribe);
+    });
+  
+    // Cleanup function to unsubscribe from all listeners on component unmount
+    return () => {
+      allUnsubscribes.forEach(unsub => unsub());
+    };
+  
   }, [userProfile, user]);
 
   const feedItems = useMemo(() => {
     if (!userProfile) return [];
     
+    // Filter out private wishlists that don't belong to the current user
     const filteredWishlists = allWishlists.filter(w => {
         return w.privacy !== 'private' || w.authorId === userProfile.uid;
     });
     
     const combined = [...allPosts, ...filteredWishlists];
     
+    // Sort the combined list by creation date
     return combined.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
   }, [allPosts, allWishlists, userProfile]);
 
@@ -721,15 +734,16 @@ export default function DashboardPage() {
 
       {!loading && error && (
           <Card className="p-8 text-center text-destructive border-destructive bg-destructive/10">
-            <h3 className="text-lg font-semibold">{error}</h3>
-            <p className="mt-2 text-sm">There was an issue loading content. Please try again later.</p>
+            <AlertTriangle className="mx-auto h-8 w-8 mb-4" />
+            <h3 className="text-lg font-semibold">Could not load feed</h3>
+            <p className="mt-2 text-sm">{error}</p>
           </Card>
       )}
 
       {!loading && !error && feedItems.length === 0 && (
          <Card className="p-8 text-center text-muted-foreground">
             <h3 className="text-lg font-semibold">Your Feed is Empty</h3>
-            <p className="mt-2">Start by following some people or explore public wishlists!</p>
+            <p className="mt-2">Start by following some people or explore public wishlists to see content here!</p>
         </Card>
       )}
 
