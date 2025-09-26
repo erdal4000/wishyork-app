@@ -50,11 +50,6 @@ export const useFollow = (profileUserId?: string) => {
     const batch = writeBatch(db);
 
     try {
-        const currentUserDoc = await getDoc(currentUserRef);
-        const profileUserDoc = await getDoc(profileUserRef);
-        const currentUserData = currentUserDoc.data() || {};
-        const profileUserData = profileUserDoc.data() || {};
-
         if (isFollowing) {
             // Unfollow logic
             batch.update(currentUserRef, { 
@@ -69,16 +64,13 @@ export const useFollow = (profileUserId?: string) => {
 
         } else {
             // Follow logic
-            const currentFollowingCount = currentUserData.followingCount || 0;
-            const profileFollowersCount = profileUserData.followersCount || 0;
-
             batch.update(currentUserRef, { 
                 following: arrayUnion(profileUserId),
-                followingCount: currentFollowingCount === 0 ? 1 : increment(1)
+                followingCount: increment(1)
             });
             batch.update(profileUserRef, { 
                 followers: arrayUnion(currentUser.uid),
-                followersCount: profileFollowersCount === 0 ? 1 : increment(1)
+                followersCount: increment(1)
             });
             toast({ title: "Followed!", description: "You are now following this user." });
         }
@@ -88,7 +80,7 @@ export const useFollow = (profileUserId?: string) => {
       console.error("Error toggling follow:", error);
       toast({
         title: "Error",
-        description: `Could not perform the follow action. Please try again. Error: ${error.code}`,
+        description: `Could not perform the follow action. Please try again.`,
         variant: "destructive",
       });
     } finally {
