@@ -228,7 +228,7 @@ export default function WishlistDetailPage() {
   }, [id, toast]);
 
   const isOwnWishlist = user?.uid === wishlist?.authorId;
-  const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
+  const canViewItems = wishlist && (isOwnWishlist || wishlist.privacy === 'public');
 
   useEffect(() => {
     if (!id || !canViewItems) {
@@ -406,7 +406,7 @@ export default function WishlistDetailPage() {
     return <div>Wishlist or author not found.</div>;
   }
   
-  if (!canViewItems) {
+  if (!canViewItems && !loading) {
       return (
           <div className="flex flex-col items-center justify-center h-96 gap-4 text-center">
               <Lock className="h-16 w-16 text-muted-foreground" />

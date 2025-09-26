@@ -23,6 +23,9 @@ export const usePostInteraction = (itemId: string, itemType: 'post' | 'wishlist'
         const likedBy = postData.likedBy || [];
         setHasLiked(likedBy.includes(user.uid));
       }
+    }, (error) => {
+      console.error(`Error listening to ${itemType} (${itemId}):`, error);
+      // Don't toast here, as it can be annoying if it's a permissions issue on a list.
     });
 
     return () => unsubscribe();
@@ -37,7 +40,7 @@ export const usePostInteraction = (itemId: string, itemType: 'post' | 'wishlist'
       });
       return;
     }
-    if (isLiking) return;
+    if (isLiking || !itemId) return;
 
     setIsLiking(true);
 
