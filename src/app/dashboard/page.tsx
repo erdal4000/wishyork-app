@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, DocumentData, Timestamp, doc, getDoc, collectionGroup, where, addDoc, serverTimestamp, deleteDoc, limit, getDocs } from 'firebase/firestore';
 import { ref, deleteObject } from "firebase/storage";
 import { useAuth } from '@/context/auth-context';
 import {
@@ -15,7 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, AlertTriangle, Image as ImageIcon, XCircle, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Loader2, Bookmark, Repeat2, AlertTriangle, Image as ImageIcon, XCircle, Trash2, Package, Globe, Users, Lock, Edit } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getInitials } from '@/lib/utils';
@@ -43,9 +43,11 @@ import {
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useToast } from '@/hooks/use-toast';
 import { useBookmark } from '@/hooks/use-bookmark';
-import { Progress as ProgressBar } from '@/components/ui/progress';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
-interface FeedItem extends DocumentData {
+interface Post extends DocumentData {
   id: string;
   type: 'post'; 
   authorId: string;
@@ -56,6 +58,28 @@ interface FeedItem extends DocumentData {
   likes: number;
   commentCount: number;
 }
+
+interface Wishlist extends DocumentData {
+  id: string;
+  type: 'wishlist';
+  title: string;
+  authorId: string;
+  imageUrl: string;
+  aiHint: string;
+  category: string;
+  progress: number;
+  itemCount: number;
+  privacy: 'public' | 'friends' | 'private';
+  likes: number;
+  commentCount: number;
+  saves: number;
+  createdAt: any;
+  unitsFulfilled: number;
+  totalUnits: number;
+}
+
+type FeedItem = Post | Wishlist;
+
 
 interface UserProfile extends DocumentData {
   name: string;
@@ -124,7 +148,7 @@ function FeedCardSkeleton() {
   );
 }
 
-function PostCard({ item }: { item: FeedItem }) {
+function PostCard({ item }: { item: Post }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
@@ -310,6 +334,149 @@ function PostCard({ item }: { item: FeedItem }) {
   );
 }
 
+function WishlistCard({ item }: { item: Wishlist }) {
+    const { user } = useAuth();
+    const { authorProfile, loadingProfile } = useAuthorProfile(item.authorId);
+    const { isBookmarked, isToggling, toggleBookmark } = useBookmark({
+      refId: item.id,
+      type: 'cause',
+      title: item.title,
+      imageUrl: item.imageUrl,
+      authorName: authorProfile?.name,
+    });
+    const { hasLiked, isLiking, toggleLike } = usePostInteraction(item.id, 'wishlist');
+    
+    if (loadingProfile) {
+      return <FeedCardSkeleton />;
+    }
+  
+    if (!authorProfile) {
+      return null;
+    }
+  
+    const itemDate = item.createdAt?.toDate();
+    const timeAgo = itemDate ? formatDistanceToNow(itemDate, { addSuffix: true }) : 'just now';
+
+    const getPrivacyIcon = (privacy: string) => {
+        switch (privacy) {
+            case 'public': return <Globe className="h-3 w-3" />;
+            case 'friends': return <Users className="h-3 w-3" />;
+            case 'private': return <Lock className="h-3 w-3" />;
+            default: return null;
+        }
+    };
+    
+    return (
+        <Card>
+             <CardHeader className="flex flex-row items-center gap-4 p-4">
+                <Avatar>
+                <AvatarImage src={authorProfile.photoURL} alt={authorProfile.name} />
+                <AvatarFallback>{getInitials(authorProfile.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                <p className="font-bold">{authorProfile.name}</p>
+                <p className="text-sm text-muted-foreground">
+                    <Link href={`/dashboard/profile/${authorProfile.username}`}>@{authorProfile.username}</Link> · {timeAgo}
+                </p>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button>
+                    </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end">
+                         <DropdownMenuItem>
+                            <AlertTriangle className="mr-2 h-4 w-4" />
+                            Report
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+                <Link href={`/dashboard/wishlist/${item.id}`} className="block hover:bg-muted/30 transition-colors">
+                    <div className="px-4 pb-4">
+                         <p className="text-muted-foreground text-sm mb-2">shared a wishlist:</p>
+                         <h3 className="font-bold text-lg">{item.title}</h3>
+                    </div>
+                    <div className="relative aspect-video w-full">
+                        <Image
+                            src={item.imageUrl}
+                            alt={item.title}
+                            fill
+                            className="object-cover"
+                            data-ai-hint={item.aiHint ?? ''}
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                        />
+                    </div>
+                    <div className="p-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-4 text-muted-foreground">
+                                <Badge variant="outline" className="capitalize gap-1.5 pl-2 pr-3 py-1 text-muted-foreground">
+                                    {getPrivacyIcon(item.privacy)}
+                                    <span>{item.privacy}</span>
+                                </Badge>
+                                <Badge variant="secondary">{item.category}</Badge>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground font-medium">{item.itemCount || 0} items</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                                <span>Progress</span>
+                                <span>{item.progress || 0}%</span>
+                            </div>
+                            <Progress value={item.progress || 0} className="h-2" />
+                        </div>
+                    </div>
+                </Link>
+            </CardContent>
+            <CardFooter className="flex justify-between p-2">
+                <TooltipProvider>
+                    <div className="flex items-center text-muted-foreground">
+                        <Tooltip>
+                            <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9"><MessageCircle className="h-5 w-5" /></Button></TooltipTrigger>
+                            <TooltipContent className="text-xs"><p>Reply</p></TooltipContent>
+                        </Tooltip>
+                        <span className="text-sm pr-2">{item.commentCount ?? 0}</span>
+
+                        <Tooltip>
+                            <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9"><Repeat2 className="h-5 w-5" /></Button></TooltipTrigger>
+                            <TooltipContent className="text-xs"><p>Repost</p></TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                            <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleLike} disabled={isLiking || !user}><Heart className={`h-5 w-5 ${hasLiked ? 'text-red-500 fill-current' : ''}`} /></Button></TooltipTrigger>
+                            <TooltipContent className="text-xs"><p>Like</p></TooltipContent>
+                        </Tooltip>
+                        <span className={`text-sm pr-2 ${hasLiked ? 'text-red-500' : ''}`}>{item.likes ?? 0}</span>
+                    </div>
+                    <div className="flex items-center text-muted-foreground">
+                        <Tooltip>
+                            <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9" onClick={(e) => { e.preventDefault(); toggleBookmark(); }} disabled={isToggling || !user}><Bookmark className={`h-5 w-5 ${isBookmarked ? 'text-yellow-500 fill-current' : ''}`} /></Button></TooltipTrigger>
+                            <TooltipContent className="text-xs"><p>Bookmark</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9"><Share2 className="h-5 w-5" /></Button></TooltipTrigger>
+                            <TooltipContent className="text-xs"><p>Share</p></TooltipContent>
+                        </Tooltip>
+                    </div>
+                </TooltipProvider>
+            </CardFooter>
+        </Card>
+    );
+}
+
+function FeedCard({ item }: { item: FeedItem }) {
+  if (item.type === 'post') {
+    return <PostCard item={item} />;
+  }
+  if (item.type === 'wishlist') {
+    return <WishlistCard item={item} />;
+  }
+  return null;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -405,8 +572,6 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     
-    let unsubscribe: (() => void) | undefined;
-  
     const fetchFeed = async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -423,23 +588,49 @@ export default function DashboardPage() {
             setFeedItems([]);
             return;
         }
-  
-        const q = query(
+
+        const postsQuery = query(
           collectionGroup(db, 'posts'),
           where('authorId', 'in', authorIdsToQuery),
           orderBy('createdAt', 'desc'),
-          limit(30)
+          limit(20)
         );
-  
-        unsubscribe = onSnapshot(q, (snapshot) => {
-          const newPosts = snapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as FeedItem));
-          setFeedItems(newPosts);
-          setLoading(false);
+
+        const wishlistsQuery = query(
+          collectionGroup(db, 'wishlists'),
+          where('authorId', 'in', authorIdsToQuery),
+          orderBy('createdAt', 'desc'),
+          limit(20)
+        );
+
+        const unsubPosts = onSnapshot(postsQuery, (postsSnapshot) => {
+            const posts = postsSnapshot.docs.map(doc => ({ id: doc.id, type: 'post', ...doc.data() } as Post));
+            
+            const unsubWishlists = onSnapshot(wishlistsQuery, (wishlistsSnapshot) => {
+                const wishlists = wishlistsSnapshot.docs
+                  .map(doc => ({ id: doc.id, type: 'wishlist', ...doc.data() } as Wishlist))
+                  .filter(wl => wl.authorId === user.uid || wl.privacy === 'public'); // Filter for own or public wishlists
+
+                const combinedFeed = [...posts, ...wishlists];
+                combinedFeed.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+                setFeedItems(combinedFeed);
+                setLoading(false);
+            }, (err) => {
+                console.error("Error fetching wishlists:", err);
+                setError("Failed to load feed wishlists.");
+                setLoading(false);
+            });
+
+            return () => unsubWishlists();
+
         }, (err) => {
-          console.error("Error fetching feed posts:", err);
-          setError("Failed to load feed posts.");
-          setLoading(false);
+            console.error("Error fetching posts:", err);
+            setError("Failed to load feed posts.");
+            setLoading(false);
         });
+
+        return () => unsubPosts();
   
       } catch (err: any) {
         console.error("Error setting up feed listeners:", err);
@@ -448,12 +639,10 @@ export default function DashboardPage() {
       }
     };
   
-    fetchFeed();
+    const unsubscribe = fetchFeed();
   
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      unsubscribe.then(unsub => unsub && unsub());
     };
   }, [user]);
 
@@ -484,7 +673,7 @@ export default function DashboardPage() {
             )}
              {imageUpload.uploading && (
                  <div className="mt-2">
-                    <ProgressBar value={imageUpload.progress} className="h-2" />
+                    <Progress value={imageUpload.progress} className="h-2" />
                     <p className="text-xs text-muted-foreground mt-1">Uploading image...</p>
                 </div>
             )}
@@ -526,7 +715,7 @@ export default function DashboardPage() {
       {!loading && !error && (
         <div className="space-y-6">
           {feedItems.length > 0 ? (
-            feedItems.map(item => <PostCard key={`${item.type}-${item.id}`} item={item} />)
+            feedItems.map(item => <FeedCard key={`${item.type}-${item.id}`} item={item} />)
           ) : (
             <Card className="p-8 text-center text-muted-foreground">
               <h3 className="text-lg font-semibold">It's quiet in here...</h3>
@@ -538,3 +727,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
