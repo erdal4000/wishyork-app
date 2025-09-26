@@ -204,60 +204,64 @@ export default function WishlistDetailPage() {
   });
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
+  // Effect 1: Fetch the main wishlist document
   useEffect(() => {
     if (!id) return;
     setLoading(true);
 
-    let itemsUnsubscribe: Unsubscribe | undefined;
-
     const wishlistRef = doc(db, 'wishlists', id);
-    const wishlistUnsubscribe = onSnapshot(wishlistRef, (wishlistDoc) => {
+    const unsubscribe = onSnapshot(wishlistRef, (wishlistDoc) => {
         if (wishlistDoc.exists()) {
-            const wishlistData = { id: wishlistDoc.id, ...wishlistDoc.data() } as Wishlist;
-            setWishlist(wishlistData);
-            setLoading(false);
-
-            // Once we have wishlist data, we can decide if we should fetch items
-            const canView = user?.uid === wishlistData.authorId || wishlistData.privacy === 'public';
-            
-            if (canView) {
-                // If there's an existing listener, unsubscribe before creating a new one
-                if (itemsUnsubscribe) {
-                    itemsUnsubscribe();
-                }
-
-                const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
-                const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
-                
-                itemsUnsubscribe = onSnapshot(q, (itemsSnapshot) => {
-                    const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
-                    setItems(itemsData);
-                }, (error) => {
-                    console.error("Error fetching items: ", error);
-                    toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
-                });
-            } else {
-                setItems([]); // Clear items if user doesn't have permission
-            }
+            setWishlist({ id: wishlistDoc.id, ...wishlistDoc.data() } as Wishlist);
         } else {
             console.log("No such document!");
             setWishlist(null);
-            setLoading(false);
         }
+        setLoading(false);
     }, (error) => {
         console.error("Error fetching wishlist: ", error);
         setLoading(false);
         toast({ title: "Error", description: "Could not fetch wishlist details.", variant: "destructive" });
     });
 
-    // Cleanup function
-    return () => {
-        wishlistUnsubscribe();
-        if (itemsUnsubscribe) {
-            itemsUnsubscribe();
-        }
-    };
-}, [id, user, toast]);
+    return () => unsubscribe();
+  }, [id, toast]);
+
+  // Effect 2: Fetch items only after wishlist is loaded and permissions are checked
+  useEffect(() => {
+      // Don't run if we don't have the wishlist or user info yet
+      if (!wishlist || !user) {
+          return;
+      }
+      
+      const canView = user.uid === wishlist.authorId || wishlist.privacy === 'public';
+      
+      let unsubscribe: Unsubscribe | undefined;
+
+      if (canView) {
+          const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
+          const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
+          
+          unsubscribe = onSnapshot(q, (itemsSnapshot) => {
+              const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+              setItems(itemsData);
+          }, (error) => {
+              console.error("Error fetching items: ", error);
+              toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
+          });
+      } else {
+          // If user cannot view, ensure items are cleared.
+          setItems([]);
+      }
+
+      // Cleanup function for the items listener
+      return () => {
+          if (unsubscribe) {
+              unsubscribe();
+          }
+      };
+  }, [wishlist, user, id, toast]); // Dependency array ensures this runs when wishlist or user changes
+
 
   const isOwnWishlist = user?.uid === wishlist?.authorId;
   const canViewItems = isOwnWishlist || wishlist?.privacy === 'public';
