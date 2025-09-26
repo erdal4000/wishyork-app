@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction, Unsubscribe, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, Unsubscribe, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -299,43 +299,21 @@ export default function WishlistDetailPage() {
 
   const handleMarkAsPurchased = async (itemId: string, itemQuantity: number) => {
     if (!user) {
-      toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
-      return;
+        toast({ title: "Login Required", description: "You must be logged in to mark an item as purchased.", variant: "destructive" });
+        return;
     }
     setIsUpdatingItem(itemId);
     const itemRef = doc(db, 'wishlists', id, 'items', itemId);
-    const wishlistRef = doc(db, 'wishlists', id);
     try {
-      await runTransaction(db, async (transaction) => {
-        const itemDoc = await transaction.get(itemRef);
-        const wishlistDoc = await transaction.get(wishlistRef);
-        if (!itemDoc.exists() || !wishlistDoc.exists()) {
-          throw new Error("Item or Wishlist not found");
-        }
-        
-        if (itemDoc.data().status === 'fulfilled') {
-            return;
-        }
-
-        transaction.update(itemRef, { 
-            status: 'fulfilled',
+        await updateDoc(itemRef, {
+            status: 'fulfilled'
         });
-        
-        const newUnitsFulfilled = (wishlistDoc.data().unitsFulfilled || 0) + itemQuantity;
-        const totalUnits = wishlistDoc.data().totalUnits || 0;
-        const newProgress = totalUnits > 0 ? Math.round((newUnitsFulfilled / totalUnits) * 100) : 0;
-  
-        transaction.update(wishlistRef, {
-          unitsFulfilled: increment(itemQuantity),
-          progress: newProgress,
-        });
-      });
-      toast({ title: "Thank You!", description: "This wish has been fulfilled." });
+        toast({ title: "Thank You!", description: "This wish has been fulfilled." });
     } catch (error) {
-      console.error("Error marking as purchased:", error);
-      toast({ title: "Error", description: "Could not mark the item as purchased. Please try again.", variant: "destructive" });
+        console.error("Error marking as purchased:", error);
+        toast({ title: "Error", description: "Could not mark the item as purchased. Please try again.", variant: "destructive" });
     } finally {
-      setIsUpdatingItem(null);
+        setIsUpdatingItem(null);
     }
   };
 
@@ -353,29 +331,20 @@ export default function WishlistDetailPage() {
     const wishlistRef = doc(db, 'wishlists', id);
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const wishlistDoc = await transaction.get(wishlistRef);
-        if (!wishlistDoc.exists()) {
-          throw new Error("Wishlist not found");
-        }
-
-        transaction.update(itemRef, {
+        const batch = writeBatch(db);
+        batch.update(itemRef, {
           status: 'available',
           reservedBy: null,
           reservedById: null,
         });
 
         if (item.status === 'fulfilled') {
-          const newUnitsFulfilled = Math.max(0, (wishlistDoc.data().unitsFulfilled || 0) - itemQuantity);
-          const totalUnits = wishlistDoc.data().totalUnits || 0;
-          const newProgress = totalUnits > 0 ? Math.round((newUnitsFulfilled / totalUnits) * 100) : 0;
-          
-          transaction.update(wishlistRef, {
-            unitsFulfilled: newUnitsFulfilled,
-            progress: newProgress,
+          batch.update(wishlistRef, {
+            unitsFulfilled: increment(-itemQuantity),
           });
         }
-      });
+        await batch.commit();
+        
       toast({ title: "Item Updated", description: "The item is now marked as available." });
     } catch (error) {
       console.error("Error marking as available:", error);
@@ -390,32 +359,23 @@ export default function WishlistDetailPage() {
     const itemRef = doc(db, 'wishlists', id, 'items', item.id);
   
     try {
-      await runTransaction(db, async (transaction) => {
-        const wishlistDoc = await transaction.get(wishlistRef);
-        if (!wishlistDoc.exists()) {
-          throw "Wishlist does not exist!";
-        }
+      const batch = writeBatch(db);
         
-        const currentData = wishlistDoc.data();
-        let newUnitsFulfilled = currentData.unitsFulfilled || 0;
-        let newTotalUnits = currentData.totalUnits || 0;
-        
-        newTotalUnits -= item.quantity;
-        if (item.status === 'fulfilled') {
-          newUnitsFulfilled -= item.quantity;
-        }
-
-        const newProgress = newTotalUnits > 0 ? Math.round((newUnitsFulfilled / newTotalUnits) * 100) : 0;
-        
-        transaction.update(wishlistRef, {
-          itemCount: increment(-1),
-          totalUnits: newTotalUnits,
-          unitsFulfilled: newUnitsFulfilled,
-          progress: newProgress
-        });
-
-        transaction.delete(itemRef);
+      let totalUnitsChange = -item.quantity;
+      let unitsFulfilledChange = 0;
+      if (item.status === 'fulfilled') {
+        unitsFulfilledChange = -item.quantity;
+      }
+      
+      batch.update(wishlistRef, {
+        itemCount: increment(-1),
+        totalUnits: increment(totalUnitsChange),
+        unitsFulfilled: increment(unitsFulfilledChange),
       });
+
+      batch.delete(itemRef);
+
+      await batch.commit();
 
       toast({ title: "Success", description: "Item removed from wishlist." });
     } catch (e) {
@@ -784,3 +744,5 @@ export default function WishlistDetailPage() {
     </div>
   );
 }
+
+    
