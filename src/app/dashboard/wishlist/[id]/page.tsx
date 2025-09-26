@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction, Unsubscribe } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, DocumentData, getDocs, writeBatch, deleteDoc, updateDoc, increment, runTransaction, Unsubscribe, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   ArrowLeft,
@@ -50,6 +50,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -188,7 +189,6 @@ export default function WishlistDetailPage() {
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingItems, setLoadingItems] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
   const [editingWishlist, setEditingWishlist] = useState<Wishlist | null>(null);
@@ -205,10 +205,10 @@ export default function WishlistDetailPage() {
   const { hasLiked, isLiking, toggleLike } = usePostInteraction(id, 'wishlist');
 
   useEffect(() => {
-    if (!id || !user) return;
-
+    if (!id) return;
     setLoading(true);
-    let itemsUnsubscribe: Unsubscribe | null = null;
+
+    let itemsUnsubscribe: Unsubscribe | undefined;
 
     const wishlistRef = doc(db, 'wishlists', id);
     const wishlistUnsubscribe = onSnapshot(wishlistRef, (wishlistDoc) => {
@@ -217,44 +217,37 @@ export default function WishlistDetailPage() {
             setWishlist(wishlistData);
             setLoading(false);
 
-            // Once we have wishlist data, decide if we can fetch items
-            const isOwn = user.uid === wishlistData.authorId;
-            const canView = isOwn || wishlistData.privacy === 'public';
-
+            // Once we have wishlist data, we can decide if we should fetch items
+            const canView = user?.uid === wishlistData.authorId || wishlistData.privacy === 'public';
+            
             if (canView) {
-                // If we can view, set up the items listener
-                setLoadingItems(true);
+                // If there's an existing listener, unsubscribe before creating a new one
+                if (itemsUnsubscribe) {
+                    itemsUnsubscribe();
+                }
+
                 const itemsCollectionRef = collection(db, 'wishlists', id, 'items');
                 const q = query(itemsCollectionRef, orderBy('addedAt', 'desc'));
                 
-                // Unsubscribe from previous items listener if it exists
-                if (itemsUnsubscribe) itemsUnsubscribe();
-
                 itemsUnsubscribe = onSnapshot(q, (itemsSnapshot) => {
                     const itemsData = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
                     setItems(itemsData);
-                    setLoadingItems(false);
                 }, (error) => {
                     console.error("Error fetching items: ", error);
-                    toast({ title: "Error", description: "Could not fetch items.", variant: "destructive" });
-                    setLoadingItems(false);
+                    toast({ title: "Error", description: "Could not fetch wishlist items.", variant: "destructive" });
                 });
             } else {
-                // If we cannot view, clear items and stop loading
-                setItems([]);
-                setLoadingItems(false);
+                setItems([]); // Clear items if user doesn't have permission
             }
         } else {
             console.log("No such document!");
             setWishlist(null);
             setLoading(false);
-            setLoadingItems(false);
         }
     }, (error) => {
         console.error("Error fetching wishlist: ", error);
-        toast({ title: "Error", description: "Could not fetch wishlist.", variant: "destructive" });
         setLoading(false);
-        setLoadingItems(false);
+        toast({ title: "Error", description: "Could not fetch wishlist details.", variant: "destructive" });
     });
 
     // Cleanup function
@@ -630,7 +623,7 @@ export default function WishlistDetailPage() {
         </div>
         <Separator />
         
-        {loadingItems ? (
+        {loading ? (
              <div className="flex justify-center p-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
